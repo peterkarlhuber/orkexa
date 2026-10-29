@@ -128,6 +128,9 @@ def prepare_history(
     visible content is lost, and the target model could not use them. Provider
     parts (server tool calls and results) stay. Messages without a model (e.g. a
     ``claude-agent`` history) are treated as coming from the current model.
+
+    Message boundaries and roles are kept: messages are never merged, and a
+    message is only removed when none of its parts can be replayed.
     """
     prepared: list[Message] = []
     dropped: dict[str, int] = {}
@@ -174,25 +177,7 @@ def prepare_history(
             HistoryConversionWarning,
             stacklevel=3,
         )
-        return _merge_adjacent(prepared)
     return prepared
-
-
-def _merge_adjacent(messages: list[Message]) -> list[Message]:
-    """Join consecutive assistant messages of one provider and model after parts were dropped."""
-    merged: list[Message] = []
-    for message in messages:
-        if (
-            merged
-            and merged[-1].role == message.role == "assistant"
-            and merged[-1].provider == message.provider
-            and merged[-1].model == message.model
-        ):
-            previous = merged[-1]
-            merged[-1] = previous.model_copy(update={"content": previous.parts() + message.parts()})
-        else:
-            merged.append(message)
-    return merged
 
 
 # ---- history files ---------------------------------------------------------------------

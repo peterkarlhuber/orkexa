@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from ._search import keyword_search
 from .agent_spec import AGENT_NAME, AgentSpec
 from .errors import RegistryError
+from .tool_registry import _write_json_atomic
 
 __all__ = ["AgentRecord", "AgentRegistry"]
 
@@ -65,7 +66,6 @@ class AgentRegistry:
         file = (root / record.name / f"v{int(record.version)}.json").resolve()
         if file.parent.parent != root:
             raise RegistryError(f"Agent record path escapes the registry directory: {record.name!r}")
-        file.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "spec": record.spec.model_dump(mode="json"),
             "version": record.version,
@@ -73,7 +73,7 @@ class AgentRegistry:
             "created_at": record.created_at,
             "requirement": record.requirement,
         }
-        file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        _write_json_atomic(file, data)
 
     def _load(self) -> None:
         assert self.path is not None
@@ -103,7 +103,7 @@ class AgentRegistry:
         The name must match ``[A-Za-z][A-Za-z0-9_-]{0,63}`` (it is a directory name).
         """
         _check_name(spec.name)
-        versions = self._records.setdefault(spec.name, [])
+        versions = self._records.get(spec.name, [])
         record = AgentRecord(
             spec=spec,
             version=(versions[-1].version + 1) if versions else 1,
@@ -111,8 +111,8 @@ class AgentRegistry:
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             requirement=requirement,
         )
-        versions.append(record)
-        self._save(record)
+        self._save(record)  # persist first: a failed write leaves the registry unchanged
+        self._records.setdefault(spec.name, []).append(record)
         return record
 
     def revoke(self, name: str) -> None:
@@ -121,8 +121,9 @@ class AgentRegistry:
             raise RegistryError(f"No approved agent named {name!r}")
         for index, record in enumerate(versions):
             if record.status == "approved":
-                versions[index] = replace(record, status="revoked")
-                self._save(versions[index])
+                revoked = replace(record, status="revoked")
+                self._save(revoked)
+                versions[index] = revoked
 
     def get(self, name: str) -> AgentRecord:
         for record in reversed(self._records.get(name, [])):

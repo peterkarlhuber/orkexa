@@ -58,6 +58,10 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
   skips stored records whose name does not match their directory.
 * Native batches pass the usage tracker's pre-request check (budget, unpriced models)
   before submission, and every batch result is recorded before a budget error is raised.
-* `prepare_history()` leaves histories unchanged when it drops nothing, and never merges
-  assistant messages of different models.
+* `prepare_history()` keeps message boundaries and roles: it never merges messages and
+  only removes a message when none of its parts can be replayed.
+* `AgentRegistry` and `ToolRegistry` persist a record before they change their
+  in-memory state, so a failed write (full disk, rejected path) leaves both unchanged;
+  record files are replaced atomically.
+* Batch usage no longer counts in `last_turn_usage` (it covers the most recent `ask()`).
 * Dropping `effort` for models without reasoning in the dynamic package is logged.
