@@ -131,7 +131,9 @@ def test_tool_built_with_openai_is_used_by_gemini() -> None:
     oa.script = Script([oa.text(MARGIN.model_dump_json())])
     coding = CodingAgent(model="openai:gpt-5.5", credentials=_settings(an, oa, ge))
     assert coding.agent.adapter.name == "openai"
-    builder = ToolBuilder(coding, ToolRegistry(sandbox=SubprocessSandbox()), approver=_approver())
+    builder = ToolBuilder(
+        coding, ToolRegistry(sandbox=SubprocessSandbox(acknowledge_unsafe=True)), approver=_approver()
+    )
     tool = builder.build("operating margin from revenue and operating income")
     assert tool.name == "calculate_operating_margin"
 

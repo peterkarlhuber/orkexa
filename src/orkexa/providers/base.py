@@ -37,26 +37,43 @@ from ..usage import UsageRecord, record_token_usage
 
 __all__ = ["Provider", "ProviderConfig", "redact", "require_module"]
 
+# Names of parameters and fields whose value is a credential (matched case-insensitively,
+# also as a suffix: "x_api_key", "client_secret", "refresh_token", ...).
+_SECRET_NAMES = r"(?:api[_-]?key|apikey|key|token|secret|password|passwd|pwd|signature|sig|credentials?|auth)"
 _SECRET_PATTERNS = (
-    re.compile(r"sk-[A-Za-z0-9_\-]{8,}"),
-    re.compile(r"AIza[0-9A-Za-z_\-]{20,}"),
-    re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-]{8,}"),
-    re.compile(r"(?i)((?:api[_-]?key|x-goog-api-key|authorization)[\"']?\s*[:=]\s*[\"']?)[^\s\"',}]{6,}"),
+    # Well-known key formats.
+    re.compile(r"sk-[A-Za-z0-9_\-]{8,}"),  # OpenAI, Anthropic
+    re.compile(r"AIza[0-9A-Za-z_\-]{20,}"),  # Google
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),  # GitHub
+    re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),  # Slack
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),  # AWS access key ids
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),  # JWTs
+    # Authorization headers with or without a scheme, and bearer tokens anywhere.
+    re.compile(r"(?i)(authorization[\"']?\s*[:=]\s*[\"']?(?:basic|bearer|token|digest)?\s*)[^\s\"',}]{4,}"),
+    re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=\-]{8,}"),
+    # User and password in URLs: scheme://user:password@host.
+    re.compile(r"(?i)(\b[a-z][a-z0-9+.\-]*://)[^\s/@?#\"']+(?=@)"),
+    # Credential parameters in query strings and fragments: ?api_key=..., &access_token=...
+    re.compile(rf"(?i)([?&;#][^=&#\s\"']*?{_SECRET_NAMES}=)[^&#\s\"']+"),
+    # Credential fields in headers, JSON and assignments: api_key: ..., "password": "...".
+    re.compile(rf"(?i)(\b[\w-]*?{_SECRET_NAMES}[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])[^\s\"',}}&]{{6,}}"),
 )
 
 
 def redact(text: str, secrets: Sequence[str] = ()) -> str:
-    """``text`` with API keys replaced by ``[REDACTED]``.
+    """``text`` with credentials replaced by ``[REDACTED]``.
 
-    Removes the given ``secrets`` and anything that looks like an OpenAI/Anthropic key
-    (``sk-...``), a Google API key (``AIza...``), a bearer token or an ``api_key=``
-    assignment.
+    Removes the given ``secrets`` and anything that looks like one: OpenAI/Anthropic
+    (``sk-...``), Google (``AIza...``), GitHub, Slack and AWS keys, JWTs, bearer
+    tokens, ``Authorization`` values, passwords in URLs (``https://user:pw@host``),
+    credential query parameters (``?api_key=...``, ``&access_token=...``) and
+    credential fields (``"password": "..."``, ``x-api-key: ...``).
     """
     for secret in secrets:
         if secret and len(secret) >= 4:
             text = text.replace(secret, "[REDACTED]")
     for pattern in _SECRET_PATTERNS:
-        text = pattern.sub(lambda m: (m.group(1) if m.groups() else "") + "[REDACTED]", text)
+        text = pattern.sub(lambda m: (m.group(1) or "" if m.groups() else "") + "[REDACTED]", text)
     return text
 
 
@@ -70,6 +87,11 @@ def require_module(module: str, extra: str) -> Any:
         raise MissingDependencyError(
             f"This provider needs the {module!r} package: pip install 'orkexa[{extra}]'"
         ) from exc
+
+
+def _shown(url: str | None) -> str | None:
+    """``url`` for ``repr`` and messages: credentials in it are redacted."""
+    return None if url is None else redact(url)
 
 
 @dataclass(repr=False)
@@ -97,7 +119,7 @@ class ProviderConfig:
     def __repr__(self) -> str:
         key = "None" if self.api_key is None else "'**********'"
         return (
-            f"ProviderConfig(api_key={key}, base_url={self.base_url!r}, timeout={self.timeout!r}, "
+            f"ProviderConfig(api_key={key}, base_url={_shown(self.base_url)!r}, timeout={self.timeout!r}, "
             f"max_retries={self.max_retries!r}, client={type(self.client).__name__ if self.client else None})"
         )
 

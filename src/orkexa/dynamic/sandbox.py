@@ -1,16 +1,19 @@
-"""Isolated execution of generated tool code.
+"""Execution of generated tool code outside the host process.
 
 Two backends share one interface:
 
+* :class:`DockerSandbox` runs the code in a throwaway container without network,
+  with a read-only file system, no capabilities, an unprivileged user and
+  memory/CPU/process limits. It is the isolation boundary for untrusted
+  (model-written) code and the default of :class:`~orkexa.dynamic.ToolRegistry`.
+  Without Docker or the image it fails closed: nothing runs.
 * :class:`SubprocessSandbox` runs the code in a separate Python process with an
   empty environment (no API keys), a temporary working directory, a timeout
-  and, on Linux/macOS, CPU/memory/file/process limits. It is a layer of
-  defense for development, **not** a security boundary: the process can still
-  reach the network and read files the user can read. The static check blocks
-  the obvious ways to do so.
-* :class:`DockerSandbox` runs the same code in a throwaway container without
-  network, with a read-only file system, no capabilities and an unprivileged
-  user. Use it in production.
+  and, on Linux/macOS, CPU/memory/file/process limits. It is **not** a security
+  boundary: the process can read every file the user can read and reach the
+  network. Use it only for code you trust or review before it runs (development,
+  tests, demos); creating one without ``acknowledge_unsafe=True`` emits an
+  :class:`~orkexa.dynamic.UnsafeOptInWarning`.
 
 Other backends (gVisor, Firecracker, a hosted sandbox) only need to implement
 :meth:`Sandbox._execute`.
@@ -28,11 +31,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any
+from typing import Any, ClassVar
 import uuid
+import warnings
 
 from ..errors import ToolExecutionError
-from .errors import SandboxError
+from .errors import SandboxError, UnsafeOptInWarning
 from .static_check import TOOL_MODULE
 
 __all__ = ["DockerSandbox", "Sandbox", "SandboxTestResult", "SubprocessSandbox", "ValidationResult"]
@@ -80,7 +84,7 @@ class ValidationResult:
 
 
 class Sandbox(ABC):
-    """Runs generated tool code in isolation.
+    """Runs generated tool code outside the host process.
 
     Args:
         timeout: Wall-clock limit per run in seconds.
@@ -97,6 +101,11 @@ class Sandbox(ABC):
         self.memory_mb = memory_mb
         self.max_output_chars = max_output_chars
 
+    #: Whether the backend is meant as a security boundary for untrusted code.
+    isolated: ClassVar[bool] = False
+    #: Whether the run directory must be readable for another (container) user.
+    _shared_workdir: ClassVar[bool] = False
+
     @abstractmethod
     def _execute(self, workdir: Path, request: str) -> str:
         """Run the sandbox runner in ``workdir`` with ``request`` on stdin; return its stdout."""
@@ -105,12 +114,14 @@ class Sandbox(ABC):
         # CPU limit slightly above the wall-clock timeout, so the timeout normally fires first.
         request["limits"] = {"cpu_seconds": int(self.timeout) + 1, "memory_mb": self.memory_mb}
         with tempfile.TemporaryDirectory(prefix="orkexa-sandbox-") as directory:
-            workdir = Path(directory)
-            workdir.chmod(0o755)  # readable for an unprivileged container user
+            workdir = Path(directory)  # mode 0700
             for name, content in files.items():
                 path = workdir / name
                 path.write_text(content, encoding="utf-8")
-                path.chmod(0o644)
+                if self._shared_workdir:
+                    path.chmod(0o644)
+            if self._shared_workdir:
+                workdir.chmod(0o755)  # readable for the unprivileged container user
             stdout = self._execute(workdir, json.dumps(request))
         try:
             response = json.loads(stdout)
@@ -175,8 +186,11 @@ def _minimal_environment() -> dict[str, str]:
 class SubprocessSandbox(Sandbox):
     """Separate Python process: empty environment, temp dir, timeout, resource limits.
 
-    A defense-in-depth layer for development, not a security boundary (see the
-    module docstring). Prefer :class:`DockerSandbox` in production.
+    **Not a security boundary** (see the module docstring): only for code you trust
+    or review before it runs. Untrusted, model-written code belongs in
+    :class:`DockerSandbox` or a stronger isolation. Creating one emits an
+    :class:`~orkexa.dynamic.UnsafeOptInWarning`; pass ``acknowledge_unsafe=True``
+    to state the choice explicitly and silence it.
 
     Args:
         python: Interpreter to use; defaults to the current one. It needs
@@ -186,6 +200,7 @@ class SubprocessSandbox(Sandbox):
         env: Variables for the sandbox process, e.g. ``{"OPENBLAS_NUM_THREADS": "1"}``
             for numerical libraries under the process limit. Nothing else is
             inherited from the host, so never put secrets here.
+        acknowledge_unsafe: Confirms that the code it runs is trusted or reviewed.
     """
 
     def __init__(
@@ -196,8 +211,17 @@ class SubprocessSandbox(Sandbox):
         max_output_chars: int = 65_536,
         python: str | None = None,
         env: Mapping[str, str] | None = None,
+        acknowledge_unsafe: bool = False,
     ) -> None:
         super().__init__(timeout=timeout, memory_mb=memory_mb, max_output_chars=max_output_chars)
+        if not acknowledge_unsafe:
+            warnings.warn(
+                "SubprocessSandbox is not a security boundary: the code it runs can read the user's "
+                "files and reach the network. Use DockerSandbox for untrusted code, or pass "
+                "SubprocessSandbox(acknowledge_unsafe=True) for trusted or reviewed code",
+                UnsafeOptInWarning,
+                stacklevel=2,
+            )
         self.python = python or sys.executable
         self.env = dict(env or {})
 
@@ -222,6 +246,13 @@ class SubprocessSandbox(Sandbox):
         return completed.stdout
 
 
+_DOCKER_HINT = (
+    "Generated code runs only in an isolated sandbox: install Docker and build the image "
+    "(docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .), or, for trusted or "
+    "reviewed code only, pass sandbox=SubprocessSandbox(acknowledge_unsafe=True)."
+)
+
+
 class DockerSandbox(Sandbox):
     """Throwaway Docker container: no network, read-only FS, no capabilities, nobody user.
 
@@ -230,8 +261,13 @@ class DockerSandbox(Sandbox):
 
         docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
 
-    The installed ``orkexa`` package is mounted read-only into the container.
+    The installed ``orkexa`` package is mounted read-only into the container. If
+    Docker or the image is missing, every run fails with a :class:`SandboxError`
+    and no code is executed.
     """
+
+    isolated: ClassVar[bool] = True
+    _shared_workdir: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -319,9 +355,10 @@ class DockerSandbox(Sandbox):
             subprocess.run([self.docker, "rm", "-f", name], capture_output=True, check=False)
             raise SandboxError(f"Timed out after {self.timeout:g} seconds") from exc
         except OSError as exc:
-            raise SandboxError(f"Cannot start docker: {exc}") from exc
+            raise SandboxError(f"Cannot start docker: {exc}. {_DOCKER_HINT}") from exc
         if not completed.stdout.strip():
             raise SandboxError(
                 f"Container exited with code {completed.returncode}: {completed.stderr[-1000:]}"
+                + (f" {_DOCKER_HINT}" if completed.returncode == 125 else "")
             )
         return completed.stdout

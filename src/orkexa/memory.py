@@ -46,6 +46,7 @@ import uuid
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
+from ._storage import create_private_file, make_private_dirs
 from .core.types import ToolDefinition
 from .errors import MemoryToolError
 
@@ -552,7 +553,7 @@ class FileMemory(MemoryBackend):
     ) -> None:
         super().__init__(max_file_chars=max_file_chars, max_view_chars=max_view_chars)
         self.root = Path(root)
-        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        make_private_dirs(self.root)
         self._resolved_root = self.root.resolve()
 
     def _location(self, key: str) -> Path:
@@ -648,6 +649,7 @@ class SQLiteMemory(MemoryBackend):
         if not namespace:
             raise ValueError("namespace must not be empty")
         self.namespace = namespace
+        create_private_file(database)  # owner-only (0600) from the start; journals inherit it
         self._connection = sqlite3.connect(
             database, isolation_level=None, check_same_thread=False, timeout=30
         )

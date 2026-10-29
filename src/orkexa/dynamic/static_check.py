@@ -1,8 +1,10 @@
 """Static (AST) checks of generated tool code before it is ever executed.
 
 This is a first line of defense that rejects obviously dangerous code early
-and with a clear message for the Coding Agent. It is *not* a security
-boundary on its own: generated code always runs inside a sandbox as well.
+and with a clear message for the Coding Agent. It is a deny/allow-list filter,
+*not* a security boundary: Python offers too many indirect paths to the
+interpreter for an AST check to close them all. Generated code therefore always
+runs in a sandbox as well, by default an isolated :class:`~orkexa.dynamic.DockerSandbox`.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import re
 __all__ = [
     "ALLOWED_IMPORTS",
     "FORBIDDEN_ATTRIBUTES",
+    "FORBIDDEN_MODULE_ATTRIBUTES",
     "FORBIDDEN_NAMES",
     "MAX_SOURCE_CHARS",
     "TOOL_MODULE",
@@ -102,6 +105,76 @@ FORBIDDEN_ATTRIBUTES = FORBIDDEN_NAMES | {
     "tb_next",
 }
 
+#: Modules that allowed modules re-export as attributes (``calendar.sys``,
+#: ``dataclasses.inspect``, ``typing.re`` ...): reaching them by attribute would bypass
+#: the import allow list, so these attribute names are rejected everywhere.
+FORBIDDEN_MODULE_ATTRIBUTES = frozenset(
+    {
+        "_codecs",
+        "_io",
+        "_locale",
+        "_os",
+        "_socket",
+        "_sys",
+        "_thread",
+        "_types",
+        "asyncio",
+        "bltns",
+        "builtins",
+        "code",
+        "codecs",
+        "codeop",
+        "copyreg",
+        "ctypes",
+        "fcntl",
+        "gc",
+        "genericpath",
+        "glob",
+        "http",
+        "importlib",
+        "inspect",
+        "io",
+        "linecache",
+        "locale",
+        "marshal",
+        "mmap",
+        "modules",
+        "multiprocessing",
+        "nt",
+        "ntpath",
+        "os",
+        "pathlib",
+        "pickle",
+        "pkgutil",
+        "platform",
+        "posix",
+        "posixpath",
+        "pty",
+        "resource",
+        "runpy",
+        "select",
+        "selectors",
+        "shelve",
+        "shutil",
+        "signal",
+        "site",
+        "socket",
+        "sqlite3",
+        "ssl",
+        "subprocess",
+        "sys",
+        "sysconfig",
+        "tempfile",
+        "threading",
+        "types",
+        "urllib",
+        "warnings",
+        "weakref",
+        "webbrowser",
+        "zipimport",
+    }
+)
+
 _DUNDER_IN_STRING = re.compile(r"__\w+__")
 
 MAX_SOURCE_CHARS = 20_000
@@ -165,6 +238,8 @@ class _Checker(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         if _is_dunder(node.attr) or node.attr in FORBIDDEN_ATTRIBUTES:
             self.error(node, f"access to attribute {node.attr!r} is not allowed")
+        elif node.attr in FORBIDDEN_MODULE_ATTRIBUTES:
+            self.error(node, f"access to module {node.attr!r} through an attribute is not allowed")
         self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:

@@ -3,12 +3,18 @@
 A Coding Agent (any provider) writes a function and its tests; the ToolBuilder
 checks it statically, runs the tests in a sandbox, asks the approver and registers
 it; an agent of possibly another provider then uses it. Generated code never runs
-in this process. ``SubprocessSandbox`` is no security boundary; build the Docker
-image (``docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .``) to use
-``DockerSandbox`` automatically.
+in this process.
+
+Model-written code runs in ``DockerSandbox``; build the image first
+(``docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .``). Without Docker
+the example stops, unless ``ORKEXA_ALLOW_SUBPROCESS_SANDBOX=1`` states that you
+accept running the generated code and its tests in ``SubprocessSandbox``, which is
+no security boundary (it can read your files and reach the network).
 """
 
 from __future__ import annotations
+
+import os
 
 from _setup import model
 
@@ -32,7 +38,16 @@ def approve(request: ApprovalRequest) -> bool:
 
 def main() -> None:
     name = model()
-    sandbox: Sandbox = DockerSandbox() if DockerSandbox.available() else SubprocessSandbox()
+    sandbox: Sandbox
+    if DockerSandbox.available():
+        sandbox = DockerSandbox()
+    elif os.environ.get("ORKEXA_ALLOW_SUBPROCESS_SANDBOX") == "1":
+        sandbox = SubprocessSandbox(acknowledge_unsafe=True)
+    else:
+        raise SystemExit(
+            "Docker is not available. Build the sandbox image, or set ORKEXA_ALLOW_SUBPROCESS_SANDBOX=1 "
+            "to run the generated code in SubprocessSandbox, which is not a security boundary."
+        )
     builder = ToolBuilder(
         CodingAgent(model=name),
         ToolRegistry(sandbox=sandbox),

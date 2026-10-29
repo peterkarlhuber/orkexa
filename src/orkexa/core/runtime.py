@@ -29,6 +29,7 @@ import uuid
 from pydantic import BaseModel
 from typing_extensions import TypeVar
 
+from .._storage import write_private_text
 from ..content import Prompt, describe_content, to_content
 from ..errors import (
     ConcurrentTurnError,
@@ -425,9 +426,11 @@ class AgentCore(Generic[OutputT]):
         return deepcopy(self.messages)
 
     def save_history(self, path: str | os.PathLike[str]) -> None:
-        """Write the conversation as a versioned Orkexa history file (JSON)."""
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(to_json(dump_history(self._conversation())))
+        """Write the conversation as a versioned Orkexa history file (JSON).
+
+        The file is replaced atomically and readable only by its owner (mode ``0600``).
+        """
+        write_private_text(path, to_json(dump_history(self._conversation())))
 
     def load_history(self, path: str | os.PathLike[str]) -> None:
         """Replace the conversation with one from :meth:`save_history`.
@@ -581,7 +584,15 @@ class AgentCore(Generic[OutputT]):
             model=model,
             priced=self.pricing is not None or self.adapter.has_pricing(model),
         )
-        batch_id, results = self.adapter.run_batch(requests, poll_interval=poll_interval, timeout=timeout)
+        submit_failure: Exception | None = None
+        try:
+            batch_id, results = self.adapter.run_batch(requests, poll_interval=poll_interval, timeout=timeout)
+        except Exception as exc:
+            submit_failure = self._provider_failure(exc)
+            if submit_failure is exc:
+                raise
+        if submit_failure is not None:
+            raise submit_failure  # outside the handler: no link to the SDK exception
         failure: Exception | None = None
         for result in results.values():
             if isinstance(result, ModelResponse):
@@ -783,7 +794,14 @@ class AgentCore(Generic[OutputT]):
         return response.raw if self._native_hooks else response
 
     def _provider_failure(self, exc: Exception) -> Exception:
-        """The exception to raise for a failed provider call."""
+        """The exception to raise for a failed provider call.
+
+        A mapped :class:`ProviderError` carries a redacted message and the safe details
+        (provider, status, request id, retryability). Callers raise it outside their
+        ``except`` block, so neither ``__cause__`` nor ``__context__`` links it to the
+        SDK exception, whose text, attributes and traceback frames may hold credentials
+        or request data.
+        """
         if not self._map_errors:
             return exc
         mapped = self.adapter.map_error(exc)

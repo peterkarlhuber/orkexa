@@ -180,8 +180,9 @@ class EvaluationFailedError(OrkexaError, RuntimeError):
 class ProviderError(OrkexaError, RuntimeError):
     """A provider API call failed; raised by generic agents instead of SDK exceptions.
 
-    The message is redacted (no API keys). The original SDK exception is the
-    ``__cause__``.
+    The message is redacted (no API keys) and names the SDK exception type. The SDK
+    exception is not attached (``__cause__`` and ``__context__`` are ``None``), so a
+    traceback cannot print its request or headers.
 
     Attributes:
         provider: Registered provider name, e.g. ``"openai"``.
