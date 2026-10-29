@@ -6,6 +6,10 @@
 
 ::: orkexa.UsageSummary
 
+::: orkexa.usage.workflow
+
+::: orkexa.usage.current_workflow
+
 ::: orkexa.ModelPricing
 
 ::: orkexa.register_pricing

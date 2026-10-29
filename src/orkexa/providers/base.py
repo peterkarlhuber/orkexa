@@ -281,6 +281,10 @@ class Provider(ABC):
         """Translate an SDK exception into a :class:`ProviderError` (``None``: not an API error)."""
         return None
 
+    def redact(self, text: str) -> str:
+        """``text`` without this provider's API key or anything that looks like a key."""
+        return redact(text, [self.config.secret() or ""])
+
     def provider_error(
         self,
         exc: BaseException,
@@ -290,7 +294,7 @@ class Provider(ABC):
         connection: bool = False,
     ) -> ProviderError:
         """A redacted :class:`ProviderError` subclass chosen by HTTP status."""
-        message = redact(f"{self.name}: {type(exc).__name__}: {exc}", [self.config.secret() or ""])
+        message = self.redact(f"{self.name}: {type(exc).__name__}: {exc}")
         kwargs: dict[str, Any] = {"provider": self.name, "status_code": status_code, "request_id": request_id}
         if connection:
             return ProviderConnectionError(message, retryable=True, **kwargs)

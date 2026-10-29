@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -16,9 +18,11 @@ __all__ = [
     "UsageRecord",
     "UsageSummary",
     "UsageTracker",
+    "current_workflow",
     "record_api_usage",
     "record_token_usage",
     "summarize_usage",
+    "workflow",
 ]
 
 _WEB_SEARCH_USD_PER_REQUEST = Decimal("0.01")  # $10 per 1,000 searches
@@ -35,9 +39,11 @@ class UsageRecord:
     ``estimated_cost_usd`` is ``None`` (never 0) when no price is known.
 
     The fields after ``request_id`` were added by Orkexa: ``provider`` (registered
-    provider name), ``turn_id`` (one id per ``ask()``), ``workflow`` (free label set by
-    orchestration) and ``pricing_source`` (``"builtin"``, ``"registered"``, ``"custom"``
-    or ``None`` when unpriced).
+    provider name), ``turn_id`` (one id per ``ask()`` of the agent that sent the
+    request), ``workflow`` (the label of the enclosing :func:`workflow`, e.g. one
+    :meth:`~orkexa.dynamic.Orchestrator.ask` including every delegated agent) and
+    ``pricing_source`` (``"builtin"``, ``"registered"``, ``"custom"`` or ``None``
+    when unpriced).
     """
 
     agent: str
@@ -122,6 +128,35 @@ def summarize_usage(records: Iterable[UsageRecord]) -> UsageSummary:
     )
 
 
+_WORKFLOW: ContextVar[str | None] = ContextVar("orkexa_workflow", default=None)
+
+
+@contextmanager
+def workflow(label: str) -> Iterator[str]:
+    """Label the usage of every request sent inside the ``with`` block.
+
+    The label follows the context into tool threads and asyncio tasks, so agents
+    delegated as tools are included. An inner block replaces the label for its
+    duration::
+
+        with workflow("nightly-report"):
+            agent.ask(...)
+        tracker.usage_by_workflow()["nightly-report"]
+    """
+    if not isinstance(label, str) or not label:
+        raise ValueError("workflow label must be a nonempty string")
+    token = _WORKFLOW.set(label)
+    try:
+        yield label
+    finally:
+        _WORKFLOW.reset(token)
+
+
+def current_workflow() -> str | None:
+    """The label of the enclosing :func:`workflow` block, if any."""
+    return _WORKFLOW.get()
+
+
 class UsageTracker:
     """Shared ledger for several agents, including agents delegated as tools."""
 
@@ -133,6 +168,9 @@ class UsageTracker:
 
     def before_request(self, *, agent: str, provider: str, model: str, priced: bool) -> None:
         """Called before every model request; budget trackers raise here to stop early."""
+
+    def check(self) -> None:
+        """Raise if a limit is exceeded; a plain tracker has none (see ``BudgetTracker``)."""
 
     @property
     def records(self) -> tuple[UsageRecord, ...]:
@@ -157,8 +195,16 @@ class UsageTracker:
         """Per-model summaries, keyed ``"provider:model"``."""
         return self._group(lambda record: f"{record.provider or 'unknown'}:{record.model}")
 
-    def _group(self, key: Any) -> dict[str, UsageSummary]:
-        grouped: dict[str, list[UsageRecord]] = {}
+    def usage_by_turn(self) -> dict[str | None, UsageSummary]:
+        """Per-turn summaries, keyed by ``turn_id`` (``None``: requests outside a turn, e.g. batches)."""
+        return self._group(lambda record: record.turn_id)
+
+    def usage_by_workflow(self) -> dict[str | None, UsageSummary]:
+        """Per-workflow summaries, keyed by label (``None``: requests outside any :func:`workflow`)."""
+        return self._group(lambda record: record.workflow)
+
+    def _group(self, key: Any) -> dict[Any, UsageSummary]:
+        grouped: dict[Any, list[UsageRecord]] = {}
         for record in self._records:
             grouped.setdefault(key(record), []).append(record)
         return {name: summarize_usage(records) for name, records in grouped.items()}

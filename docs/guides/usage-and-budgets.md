@@ -37,15 +37,37 @@ from orkexa.dynamic import BudgetTracker
 budget = BudgetTracker("5.00", on_unpriced="reject")
 ```
 
-* Before every request the tracker refuses to start when the budget is used up.
+* Before every request the tracker refuses to start when the budget is used up
+  (`spent_usd >= limit_usd`; a budget of 0 sends no request at all).
 * After every response it records the usage and raises `BudgetExceededError` when the
-  limit is exceeded. One request can overshoot slightly: its cost is known only after
-  it ran. Server-tool fees are added only where the provider reports them (Anthropic
-  web search/fetch).
+  limit is exceeded. Server-tool fees are added only where the provider reports them
+  (Anthropic web search/fetch).
+* The limit is a **soft limit**: a request's cost is known only after it ran, so the
+  last admitted request can overshoot it, and agents that share a tracker and run
+  concurrently can each overshoot it by one request. Keep a margin, or run
+  budget-critical agents sequentially.
 * `on_unpriced` decides what happens to models without a price: `"ignore"` (count as
   0; the 0.8.0 behavior and the default without a limit), `"warn"` (default with a
   limit; one `UnpricedUsageWarning` per model), `"reject"` (`UnpricedModelError`
   before the request is sent).
 
 One tracker can be shared by agents of every provider (`usage_by_provider()`,
-`usage_by_agent()`, `usage_by_model()`).
+`usage_by_agent()`, `usage_by_model()`, `usage_by_turn()`, `usage_by_workflow()`).
+
+## Workflows
+
+`workflow(label)` labels every request sent inside the block, including agents that
+run as tools or in asyncio tasks. `Orchestrator.ask()` opens a workflow per run
+(`orchestrator.last_workflow`), so the cost of one multi-agent run is one entry:
+
+```python
+from orkexa.usage import workflow
+
+with workflow("nightly-report"):
+    researcher.ask("...")
+    writer.ask("...")
+tracker.usage_by_workflow()["nightly-report"].estimated_cost_usd
+```
+
+Requests outside any workflow are listed under `None`, like requests without a turn
+(batches) in `usage_by_turn()`.

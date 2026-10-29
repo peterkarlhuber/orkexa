@@ -20,4 +20,19 @@ Reasoning parts and native-only blocks cannot be replayed to another provider:
   tool calls, tool results, images and documents are converted.
 
 Provider file references (`uploaded_file()`) never move between providers.
+
+## Switching model within a provider
+
+Reasoning is bound to the model that produced it (thinking signatures, encrypted
+reasoning items and Gemini thought signatures are only valid for that model). When
+`agent.model` changes to another model of the same provider, the reasoning parts and
+Gemini thought signatures of the old model's messages are not sent, under both
+policies, with a `HistoryConversionWarning`. Nothing visible is lost: text, tool calls
+and tool results stay, and the stored history is unchanged (switching back replays
+them). Server-tool blocks of the provider stay as well.
+
+`Message.model` is the model id the agent requested (`"gpt-5.5"`); the version the API
+reported is `ModelResponse.model` and `UsageRecord.model`. Messages without a model
+(`claude-agent` 0.8.0 histories, which do not record one) count as coming from the
+current model, as in 0.8.0.
 See `examples/07_history_migration.py`.

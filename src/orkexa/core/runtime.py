@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Generator, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import os
 import threading
@@ -35,6 +35,7 @@ from ..errors import (
     IncompleteResponseError,
     MaxToolRoundsError,
     MemoryToolError,
+    ProviderError,
     RefusalError,
     StructuredOutputError,
     ToolDefinitionError,
@@ -48,7 +49,7 @@ from ..memory import MEMORY_TOOL_NAME, MemoryBackend
 from ..pricing import ModelPricing
 from ..retrieval import Index
 from ..tools import Tool, ToolOutput
-from ..usage import UsageRecord, UsageSummary, UsageTracker, summarize_usage
+from ..usage import UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
 from .capabilities import ModelCapabilities, Support
 from .conversion import (
     HistoryPolicy,
@@ -339,6 +340,9 @@ class AgentCore(Generic[OutputT]):
         self._last_turn_records.clear()
 
     def _add_usage_record(self, record: UsageRecord) -> None:
+        label = current_workflow()
+        if record.workflow is None and label is not None:
+            record = replace(record, workflow=label)
         self._usage_records.append(record)
         self._last_turn_records.append(record)
         self.usage_tracker.add(record)
@@ -471,7 +475,7 @@ class AgentCore(Generic[OutputT]):
                 tools.append(self.memory.tool_definition())
         request = ModelRequest(
             model=model,
-            messages=prepare_history(history, self.adapter.name, self.history_policy),
+            messages=prepare_history(history, self.adapter.name, self.history_policy, model),
             system=self.system_prompt,
             tools=tools,
             native_tools=native_tools,
@@ -672,7 +676,9 @@ class AgentCore(Generic[OutputT]):
                 f"(stop_reason={native!r}, max_tokens={self._max_tokens}). "
                 "The conversation history was not updated."
             )
-        history.append(response.message)
+        # The requested model id (not a dated version the API reports): reasoning is
+        # only replayed to the model the conversation continues with.
+        history.append(response.message.model_copy(update={"model": self._model_id()}))
 
         if response.stop_reason in ("tool_use", "pause_turn"):
             if round_number >= self.max_tool_rounds:
@@ -734,7 +740,11 @@ class AgentCore(Generic[OutputT]):
         if not self._map_errors:
             return exc
         mapped = self.adapter.map_error(exc)
-        return exc if mapped is None else cast(Exception, mapped)
+        failure = exc if mapped is None else cast(Exception, mapped)
+        if isinstance(failure, ProviderError):
+            # Adapters build some errors from native response text themselves.
+            failure.args = tuple(self.adapter.redact(a) if isinstance(a, str) else a for a in failure.args)
+        return failure
 
     @staticmethod
     def _final_response(event: StreamEvent | None) -> ModelResponse:

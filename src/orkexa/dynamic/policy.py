@@ -45,7 +45,8 @@ class DynamicPolicy:
         max_effort: Highest effort a generated agent may use (higher is lowered).
         max_tokens: Upper bound for a generated agent's ``max_tokens`` (higher is lowered).
         max_tool_rounds: Upper bound for a generated agent's ``max_tool_rounds``.
-        allowed_agent_tools: If set, generated agents may only use these registered tools.
+        allowed_agent_tools: If set, generated agents may only use these registered
+            tools, and :meth:`ToolBuilder.as_tools`' ``load_tool`` only loads these.
         allow_agent_delegation: Whether generated agents may receive the reserved
             orchestration tools (``run_agent`` etc.).
         max_depth: Maximum nesting of ``run_agent`` delegations.
@@ -117,9 +118,12 @@ class BudgetTracker(UsageTracker):
     Every request is recorded first; if the summed estimated cost then exceeds
     ``limit_usd``, :class:`BudgetExceededError` is raised. Because the agent
     records usage right after each API response, this aborts a running tool
-    loop. A single request can therefore overshoot the limit slightly: the cost
-    of a request is only known after it ran. Before each request the tracker
-    also refuses to start when the budget is already used up.
+    loop. Before each request the tracker refuses to start when the budget is
+    already used up (``spent_usd >= limit_usd``, so a zero budget sends nothing).
+
+    The limit is a *soft* limit: the cost of a request is only known after it
+    ran, so the last admitted request can overshoot it, and agents that share a
+    tracker and run concurrently can each overshoot it by one request.
 
     Requests of a model without a known price (no built-in price, no
     ``pricing=``/:func:`~orkexa.register_pricing`) have an *unknown* cost, which
@@ -175,7 +179,12 @@ class BudgetTracker(UsageTracker):
             )
 
     def before_request(self, *, agent: str, provider: str, model: str, priced: bool) -> None:
-        self.check()
+        # A budget that is exactly used up (e.g. limit 0) admits no further request.
+        if self.limit_usd is not None and self.spent_usd >= self.limit_usd:
+            raise BudgetExceededError(
+                f"Budget used up: spent ${self.spent_usd:.4f} of ${self.limit_usd:.4f}; "
+                f"request of agent {agent!r} to {provider}:{model} not sent"
+            )
         if not priced and self.on_unpriced == "reject":
             raise UnpricedModelError(
                 f"No price known for {provider}:{model} (agent {agent!r}); the budget cannot be enforced. "

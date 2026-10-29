@@ -222,8 +222,10 @@ Part = Annotated[
 class Message(BaseModel):
     """One message of a conversation.
 
-    ``provider``/``model`` record which provider produced an assistant message, so a
-    conversation can be checked before it is sent to another provider.
+    ``provider``/``model`` record which provider and model produced an assistant
+    message, so a conversation can be checked before it is sent to another provider
+    or model. Agents store the model id they requested (e.g. ``"gpt-5.5"``); the
+    version the API reports is :attr:`ModelResponse.model`.
     """
 
     model_config = ConfigDict(extra="forbid")

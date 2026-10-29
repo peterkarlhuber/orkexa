@@ -55,7 +55,7 @@ listed at the end of this page).
 | --- | --- | --- |
 | `UsageRecord` (14 fields) | `orkexa.UsageRecord` | **extended**: new trailing defaulted fields `provider`, `turn_id`, `workflow`, `pricing_source`; positional/keyword construction of 0.8.0 unchanged; `total_input_tokens`/`total_tokens` unchanged. |
 | `UsageSummary` (12 fields) | same | **same** fields and semantics (`estimated_cost_usd is None` if any request is unpriced). |
-| `UsageTracker()` with `add`, `records`, `usage`, `usage_by_agent`, `reset` | same | **extended**: `usage_by_provider()`, `usage_by_model()`, `usage_by_turn()`, `usage_by_workflow()`, `check()` (no-op). |
+| `UsageTracker()` with `add`, `records`, `usage`, `usage_by_agent`, `reset` | same | **extended**: `usage_by_provider()`, `usage_by_model()`, `usage_by_turn()`, `usage_by_workflow()`, `check()` (no-op); `orkexa.usage.workflow(label)` labels requests. |
 | `record_api_usage(response, *, agent_name, default_model, custom_pricing=None, batch=False)` | `orkexa.usage` | **same**; used by the Anthropic adapter. |
 | `summarize_usage(records)` | same | **same**. |
 | `ModelPricing`, `ModelPricing.of`, `MODEL_PRICING`, `resolve_pricing(model, total_input_tokens=0)` | `orkexa.pricing` | **extended**: `resolve_pricing(..., provider="anthropic")`; `PROVIDER_PRICING` catalog per provider (`MODEL_PRICING` is its Anthropic table). |
@@ -105,7 +105,9 @@ monkeypatching and private helpers used by existing tests keep working.
 
 | Deviation | Reason | Test |
 | --- | --- | --- |
-| Sandbox temporary directory prefix `orkexa-sandbox-` (was `claude-agent-sandbox-`); Docker mount `/opt/orkexa/orkexa`; default image `orkexa-sandbox` | the spec requires migrating hardcoded `claude_agent` paths | `tests/legacy/test_dynamic_sandbox.py::test_working_directory_is_temporary` asserts the new prefix (the only edited legacy assertion); `tests/test_dynamic_migration.py` |
+| Sandbox temporary directory prefix `orkexa-sandbox-` (was `claude-agent-sandbox-`); Docker mount `/opt/orkexa/orkexa`; default image `orkexa-sandbox` | the spec requires migrating hardcoded `claude_agent` paths | `tests/legacy/test_dynamic_sandbox.py::test_working_directory_is_temporary` asserts the new prefix (the only edited legacy assertion); `tests/test_sandbox_migration.py` |
 | `evaluator.agent`, `coding_agent.agent`, `architect.agent`, `orchestrator.agent` and `AgentFactory.create()` return `orkexa.Agent` instead of `ClaudeAgent` | dynamic components must accept any provider | their `.messages` are Orkexa messages, not Messages-API dicts; all attributes used by 0.8.0 (`usage_tracker`, `model`, `effort`, `max_tokens`, `tools`, …) are identical |
 | A turn cannot run concurrently with another turn on the same agent (`ConcurrentTurnError`) | 0.8.0 documented "do not run two `ask()` calls of the same agent at the same time" but did not enforce it | `tests/test_runtime.py` |
-| A shared `BudgetTracker` that is already exhausted stops the *next* model request before it is sent | budgets must be enforced before requests where possible; 0.8.0 sent one more request and then raised | `tests/test_usage_budget.py` |
+| A shared `BudgetTracker` that is used up (`spent_usd >= limit_usd`, e.g. a limit of 0) stops the *next* model request before it is sent; `check()` still raises only above the limit | budgets must be enforced before requests where possible; 0.8.0 sent one more request and then raised | `tests/test_usage_budget.py` |
+| `ToolRegistry.add_generated()` rejects names outside `[A-Za-z0-9_-]{1,128}` with `RegistryError`; such stored records are skipped on load | 0.8.0 joined the name to the registry path unchecked (`../x` wrote outside the directory) | `tests/test_security.py` |
+| Reasoning of another model of the same provider is not replayed (`HistoryConversionWarning`); `Message.model` is the requested model id | reasoning signatures are model-bound | `tests/test_history_models.py` |

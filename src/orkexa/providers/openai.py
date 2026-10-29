@@ -481,8 +481,10 @@ class OpenAIProvider(Provider):
         if status == "failed":
             error = getattr(response, "error", None)
             raise ProviderServerError(
-                f"{self.name}: the response failed: {getattr(error, 'code', None)}: "
-                f"{getattr(error, 'message', error)}",
+                self.redact(
+                    f"{self.name}: the response failed: {getattr(error, 'code', None)}: "
+                    f"{getattr(error, 'message', error)}"
+                ),
                 provider=self.name,
                 retryable=True,
             )
