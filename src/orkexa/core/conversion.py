@@ -208,12 +208,28 @@ def parse_history(
     raise ValueError(f"{source}: not a conversation history")
 
 
-def validate_output(output_format: type[BaseModel], text: str) -> tuple[Any, str | None]:
-    """Validate model output ``text`` locally against ``output_format`` -> ``(instance, error)``."""
+def validate_output(
+    output_format: type[BaseModel], text: str, *, strict_schema: bool = False
+) -> tuple[Any, str | None]:
+    """Validate model output ``text`` locally against ``output_format`` -> ``(instance, error)``.
+
+    With ``strict_schema=True`` (the request used :func:`orkexa.core.schema.strict_schema`,
+    where optional properties are required but nullable), ``null`` values of optional
+    properties are removed first, so they get their Pydantic defaults.
+    """
     try:
+        if strict_schema:
+            from .schema import drop_null_optionals
+
+            data = json.loads(text)
+            if isinstance(data, dict):
+                data = drop_null_optionals(data, output_format.model_json_schema())
+            return output_format.model_validate(data), None
         return output_format.model_validate_json(text), None
     except ValidationError as exc:
         return None, str(exc)
+    except json.JSONDecodeError as exc:
+        return None, f"invalid JSON: {exc}"
 
 
 def to_json(document: Any) -> str:

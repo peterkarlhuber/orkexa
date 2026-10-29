@@ -265,3 +265,30 @@ def test_inline_refs_rejects_recursion() -> None:
 
     with pytest.raises(ToolSchemaError):
         inline_refs(Node.model_json_schema(), name="Node")
+
+
+def test_declared_capabilities_drive_the_encoding() -> None:
+    """An agent's capabilities= overrides reach the adapter (not only the checks)."""
+    harness = ChatHarness()
+    kwargs = harness.agent_kwargs()
+    kwargs["capabilities"] = {**kwargs["capabilities"], "strict_tool_schemas": "supported"}
+    harness.script.responses = [harness.text('{"a": {"x": 1}, "b": null, "c": null}')]
+    agent = Agent(provider="ollama", client=harness.client(False), output_format=Outer, **kwargs)
+    assert agent.ask("hi") == Outer(a=Inner(x=1))
+    response_format = harness.script.calls[0]["response_format"]["json_schema"]
+    assert response_format["strict"] is True
+    assert response_format["schema"]["required"] == ["a", "b", "c"]
+
+
+def test_compat_diagnostics_report_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    from orkexa import compat
+
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    report = compat.diagnose()
+    text = "\n".join(report.lines())
+    assert "OPENAI_API_KEY" in text and SECRET not in text
+    assert report.orkexa is not None
+    assert compat.main([]) == (1 if report.conflict else 0)
+    conflict = compat.CompatReport(orkexa="0.1.0", shim="0.1.0", original="0.8.0", claude_agent_path=None)
+    assert conflict.conflict and conflict.provider == "conflict"
+    assert "pip uninstall -y claude-agent orkexa-claude-compat" in "\n".join(conflict.lines())

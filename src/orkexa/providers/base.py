@@ -221,6 +221,11 @@ class Provider(ABC):
         """
         return not capabilities.supports("strict_tool_schemas")
 
+    def request_capabilities(self, request: ModelRequest) -> ModelCapabilities:
+        """The capabilities in effect for ``request`` (including the agent's overrides)."""
+        caps = request.capabilities
+        return caps if isinstance(caps, ModelCapabilities) else self.capabilities(request.model)
+
     def has_pricing(self, model: str) -> bool:
         """Whether a price for ``model`` is known (for budget pre-checks)."""
         return resolve_pricing(model, provider=self.name) is not None
@@ -259,6 +264,7 @@ class Provider(ABC):
             request_id=response.request_id,
             turn_id=turn_id,
             batch=batch,
+            requested_model=model,
         )
 
     def run_batch(

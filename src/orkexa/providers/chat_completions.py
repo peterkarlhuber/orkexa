@@ -140,7 +140,7 @@ class ChatCompletionsProvider(Provider):
             raise ConfigurationError(
                 "Chat Completions has no server tools; use api='responses' if the endpoint has them"
             )
-        caps = self.capabilities(request.model)
+        caps = self.request_capabilities(request)
         strict = caps.strict_tool_schemas == "supported"
         for tool in request.tools:
             self.tool(tool, strict=strict)
@@ -258,7 +258,7 @@ class ChatCompletionsProvider(Provider):
 
     def prepare(self, request: ModelRequest) -> dict[str, Any]:
         options = self._options(request)
-        caps = self.capabilities(request.model)
+        caps = self.request_capabilities(request)
         system = request.system
         args: dict[str, Any] = {"model": request.model}
         if request.output_format is not None:
@@ -306,7 +306,7 @@ class ChatCompletionsProvider(Provider):
             return ToolCallPart(id=call_id, name=name, parse_error=f"invalid JSON arguments: {exc}")
         if not isinstance(arguments, dict):
             return ToolCallPart(id=call_id, name=name, parse_error="arguments are not a JSON object")
-        strict = self.capabilities(request.model).strict_tool_schemas == "supported"
+        strict = self.request_capabilities(request).strict_tool_schemas == "supported"
         schemas = {t.name: t.input_schema for t in request.tools if t.strict}
         if strict and name in schemas:
             arguments = drop_null_optionals(arguments, schemas[name])
@@ -346,7 +346,12 @@ class ChatCompletionsProvider(Provider):
         message = Message(role="assistant", content=parts, provider=self.name, model=model)
         parsed, error = None, None
         if request.output_format is not None and stop_reason == "end_turn":
-            parsed, error = validate_output(request.output_format, content or "")
+            options = self._options(request)
+            strict = (
+                options.structured_output == "json_schema"
+                and self.request_capabilities(request).strict_tool_schemas == "supported"
+            )
+            parsed, error = validate_output(request.output_format, content or "", strict_schema=strict)
         return ModelResponse(
             message=message,
             stop_reason=stop_reason,

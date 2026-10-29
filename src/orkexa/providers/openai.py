@@ -6,7 +6,7 @@
   (messages, function calls, reasoning items with ``encrypted_content``) are kept
   verbatim in ``Part.meta["openai"]`` and sent back unchanged in the next request,
   as the Responses API requires for multi-round tool use with reasoning models.
-* Structured output through ``responses.parse(text_format=...)``.
+* Structured output with a strict JSON schema (``text.format``), validated locally.
 * ``effort`` maps to ``reasoning.effort`` (same value names); ``OpenAIOptions``
   holds everything else.
 
@@ -427,13 +427,23 @@ class OpenAIProvider(Provider):
             reasoning["summary"] = options.reasoning_summary
         if reasoning:
             args["reasoning"] = reasoning
-        caps = self.capabilities(request.model)
+        caps = self.request_capabilities(request)
         if options.include_encrypted_reasoning and not options.store and caps.reasoning == "supported":
             args["include"] = ["reasoning.encrypted_content"]
         if options.service_tier is not None:
             args["service_tier"] = options.service_tier
         if request.output_format is not None:
-            args["text_format"] = request.output_format
+            # Orkexa's strict schema (not the SDK's parse()): optional fields become
+            # nullable and get their defaults back in local validation.
+            name = request.output_format.__name__
+            args["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": name,
+                    "schema": strict_schema(request.output_format.model_json_schema(), name=name),
+                    "strict": True,
+                }
+            }
         for key, value in deepcopy(options.request_options).items():
             if isinstance(value, dict) and isinstance(args.get(key), dict):
                 args[key] = {**args[key], **value}
@@ -443,13 +453,11 @@ class OpenAIProvider(Provider):
 
     def call(self, native: dict[str, Any], request: ModelRequest) -> ModelResponse:
         api = self.client.responses
-        response = api.parse(**native) if "text_format" in native else api.create(**native)
-        return self.normalize(response, request)
+        return self.normalize(api.create(**native), request)
 
     async def acall(self, native: dict[str, Any], request: ModelRequest) -> ModelResponse:
         api = self.client.responses
-        response = await (api.parse(**native) if "text_format" in native else api.create(**native))
-        return self.normalize(response, request)
+        return self.normalize(await api.create(**native), request)
 
     def stream(self, native: dict[str, Any], request: ModelRequest) -> Iterator[StreamEvent]:
         state = _ResponsesStream()
@@ -500,9 +508,7 @@ class OpenAIProvider(Provider):
         message = Message(role="assistant", content=parts, provider=self.name, model=model)
         parsed, error = None, None
         if request.output_format is not None and stop_reason == "end_turn":
-            parsed = getattr(response, "output_parsed", None)
-            if not isinstance(parsed, request.output_format):
-                parsed, error = validate_output(request.output_format, message.text)
+            parsed, error = validate_output(request.output_format, message.text, strict_schema=True)
         request_id = getattr(response, "_request_id", None)
         return ModelResponse(
             message=message,

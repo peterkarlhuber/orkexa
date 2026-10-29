@@ -328,11 +328,15 @@ def record_token_usage(
     request_id: str | None = None,
     turn_id: str | None = None,
     batch: bool = False,
+    requested_model: str | None = None,
 ) -> UsageRecord:
     """Build a :class:`UsageRecord` from normalized counts (every provider but Anthropic).
 
     Prices come from ``custom_pricing`` or :func:`orkexa.pricing.register_pricing`;
     Orkexa ships no prices for other providers, so without them the cost is ``None``.
+    Registered prices are looked up for ``requested_model`` (the id the agent was
+    configured with) first and then for ``model`` (the id the API reported, which
+    may be a dated snapshot), the same order the budget pre-check uses.
     Cache writes are priced at the 5-minute cache-write rate.
     """
     counts = {
@@ -344,7 +348,12 @@ def record_token_usage(
         or (usage.cache_creation_input_tokens - usage.cache_creation_1h_input_tokens),
         "cache_creation_1h_input_tokens": usage.cache_creation_1h_input_tokens,
     }
-    prices = custom_pricing or resolve_pricing(model, _total_input(counts), provider=provider)
+    total = _total_input(counts)
+    prices = custom_pricing
+    if prices is None and requested_model is not None:
+        prices = resolve_pricing(requested_model, total, provider=provider)
+    if prices is None:
+        prices = resolve_pricing(model, total, provider=provider)
     cost: Decimal | None = None
     note: str | None = None
     if prices is None:

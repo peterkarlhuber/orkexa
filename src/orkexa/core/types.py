@@ -336,6 +336,9 @@ class ModelRequest:
     options: Any = None
     """The agent's typed provider options (e.g. ``AnthropicOptions``), or ``None``."""
     history_policy: Literal["strict", "convert"] = "strict"
+    capabilities: Any = None
+    """The effective :class:`~orkexa.ModelCapabilities` (provider defaults merged with the
+    agent's ``capabilities=`` overrides); adapters base encoding decisions on it."""
 
 
 @dataclass

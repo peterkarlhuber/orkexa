@@ -482,6 +482,7 @@ class AgentCore(Generic[OutputT]):
             effort=self._effort,
             options=self._provider_options(),
             history_policy=self.history_policy,
+            capabilities=caps,
         )
         if check:
             self._check_request(request, caps)
