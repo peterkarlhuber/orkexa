@@ -21,6 +21,13 @@ every adapter).
 
 `AsyncAgent` accepts coroutine functions for every hook.
 
+An exception raised by a hook ends the turn with that exception, and the history is
+not committed. A request that was already answered is still recorded:
+when `on_response` or the hooks of the final `ResponseCompleted` event raise, its usage
+reaches `agent.usage` and the usage tracker (and counts against a budget). The
+history is committed just before `TurnCompleted` is emitted, so an exception from
+that last event leaves the completed turn in the history.
+
 ## Errors
 
 | Situation | Exception |
@@ -29,7 +36,7 @@ every adapter).
 | output token limit reached | `IncompleteResponseError` (usage is recorded) |
 | structured output invalid | `StructuredOutputError` |
 | tool rounds exhausted | `MaxToolRoundsError` |
-| second `ask()` while one runs | `ConcurrentTurnError` |
+| second `ask()`, `reset()` or `load_history()` while a turn runs | `ConcurrentTurnError` |
 | provider API errors (generic agents) | `AuthenticationError`, `RateLimitError`, `InvalidRequestError`, `ProviderConnectionError`, `ProviderServerError` (all `ProviderError`) |
 
 `ProviderError` has `provider`, `status_code`, `request_id` and `retryable`; its message

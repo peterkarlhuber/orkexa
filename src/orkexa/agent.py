@@ -167,7 +167,11 @@ class Agent(AgentCore[OutputT]):
                     raise
                 raise failure from exc
         if self.on_response is not None:
-            self.on_response(self._response_hook_arg(response))
+            try:
+                self.on_response(self._response_hook_arg(response))
+            except BaseException:  # also cancellation: the answered request is billed
+                self._record_before_failure(response)
+                raise
         return response
 
     def _stream(self, native: dict[str, Any], request: ModelRequest) -> ModelResponse:
@@ -186,7 +190,12 @@ class Agent(AgentCore[OutputT]):
                     raise failure from exc
                 if isinstance(event, ResponseCompleted):
                     final = event
-                self._event_hooks(event)
+                try:
+                    self._event_hooks(event)
+                except BaseException:
+                    if isinstance(final, ResponseCompleted):
+                        self._record_before_failure(final.response)
+                    raise
         finally:
             close = getattr(events, "close", None)
             if close is not None:

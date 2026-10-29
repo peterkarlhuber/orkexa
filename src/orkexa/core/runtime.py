@@ -16,7 +16,8 @@ responses; there are no provider-specific branches here.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from copy import deepcopy
 from dataclasses import dataclass, replace
 import json
@@ -410,9 +411,14 @@ class AgentCore(Generic[OutputT]):
         return self._conversation()
 
     def reset(self) -> None:
-        """Forget the conversation history (usage counters are kept)."""
-        self.messages.clear()
-        self.last_response = None
+        """Forget the conversation history (usage counters are kept).
+
+        Raises:
+            ConcurrentTurnError: a turn is running; it would commit the old history.
+        """
+        with self._history_change("reset()"):
+            self.messages.clear()
+            self.last_response = None
 
     def history(self) -> list[Any]:
         """A deep copy of the committed conversation history."""
@@ -434,8 +440,10 @@ class AgentCore(Generic[OutputT]):
 
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
-        self._commit(parse_history(data, decode_messages, str(path)))
-        self.last_response = None
+        messages = parse_history(data, decode_messages, str(path))
+        with self._history_change("load_history()"):
+            self._commit(messages)
+            self.last_response = None
 
     # ---- per-turn settings and requests --------------------------------------------------
 
@@ -598,6 +606,22 @@ class AgentCore(Generic[OutputT]):
                 "conversation, use one agent per concurrent session"
             )
 
+    @contextmanager
+    def _history_change(self, what: str) -> Iterator[None]:
+        """Hold the turn lock while the committed history is replaced outside a turn.
+
+        A running turn works on a copy and commits it at its end, which would undo
+        the change; so the change is refused instead.
+        """
+        if not self._turn_lock.acquire(blocking=False):
+            raise ConcurrentTurnError(
+                f"{self.name}: {what} while ask() is running; wait for the turn to finish"
+            )
+        try:
+            yield
+        finally:
+            self._turn_lock.release()
+
     def _exit_turn(self) -> None:
         self._turn_effort = None
         self._turn_max_tokens = None
@@ -665,6 +689,16 @@ class AgentCore(Generic[OutputT]):
             if self.on_event is not None:
                 yield Emit(TurnFailed(exc))
             raise
+
+    def _record_before_failure(self, response: ModelResponse) -> None:
+        """Record a response whose turn fails in a hook before the runtime receives it.
+
+        The request was answered and billed, so its usage must reach the ledger.
+        The hook's exception is what the caller sees; a tracker error raised while
+        recording (e.g. the budget is now exceeded) is not raised instead of it.
+        """
+        with suppress(Exception):
+            self._record(response)
 
     def _record(self, response: ModelResponse) -> UsageRecord | None:
         """Record usage first: API costs never disappear from the ledger, even if the turn fails."""

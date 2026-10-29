@@ -64,4 +64,10 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
   in-memory state, so a failed write (full disk, rejected path) leaves both unchanged;
   record files are replaced atomically.
 * Batch usage no longer counts in `last_turn_usage` (it covers the most recent `ask()`).
+* A request that was answered is recorded even when `on_response` (or a hook of the
+  final stream event) raises; 0.8.0 lost its usage.
+* `reset()` and `load_history()` raise `ConcurrentTurnError` while a turn runs instead
+  of being undone when the turn commits.
+* `revoke()` of both registries documents and tests its behavior on a failed write: the
+  active version is revoked last, so it stays active until a retry completes.
 * Dropping `effort` for models without reasoning in the dynamic package is logged.

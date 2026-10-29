@@ -212,7 +212,13 @@ class ToolRegistry:
         return self.set_status(name, version, "rejected")
 
     def revoke(self, name: str) -> None:
-        """Revoke every approved version of a tool (trusted tools are removed)."""
+        """Revoke every approved version of a tool (trusted tools are removed).
+
+        Versions are revoked oldest first, so the version :meth:`record` returns
+        is revoked last: if a write fails, ``record`` still returns the version it
+        returned before (in memory and after a restart), the error is raised, and
+        calling ``revoke`` again completes the revocation.
+        """
         if name in self._trusted:
             del self._trusted[name]
             del self._records[name]
