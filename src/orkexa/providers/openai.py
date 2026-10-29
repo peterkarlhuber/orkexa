@@ -59,9 +59,12 @@ __all__ = ["OpenAIProvider", "ResponsesCodec", "openai_media", "openai_tool_choi
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 
-_REASONING_MODELS = re.compile(r"^(gpt-5|o\d)")
+#: Model families by documented capabilities (GPT-6 Astra, Sol, Terra and Luna: reasoning
+#: with low to max effort, text and image input); other models stay "unknown" until
+#: declared with ``capabilities=``.
+_REASONING_MODELS = re.compile(r"^(gpt-6|gpt-5|o\d)")
 _CLASSIC_MODELS = re.compile(r"^(gpt-4|gpt-3\.5|chatgpt-4o)")
-_MULTIMODAL_MODELS = re.compile(r"^(gpt-5|gpt-4o|gpt-4\.1|o3|o4)")
+_MULTIMODAL_MODELS = re.compile(r"^(gpt-6|gpt-5|gpt-4o|gpt-4\.1|o3|o4)")
 
 
 def openai_tool_choice(choice: ToolChoice | None) -> Any:

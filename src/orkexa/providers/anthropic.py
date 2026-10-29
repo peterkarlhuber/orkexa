@@ -399,6 +399,31 @@ class AnthropicProvider(Provider):
             return self.provider_error(exc, status_code=exc.status_code, request_id=exc.request_id)
         return None
 
+    def batch_params(self, request: ModelRequest) -> tuple[dict[str, Any], list[str]]:
+        """One batch item's ``params`` (built like :meth:`prepare`) and the betas it needs.
+
+        A batch item is one request that cannot run local tools, so they are rejected
+        rather than sent; SDK-call options without a batch-item counterpart too.
+        """
+        if request.tools:
+            raise UnsupportedCapabilityError(
+                f"Message Batches send single requests, local tools cannot run there: "
+                f"{sorted(t.name for t in request.tools)}",
+                capability="batch",
+            )
+        args = self.prepare(_without_output_format(request))
+        betas = list(args.pop("betas", []))
+        unsupported = sorted(key for key in ("extra_headers", "extra_query", "timeout") if key in args)
+        if unsupported:
+            raise ConfigurationError(f"request_options {unsupported} cannot be applied to batch items")
+        extra_body = args.pop("extra_body", {})
+        params = {**args, **extra_body}  # a batch item is the request body itself
+        if request.output_format is not None:
+            sdk = require_module("anthropic", "anthropic")
+            schema = {"type": "json_schema", "schema": sdk.transform_schema(request.output_format)}
+            params["output_config"] = {**params.get("output_config", {}), "format": schema}
+        return params, betas
+
     def run_batch(
         self,
         requests: Mapping[str, ModelRequest],
@@ -407,32 +432,19 @@ class AnthropicProvider(Provider):
         timeout: float | None,
     ) -> tuple[str, dict[str, ModelResponse | str]]:
         """Message Batches: one request per item, 50 % price, polled until it ended."""
-        sdk = require_module("anthropic", "anthropic")
         items: list[dict[str, Any]] = []
+        betas: list[str] = []
         for custom_id, request in requests.items():
-            options = self._options(request)
-            output_config: dict[str, Any] = {}
-            if request.output_format is not None:
-                output_config["format"] = {
-                    "type": "json_schema",
-                    "schema": sdk.transform_schema(request.output_format),
-                }
-            if request.effort is not None:
-                output_config["effort"] = request.effort
-            params: dict[str, Any] = {
-                "model": request.model,
-                "max_tokens": request.max_tokens,
-                "system": request.system,
-                "messages": codec.encode_messages(request.messages),
-            }
-            if output_config:
-                params["output_config"] = output_config
-            if options.cache_control:
-                params["cache_control"] = {"type": "ephemeral"}
+            params, needed = self.batch_params(request)
+            betas += [beta for beta in needed if beta not in betas]
             items.append({"custom_id": custom_id, "params": params})
 
-        batches = self.client.messages.batches
-        created = batches.create(requests=items)
+        if betas:
+            batches = self.client.beta.messages.batches
+            created = batches.create(requests=items, betas=betas)
+        else:
+            batches = self.client.messages.batches
+            created = batches.create(requests=items)
         deadline = None if timeout is None else time.monotonic() + timeout
         status = created
         while status.processing_status != "ended":
