@@ -174,17 +174,19 @@ def prepare_history(
             HistoryConversionWarning,
             stacklevel=3,
         )
-    return _merge_adjacent(prepared)
+        return _merge_adjacent(prepared)
+    return prepared
 
 
 def _merge_adjacent(messages: list[Message]) -> list[Message]:
-    """Join consecutive messages of the same role that dropping parts can leave behind."""
+    """Join consecutive assistant messages of one provider and model after parts were dropped."""
     merged: list[Message] = []
     for message in messages:
         if (
             merged
             and merged[-1].role == message.role == "assistant"
             and merged[-1].provider == message.provider
+            and merged[-1].model == message.model
         ):
             previous = merged[-1]
             merged[-1] = previous.model_copy(update={"content": previous.parts() + message.parts()})

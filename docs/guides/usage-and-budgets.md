@@ -46,6 +46,10 @@ budget = BudgetTracker("5.00", on_unpriced="reject")
   last admitted request can overshoot it, and agents that share a tracker and run
   concurrently can each overshoot it by one request. Keep a margin, or run
   budget-critical agents sequentially.
+* A native batch (`Evaluator.evaluate_many(batch=True)`) is admitted as a whole like
+  one request: it is not submitted when the budget is used up or, with
+  `on_unpriced="reject"`, when the model has no price. All of its results are recorded
+  before `BudgetExceededError` is raised, so the ledger stays complete.
 * `on_unpriced` decides what happens to models without a price: `"ignore"` (count as
   0; the 0.8.0 behavior and the default without a limit), `"warn"` (default with a
   limit; one `UnpricedUsageWarning` per model), `"reject"` (`UnpricedModelError`

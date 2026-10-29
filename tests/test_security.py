@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from orkexa import Agent, ProviderServerError
-from orkexa.dynamic import RegistryError, ToolRegistry
+from orkexa.dynamic import AgentRegistry, AgentSpec, RegistryError, ToolRegistry
 from orkexa.providers.base import ProviderConfig
 from orkexa.providers.fake import FakeModel, text
 from orkexa.providers.openai import OpenAIProvider
@@ -158,3 +158,41 @@ def test_load_tool_respects_allowed_agent_tools() -> None:
     assert "harmless" in agent.tools
     # The Python API is the developer's decision and is not restricted.
     assert builder.attach(agent, "dangerous")
+
+
+# ---- AgentRegistry paths -----------------------------------------------------------------
+
+
+def _spec(name: str) -> AgentSpec:
+    return AgentSpec(name=name, description="Test", system_prompt="Test", model="fake:m", effort="low")
+
+
+@pytest.mark.parametrize(
+    "name", ["../outside", "..", "", "/tmp/abs", "a/b", "a\\b", "1agent", "x" * 65, "ägent"]
+)
+def test_agent_registry_rejects_unsafe_names_without_writing(tmp_path: Path, name: str) -> None:
+    registry = AgentRegistry(tmp_path / "agents")
+    with pytest.raises(RegistryError, match="Invalid agent name"):
+        registry.register(_spec(name))
+    assert registry.versions(name) == ()
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+def test_agent_registry_skips_records_whose_name_does_not_match_the_directory(tmp_path: Path) -> None:
+    registry = AgentRegistry(tmp_path / "agents")
+    registry.register(_spec("Analyst"))
+    stored = json.loads((tmp_path / "agents" / "Analyst" / "v1.json").read_text(encoding="utf-8"))
+    tampered = tmp_path / "agents" / "safe"
+    tampered.mkdir()
+    stored["spec"]["name"] = "../outside"
+    (tampered / "v1.json").write_text(json.dumps(stored), encoding="utf-8")
+    reloaded = AgentRegistry(tmp_path / "agents")
+    assert reloaded.names() == ["Analyst"]
+    with pytest.raises(RegistryError):
+        reloaded.revoke("../outside")
+    reloaded.revoke("Analyst")
+    assert not (tmp_path / "outside").exists()
+    assert (
+        json.loads((tmp_path / "agents" / "Analyst" / "v1.json").read_text(encoding="utf-8"))["status"]
+        == "revoked"
+    )

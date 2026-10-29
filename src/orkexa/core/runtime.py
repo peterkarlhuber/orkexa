@@ -553,6 +553,10 @@ class AgentCore(Generic[OutputT]):
     ) -> tuple[str, dict[str, ModelResponse | str]]:
         """Send one-message requests through the provider's batch API; records usage.
 
+        The usage tracker admits the batch as a whole before it is submitted (like
+        one request). Every result's usage is recorded before an error of the
+        tracker (e.g. an exceeded budget) is raised.
+
         Returns the batch id and, per custom id, the response or an error description.
         """
         requests = {
@@ -561,19 +565,27 @@ class AgentCore(Generic[OutputT]):
         }
         for request in requests.values():
             request.stream = False
+        model = self._model_id()
+        self.usage_tracker.before_request(
+            agent=self.name,
+            provider=self.adapter.name,
+            model=model,
+            priced=self.pricing is not None or self.adapter.has_pricing(model),
+        )
         batch_id, results = self.adapter.run_batch(requests, poll_interval=poll_interval, timeout=timeout)
+        failure: Exception | None = None
         for result in results.values():
             if isinstance(result, ModelResponse):
                 record = self.adapter.usage_record(
-                    result,
-                    agent=self.name,
-                    pricing=self.pricing,
-                    turn_id=None,
-                    model=self._model_id(),
-                    batch=True,
+                    result, agent=self.name, pricing=self.pricing, turn_id=None, model=model, batch=True
                 )
                 if record is not None:
-                    self._add_usage_record(record)
+                    try:
+                        self._add_usage_record(record)
+                    except Exception as exc:  # the tracker keeps the record; raise after all are in
+                        failure = failure or exc
+        if failure is not None:
+            raise failure
         return batch_id, results
 
     # ---- the turn ------------------------------------------------------------------------

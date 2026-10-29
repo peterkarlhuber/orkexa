@@ -198,3 +198,67 @@ def test_unpriced_requests_make_aggregated_cost_unknown() -> None:
 def test_workflow_label_must_be_nonempty() -> None:
     with pytest.raises(ValueError), workflow(""):
         pass
+
+
+# ---- batches -------------------------------------------------------------------------------
+
+
+def _batch_agent(budget: UsageTracker, calls: list[int]) -> Agent[str]:
+    agent = Agent(model="fake:m", client=FakeModel(), pricing=PRICE, usage_tracker=budget)
+
+    def run_batch(requests: dict[str, object], *, poll_interval: float, timeout: float | None) -> object:
+        calls.append(len(requests))
+        return "batch-1", {key: text("ok") for key in requests}
+
+    agent.adapter.run_batch = run_batch  # type: ignore[method-assign,assignment]
+    return agent
+
+
+def test_used_up_budget_submits_no_batch() -> None:
+    calls: list[int] = []
+    agent = _batch_agent(BudgetTracker(0), calls)
+    with pytest.raises(BudgetExceededError, match="not sent"):
+        agent._run_batch({"a": "x", "b": "y"}, poll_interval=1, timeout=None)
+    assert calls == []
+
+
+def test_unpriced_batch_is_rejected_before_submission() -> None:
+    from orkexa.dynamic import UnpricedModelError
+
+    calls: list[int] = []
+    agent = _batch_agent(BudgetTracker(100, on_unpriced="reject"), calls)
+    agent.pricing = None
+    with pytest.raises(UnpricedModelError):
+        agent._run_batch({"a": "x"}, poll_interval=1, timeout=None)
+    assert calls == []
+
+
+def test_batch_over_budget_records_every_result_before_raising() -> None:
+    calls: list[int] = []
+    budget = BudgetTracker(1)
+    agent = _batch_agent(budget, calls)
+    with pytest.raises(BudgetExceededError):
+        agent._run_batch({"one": "a", "two": "b", "three": "c"}, poll_interval=1, timeout=None)
+    assert calls == [3]
+    assert len(budget.records) == 3 and all(r.turn_id is None for r in budget.records)
+    assert budget.spent_usd == 3 * COST / 2  # batch prices are half
+    assert agent.usage.requests == 3
+
+
+def test_evaluator_batch_respects_the_budget() -> None:
+    from orkexa.evaluation import Criterion, EvaluationCase, Evaluator
+
+    calls: list[int] = []
+    budget = BudgetTracker(0)
+    evaluator = Evaluator(
+        criteria=[Criterion(name="ok", description="Output is acceptable")],
+        model="fake:m",
+        effort=None,
+        client=FakeModel(),
+        capabilities={"batch": "supported"},
+        usage_tracker=budget,
+    )
+    evaluator.agent.adapter.run_batch = lambda requests, **_: calls.append(len(requests))  # type: ignore[method-assign,assignment,func-returns-value,misc]
+    with pytest.raises(BudgetExceededError):
+        evaluator.evaluate_many([EvaluationCase(task="Task", output="Result")], batch=True)
+    assert calls == []

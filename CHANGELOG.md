@@ -54,4 +54,10 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
   documented; `orkexa.usage.workflow()` labels requests, and `Orchestrator.ask()`
   labels each run including delegated agents (`last_workflow`).
 * `ToolBuilder.as_tools()`' `load_tool` respects `DynamicPolicy.allowed_agent_tools`.
+* `AgentRegistry` validates agent names like `ToolRegistry` validates tool names and
+  skips stored records whose name does not match their directory.
+* Native batches pass the usage tracker's pre-request check (budget, unpriced models)
+  before submission, and every batch result is recorded before a budget error is raised.
+* `prepare_history()` leaves histories unchanged when it drops nothing, and never merges
+  assistant messages of different models.
 * Dropping `effort` for models without reasoning in the dynamic package is logged.

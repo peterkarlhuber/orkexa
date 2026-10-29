@@ -28,9 +28,10 @@
   `docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`.
 * `AutoApprover` is an **unsafe opt-in**: it emits `UnsafeOptInWarning` unless created
   with `AutoApprover(acknowledge_unsafe=True)`.
-* `ToolRegistry` treats tool names as untrusted: only `[A-Za-z0-9_-]{1,128}` is
-  accepted, records are written only inside the registry directory, and stored records
-  whose name does not match their directory are skipped on load.
+* `ToolRegistry` and `AgentRegistry` treat names as untrusted: only tool names
+  `[A-Za-z0-9_-]{1,128}` and agent names `[A-Za-z][A-Za-z0-9_-]{0,63}` are accepted,
+  records are written only inside the registry directory, and stored records whose
+  name does not match their directory are skipped on load.
 * `DynamicPolicy.allowed_agent_tools` limits the tools of generated agents and the
   tools a model can attach to itself with `ToolBuilder.as_tools()`' `load_tool`.
 
