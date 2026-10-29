@@ -22,10 +22,10 @@ jobs:
       id-token: write # build provenance attestations
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Check that the tag matches the package version
@@ -43,10 +43,10 @@ jobs:
       - run: python -m build compat/orkexa-claude-compat --outdir dist/compat
       - run: twine check --strict dist/orkexa/* dist/compat/*
       - run: pytest -m packaging tests/packaging -v --noconftest
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: "dist/*/*"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-dist
           path: dist/
@@ -60,7 +60,7 @@ jobs:
     permissions:
       id-token: write # PyPI trusted publishing (OIDC); no API token is stored
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-dist
           path: dist/
