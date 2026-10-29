@@ -69,7 +69,7 @@ _REFUSALS = frozenset(
         "IMAGE_RECITATION",
     }
 )
-_THINKING_LEVEL = re.compile(r"^(models/)?gemini-(3|4)")  # Gemini 3.x and 4 (e.g. gemini-4-argon)
+_THINKING_LEVEL = re.compile(r"^(models/)?gemini-[34]([.-]|$)")  # Gemini 3.x and 4 (e.g. gemini-4-argon)
 _GEMINI_2 = re.compile(r"^(models/)?gemini-(2|1)\.")
 _RESERVED = frozenset(
     {
