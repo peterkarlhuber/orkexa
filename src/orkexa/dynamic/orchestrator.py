@@ -9,7 +9,8 @@ from typing import Any
 from anthropic import Anthropic
 from pydantic import BaseModel
 
-from ..agent import ClaudeAgent, Effort
+from ..claude import ClaudeAgent
+from ..core.types import Effort
 from ..tools import Tool
 from ..usage import UsageTracker
 from .agent_registry import AgentRecord, AgentRegistry

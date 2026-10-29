@@ -86,6 +86,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
+known-first-party = ["orkexa", "claude_agent"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/legacy/*" = ["RUF", "B", "SIM"]

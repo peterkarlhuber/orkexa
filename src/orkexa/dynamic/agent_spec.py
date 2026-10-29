@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..agent import Effort
+from ..core.types import Effort
 
 __all__ = ["AgentSpec", "ToolRequirement"]
 

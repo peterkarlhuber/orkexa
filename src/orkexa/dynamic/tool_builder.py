@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any
 
-from ..agent import ClaudeAgent
+from ..claude import ClaudeAgent
 from ..evaluation import Criterion, Evaluation, Evaluator
 from ..tools import Tool
 from ..usage import UsageTracker

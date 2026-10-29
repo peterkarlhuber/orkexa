@@ -6,7 +6,8 @@ import json
 
 from anthropic import Anthropic
 
-from ..agent import ClaudeAgent, Effort
+from ..claude import ClaudeAgent
+from ..core.types import Effort
 from ..usage import UsageTracker
 from .agent_spec import AgentSpec
 from .policy import DynamicPolicy

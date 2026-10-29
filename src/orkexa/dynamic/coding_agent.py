@@ -5,7 +5,8 @@ from __future__ import annotations
 from anthropic import Anthropic
 from pydantic import BaseModel, Field
 
-from ..agent import ClaudeAgent, Effort
+from ..claude import ClaudeAgent
+from ..core.types import Effort
 from ..usage import UsageTracker
 from .static_check import ALLOWED_IMPORTS, TOOL_MODULE
 

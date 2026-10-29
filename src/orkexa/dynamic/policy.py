@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import get_args
 
-from ..agent import Effort
+from ..core.types import Effort
 from ..usage import UsageRecord, UsageTracker
 from .errors import BudgetExceededError
 

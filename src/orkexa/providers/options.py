@@ -12,6 +12,37 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+_ANTHROPIC_TOOL_CHOICES = ("auto", "none", "any", "tool")
+_THINKING_DISPLAYS = ("summarized", "omitted", "updates")
+#: Request fields the agent manages itself; they cannot be set via request_options.
+_ANTHROPIC_RESERVED = frozenset(
+    {
+        "model",
+        "messages",
+        "max_tokens",
+        "system",
+        "tools",
+        "tool_choice",
+        "thinking",
+        "stream",
+        "output_format",
+        "fallbacks",
+    }
+)
+_OPENAI_RESERVED = frozenset(
+    {
+        "model",
+        "input",
+        "instructions",
+        "tools",
+        "tool_choice",
+        "text_format",
+        "text",
+        "stream",
+        "max_output_tokens",
+    }
+)
+
 __all__ = [
     "AnthropicOptions",
     "CompatibleOptions",
@@ -33,6 +64,8 @@ class AnthropicOptions:
         eager_input_streaming: Stream tool inputs unbuffered.
         fallbacks: Server-side model fallbacks (``"default"`` or a list).
         request_options: Merged into every request (``betas`` route to the beta API).
+        tool_choice: A native ``tool_choice`` dict (e.g. with
+            ``disable_parallel_tool_use``); overrides the agent's generic ``tool_choice``.
     """
 
     thinking: Literal["adaptive", "between_tools", "disabled"] | None = None
@@ -42,8 +75,26 @@ class AnthropicOptions:
     eager_input_streaming: bool = False
     fallbacks: Literal["default"] | list[dict[str, Any]] | None = None
     request_options: dict[str, Any] = field(default_factory=dict)
+    tool_choice: dict[str, Any] | None = None
 
     provider = "anthropic"
+
+    def __post_init__(self) -> None:
+        if self.cache_ttl not in ("5m", "1h"):
+            raise ValueError("cache_ttl must be '5m' or '1h'")
+        if self.tool_choice is not None and self.tool_choice.get("type") not in _ANTHROPIC_TOOL_CHOICES:
+            raise ValueError("Invalid tool_choice")
+        if self.thinking_display is not None and self.thinking_display not in _THINKING_DISPLAYS:
+            raise ValueError(f"thinking_display must be one of {_THINKING_DISPLAYS}")
+        if (
+            self.fallbacks is not None
+            and self.fallbacks != "default"
+            and not isinstance(self.fallbacks, list)
+        ):
+            raise ValueError("fallbacks must be 'default' or a list like [{'model': '...'}]")
+        reserved = _ANTHROPIC_RESERVED & set(self.request_options or {})
+        if reserved:
+            raise ValueError(f"Set these via constructor arguments, not request_options: {sorted(reserved)}")
 
 
 @dataclass

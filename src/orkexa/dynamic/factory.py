@@ -7,7 +7,7 @@ from typing import Any
 
 from anthropic import Anthropic
 
-from ..agent import ClaudeAgent
+from ..claude import ClaudeAgent
 from ..tools import Tool
 from ..usage import UsageTracker
 from .agent_spec import AgentSpec

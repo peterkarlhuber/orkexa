@@ -128,8 +128,10 @@ class ModelCapabilities:
         return replace(self, reasons=reasons, **changes)
 
     @classmethod
-    def all(cls, value: Support, **overrides: Support) -> ModelCapabilities:
+    def all(
+        cls, value: Support, *, reasons: Mapping[str, str] | None = None, **overrides: Support
+    ) -> ModelCapabilities:
         """Every capability set to ``value``, except ``overrides``."""
         values: dict[str, Support] = dict.fromkeys(CAPABILITY_NAMES, value)
         values.update(overrides)
-        return cls(**values)  # type: ignore[arg-type]
+        return cls(**values, reasons=dict(reasons or {}))  # type: ignore[arg-type,unused-ignore]

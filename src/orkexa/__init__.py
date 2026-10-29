@@ -30,6 +30,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from .agent import Agent, RefusalMode, ToolCall
 from .async_agent import AsyncAgent
+from .claude import AsyncClaudeAgent, ClaudeAgent, Fallbacks, ThinkingDisplay, ThinkingMode
 from .content import ContentBlock, Prompt, ToolContent, document, image, uploaded_file
 from .core.capabilities import ModelCapabilities, Support
 from .core.conversion import HistoryConversionWarning
@@ -112,9 +113,11 @@ __all__ = [
     "Agent",
     "AnthropicOptions",
     "AsyncAgent",
+    "AsyncClaudeAgent",
     "AuthenticationError",
     "Chunk",
     "Citation",
+    "ClaudeAgent",
     "ClaudeAgentError",
     "CompatibleOptions",
     "ConcurrentTurnError",
@@ -128,6 +131,7 @@ __all__ = [
     "EvaluationCase",
     "EvaluationFailedError",
     "Evaluator",
+    "Fallbacks",
     "FileMemory",
     "FileStore",
     "GeminiOptions",
@@ -169,6 +173,8 @@ __all__ = [
     "StructuredOutputError",
     "Support",
     "TextDelta",
+    "ThinkingDisplay",
+    "ThinkingMode",
     "Tool",
     "ToolCall",
     "ToolCallDelta",
