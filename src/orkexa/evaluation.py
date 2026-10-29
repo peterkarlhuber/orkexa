@@ -189,8 +189,11 @@ class Evaluator:
         provider: The judge's provider, if not given as model prefix.
         effort: Reasoning effort of the judge. By default ``"medium"`` where the judge
             model supports reasoning effort, otherwise none.
-        client, api_key, base_url, options, capabilities: Passed to the judge agent
-            (credentials only apply to the judge's own provider).
+        client: SDK client of the judge's provider.
+        api_key: API key of the judge's provider (never used for another provider).
+        base_url: Endpoint override of the judge's provider.
+        options: Provider options of the judge.
+        capabilities: Capability overrides of the judge.
 
     An Anthropic judge is a :class:`~orkexa.ClaudeAgent` (``claude-agent``
     compatible, Message Batches for :meth:`evaluate_many`); every other judge is an

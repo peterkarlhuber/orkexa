@@ -442,3 +442,26 @@ def test_files_tool_loads_an_image_for_openai_and_a_document_for_gemini(tmp_path
     )
     assert agent.ask("growth?") == "12%"
     assert "Revenue grew 12%." in ge.tool_results(ge.script.calls[1])[0][1]
+
+
+# ---- evaluation batches -----------------------------------------------------------------------
+
+
+def test_evaluate_many_without_native_batch_is_explicit() -> None:
+    from orkexa import EvaluationCase, UnsupportedCapabilityError
+
+    _, oa, _ = _harnesses()
+    oa.script = Script([oa.text(_verdict(specific=True)), oa.text(_verdict(specific=False))])
+    judge = Evaluator(
+        criteria=[Criterion(name="specific", description="Names concrete numbers.")],
+        model="openai:gpt-5.5",
+        client=oa.client(False),
+    )
+    cases = [EvaluationCase(task="t", output="a"), EvaluationCase(task="t", output="b")]
+    with pytest.raises(UnsupportedCapabilityError, match=r"batch=False"):
+        judge.evaluate_many(cases)
+    assert oa.script.calls == []
+    results = judge.evaluate_many(cases, batch=False)
+    assert [r.passed for r in results] == [True, False]
+    with pytest.raises(TimeoutError, match="0 of 2"):
+        judge.evaluate_many(cases, batch=False, timeout=0)

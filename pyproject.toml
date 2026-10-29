@@ -39,6 +39,7 @@ vector = ["sqlite-vec>=0.1.6"]
 docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.27",
+    "pymdown-extensions>=10,<11",  # 11+ breaks mkdocstrings' code highlighting
 ]
 dev = [
     "anthropic>=2.0,<3",

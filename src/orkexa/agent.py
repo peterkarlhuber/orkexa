@@ -61,7 +61,8 @@ class Agent(AgentCore[OutputT]):
             :class:`~orkexa.ToolExecutionError` (its thread is abandoned, not killed).
         stream: Stream requests (``None``: when a streaming hook is set).
         on_refusal: ``"raise"`` (:class:`~orkexa.RefusalError`) or ``"return"`` the text.
-        on_text, on_thinking: Streamed text / visible reasoning deltas.
+        on_text: Streamed text deltas.
+        on_thinking: Streamed visible reasoning deltas.
         on_event: Every normalized :data:`~orkexa.core.types.StreamEvent`.
         on_request: The :class:`~orkexa.core.types.ModelRequest` of every request.
         on_response: The :class:`~orkexa.core.types.ModelResponse` of every request.
@@ -70,7 +71,10 @@ class Agent(AgentCore[OutputT]):
         after_tool: ``(call, content, is_error)`` of every result.
         options: Typed provider options (``AnthropicOptions``, ``OpenAIOptions``, ...).
         client: A preconfigured SDK client.
-        api_key, base_url, timeout, max_retries: Client settings for this agent's provider only.
+        api_key: API key for this agent's provider only.
+        base_url: Endpoint override (a custom URL needs an explicit ``api_key``).
+        timeout: Client timeout in seconds.
+        max_retries: Client retries.
         name: Agent name for usage records (default: the model id).
         usage_tracker: A shared :class:`~orkexa.UsageTracker` (or a budget tracker).
         pricing: Custom :class:`~orkexa.ModelPricing` for cost estimates.

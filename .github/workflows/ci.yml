@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: pip install --no-deps -e compat/orkexa-claude-compat
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy --strict src
+      - run: mypy --strict examples
+      # Offline only: no API keys are configured, live tests skip themselves.
+      - run: pytest --cov=orkexa --cov-report=term-missing
+
+  packaging:
+    name: build and install (fresh virtual environments)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: peterkarlhuber/claude-agent
+          path: reference/claude-agent
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build pytest
+      - run: python -m build
+      - run: python -m build compat/orkexa-claude-compat
+      - run: pytest -m packaging tests/packaging -v
+        env:
+          CLAUDE_AGENT_SOURCE: ${{ github.workspace }}/reference/claude-agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/
+            compat/orkexa-claude-compat/dist/
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[docs]"
+      - run: mkdocs build --strict
