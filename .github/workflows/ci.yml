@@ -23,10 +23,10 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
@@ -38,7 +38,7 @@ jobs:
       # Offline only: no API keys are configured, and live tests run only with -m live.
       - run: pytest --cov=orkexa --cov-report=term-missing --cov-report=xml
       - if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.xml
@@ -48,10 +48,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.10"
       - run: pip install -e ".[dev]"
@@ -65,10 +65,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install build pytest twine
@@ -80,7 +80,7 @@ jobs:
       # --noconftest: the suite's root conftest needs the provider SDKs, which this
       # job deliberately does not install (the tests create their own environments).
       - run: pytest -m packaging tests/packaging -v --noconftest
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: |
@@ -91,10 +91,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install -e ".[docs]"
@@ -105,10 +105,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # Every runtime dependency, all provider SDKs and optional extras, and the docs toolchain.
