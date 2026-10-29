@@ -22,8 +22,10 @@ change. This page collects the common cases.
 | `ConcurrentTurnError` | A second `ask()`, `reset()` or `load_history()` while a turn runs | Use one agent per concurrent conversation |
 | `UnpricedModelError` (`orkexa.dynamic`) | `BudgetTracker(on_unpriced="reject")` and no price for the model | `register_pricing()` or `pricing=` on the agent |
 
-Provider errors are redacted: messages never contain API keys. The original SDK
-exception is available as `exc.__cause__`.
+Provider errors are redacted: messages never contain API keys. The SDK exception is not
+attached (`exc.__cause__` is `None`, so tracebacks cannot print request headers); use
+`exc.provider`, `exc.status_code`, `exc.request_id` and `exc.retryable`, and quote the
+`request_id` when you contact the provider.
 
 ## FAQ
 
@@ -52,4 +54,10 @@ if your server needs one.
 that call real APIs are marked `live` and skip themselves without keys.
 
 **Is `SubprocessSandbox` safe for untrusted code?** No. It is not a security boundary;
-use `DockerSandbox` or stronger isolation ([Security](guides/security.md)).
+use `DockerSandbox` (the default of `ToolRegistry`) or stronger isolation
+([Security](guides/security.md)).
+
+**Why does my generated tool fail with "Cannot start docker"?** `ToolRegistry` runs
+generated code in `DockerSandbox` by default and refuses to run it without Docker.
+Build the image (`docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`), or,
+for code you trust, pass `sandbox=SubprocessSandbox(acknowledge_unsafe=True)`.

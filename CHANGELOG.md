@@ -34,6 +34,9 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
 * Sandbox temp directory prefix, Docker image and mount path use `orkexa`
   (`orkexa-sandbox-`, `orkexa-sandbox`, `/opt/orkexa/orkexa`).
 * `AutoApprover()` warns (`UnsafeOptInWarning`) unless `acknowledge_unsafe=True`.
+* `ToolRegistry()` uses `DockerSandbox()` instead of `SubprocessSandbox()`;
+  `SubprocessSandbox()` warns unless `acknowledge_unsafe=True` (see Security below).
+* History and registry files are `0600`, new SQLite databases `0600`.
 * `BudgetTracker` with a limit warns about requests without known price.
 * Install hints name the `orkexa[...]` extras.
 * `BudgetTracker` refuses a request when the budget is exactly used up
@@ -42,6 +45,45 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
 * `ToolRegistry.add_generated()` validates the tool name (`[A-Za-z0-9_-]{1,128}`) and
   never writes outside the registry directory; stored records with a name that does
   not match their directory are skipped (0.8.0 accepted names such as `../x`).
+
+### Security (independent release audit, 2026-10-29)
+
+* **Provider errors no longer chain the SDK exception** (SEC-01). `Agent` and
+  `AsyncAgent` raise `ProviderError` with `__cause__` and `__context__` set to `None`
+  in synchronous, asynchronous and streamed turns, token counting and batches, so
+  tracebacks and `logging.exception()` cannot print the SDK exception, its request or
+  its `Authorization` header. `provider`, `status_code`, `request_id`, `retryable` and
+  the redacted message are kept. Redaction also covers bearer and basic credentials,
+  `x-api-key`, Google, GitHub, Slack and AWS keys, JWTs, URL user info, credential
+  query parameters and JSON credential fields.
+* **Generated code runs in `DockerSandbox` by default** (SEC-02). `ToolRegistry()`
+  without `sandbox=` fails closed when Docker or the image is missing; no code runs.
+  `SubprocessSandbox()` emits `UnsafeOptInWarning` unless created with
+  `acknowledge_unsafe=True`, and its run directory stays `0700`. The static check
+  rejects access to modules through attributes of allowed modules (`calendar.sys`,
+  `dataclasses.inspect`, `json.codecs`, `enum.bltns`, `typing_extensions._types` ...),
+  and a test walks every reachable module so new exposures fail CI. Example 11 stops
+  without Docker unless `ORKEXA_ALLOW_SUBPROCESS_SANDBOX=1`.
+* **Stored data is owner-private** (PRI-01 to PRI-03). `save_history()` (all agents),
+  `ToolRegistry` and `AgentRegistry` write `0600` files atomically; new SQLite
+  databases of `SQLiteMemory`, `SQLiteFileStore` and `SQLiteIndex` (and so their
+  journal and WAL files) are `0600`; directories Orkexa creates, including missing
+  parents, are `0700`. The umask is not changed; existing databases and directories
+  keep their mode.
+* **`base_url` credentials are redacted** in the `repr` of `ProviderConfig` and
+  `ProviderSettings` (SEC-03); requests use the URL unchanged.
+
+#### Migration
+
+* Build the sandbox image (`docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`),
+  or, for trusted or reviewed code only, pass
+  `ToolRegistry(path, sandbox=SubprocessSandbox(acknowledge_unsafe=True))`.
+* Code that read `ProviderError.__cause__` uses the error's attributes instead.
+* Setups that share histories, registries or new databases with other users grant
+  access explicitly. To make databases created by earlier versions private, run
+  `chmod 600 <database>*`.
+
+See "Migrating to the secure defaults" in the security guide.
 
 ### Fixed during review of the first implementation
 

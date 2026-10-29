@@ -12,7 +12,7 @@ network request.
 | Search hits and memory contents | Same provider, as tool results | When the model calls the `search` or `memory` tool |
 | Files with `files_api=client` | Anthropic's Files API | The first time a file is loaded; later requests reference its id |
 | Queries of server tools (e.g. Anthropic web search) | The provider and the services it uses for the tool | When you enable a server tool and the model uses it |
-| Generated tool code and its tests | The configured sandbox (a local subprocess or a Docker container) | When `ToolBuilder` validates or a registry runs a generated tool |
+| Generated tool code and its tests | The configured sandbox (a Docker container by default; a local subprocess only after an explicit opt-in) | When `ToolBuilder` validates or a registry runs a generated tool |
 | Delegated tasks | The provider of each delegated agent, which may differ from the caller's | In multi-agent setups, per delegated agent |
 
 Credentials go only to the provider they belong to. A custom `base_url` for a
@@ -30,6 +30,9 @@ a third-party host. Sandboxes start with an empty environment.
 | `UsageTracker` | Process memory | Metadata only: counts, model, provider, ids, cost |
 | `ToolRegistry`, `AgentRegistry` | Files below the directory you pass | Generated code, specs, approval status |
 | Python `logging` | Wherever your logging configuration sends it | Orkexa adds no handlers. The dynamic package logs registry problems (file paths) and, at INFO level, the sandbox feedback of failed tool proposals |
+
+Files and databases Orkexa creates are readable only by the user that runs it (`0600`,
+directories `0700`); see [Stored data](../guides/security.md#stored-data).
 
 ## Deleting data
 

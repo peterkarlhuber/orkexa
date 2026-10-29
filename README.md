@@ -123,9 +123,11 @@ docstrings: `pip install -e ".[docs]" && mkdocs serve`.
 ## Security and compliance
 
 Orkexa never lets a provider SDK execute tools on its own, keeps credentials per
-provider, redacts secrets from errors and starts sandboxes with an empty environment.
-`SubprocessSandbox` is **not** a security boundary and `AutoApprover` is an explicit
-unsafe opt-in; see the [security guide](docs/guides/security.md). Report
+provider, redacts secrets from errors and tracebacks, stores histories, memory and
+registries owner-private (`0600`) and runs generated code in `DockerSandbox` by
+default, failing closed without Docker. `SubprocessSandbox` is **not** a security
+boundary and, like `AutoApprover`, an explicit unsafe opt-in; see the
+[security guide](docs/guides/security.md). Report
 vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
 Orkexa is a library, not a certified product. It provides technical controls that help
