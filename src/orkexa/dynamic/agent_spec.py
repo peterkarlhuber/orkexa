@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, Field
 
 from ..core.types import Effort
 
 __all__ = ["AgentSpec", "ToolRequirement"]
+
+AGENT_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}")
+"""Valid agent names; they are also directory names of an :class:`AgentRegistry`."""
 
 
 class ToolRequirement(BaseModel):

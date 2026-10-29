@@ -129,3 +129,37 @@ def test_gemini_thought_signatures_are_only_replayed_to_their_model() -> None:
     with pytest.warns(HistoryConversionWarning):
         agent.ask("again")
     assert not any(_signatures(harness.script.calls[2]))
+
+
+def test_unchanged_histories_are_not_restructured() -> None:
+    history = [
+        Message(role="user", content="hi"),
+        Message(role="assistant", content="A", provider="fake", model="model-one"),
+        Message(role="assistant", content="B", provider="fake", model="model-two"),
+        Message(role="assistant", content="C", provider="fake", model="model-two"),
+    ]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", HistoryConversionWarning)
+        assert prepare_history(history, "fake", "strict", "model-one") == history
+
+
+def test_merging_after_dropped_parts_keeps_models_apart() -> None:
+    history = [
+        Message(role="user", content="hi"),
+        Message(
+            role="assistant",
+            content=[ReasoningPart(text="r"), TextPart(text="A")],
+            provider="other",
+            model="x",
+        ),
+        Message(role="assistant", content=[TextPart(text="B")], provider="fake", model="model-one"),
+        Message(role="assistant", content=[TextPart(text="C")], provider="fake", model="model-two"),
+    ]
+    with pytest.warns(HistoryConversionWarning):
+        prepared = prepare_history(history, "fake", "convert", "model-one")
+    assert [(m.provider, m.model, m.text) for m in prepared] == [
+        (None, None, "hi"),
+        ("other", "x", "A"),
+        ("fake", "model-one", "B"),
+        ("fake", "model-two", "C"),
+    ]

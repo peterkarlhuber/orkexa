@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-import re
 from typing import Any
 
 from ..agent import Agent
 from ..tools import Tool
 from ..usage import UsageTracker
 from ._agents import ProviderSettings, build_agent, same_model
-from .agent_spec import AgentSpec
+from .agent_spec import AGENT_NAME, AgentSpec
 from .errors import PolicyViolationError
 from .output_registry import OutputFormatRegistry
 from .policy import RESERVED_TOOL_NAMES, DynamicPolicy, clamp_effort
@@ -18,7 +17,7 @@ from .tool_registry import ToolRegistry
 
 __all__ = ["AgentFactory"]
 
-_AGENT_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}")
+_AGENT_NAME = AGENT_NAME
 
 
 class AgentFactory:

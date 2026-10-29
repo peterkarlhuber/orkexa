@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import ValidationError
 
 from ._search import keyword_search
-from .agent_spec import AgentSpec
+from .agent_spec import AGENT_NAME, AgentSpec
 from .errors import RegistryError
 
 __all__ = ["AgentRecord", "AgentRegistry"]
@@ -32,6 +32,13 @@ class AgentRecord:
     @property
     def name(self) -> str:
         return self.spec.name
+
+
+def _check_name(name: object) -> None:
+    if not isinstance(name, str) or not AGENT_NAME.fullmatch(name):
+        raise RegistryError(
+            f"Invalid agent name {name!r}: a letter, then up to 63 of A-Z, a-z, 0-9, '_', '-'"
+        )
 
 
 class AgentRegistry:
@@ -53,7 +60,11 @@ class AgentRegistry:
     def _save(self, record: AgentRecord) -> None:
         if self.path is None:
             return
-        file = self.path / record.name / f"v{record.version}.json"
+        _check_name(record.name)
+        root = self.path.resolve()
+        file = (root / record.name / f"v{int(record.version)}.json").resolve()
+        if file.parent.parent != root:
+            raise RegistryError(f"Agent record path escapes the registry directory: {record.name!r}")
         file.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "spec": record.spec.model_dump(mode="json"),
@@ -79,12 +90,19 @@ class AgentRegistry:
             except (OSError, ValueError, KeyError, TypeError, ValidationError) as exc:
                 logger.warning("Skipping unreadable agent record %s: %s", file, exc)
                 continue
+            if not AGENT_NAME.fullmatch(record.name) or record.name != file.parent.name:
+                logger.warning("Skipping agent record %s: name does not match its directory", file)
+                continue
             self._records.setdefault(record.name, []).append(record)
         for versions in self._records.values():
             versions.sort(key=lambda r: r.version)
 
     def register(self, spec: AgentSpec, requirement: str | None = None) -> AgentRecord:
-        """Store an approved spec as the newest version under its name."""
+        """Store an approved spec as the newest version under its name.
+
+        The name must match ``[A-Za-z][A-Za-z0-9_-]{0,63}`` (it is a directory name).
+        """
+        _check_name(spec.name)
         versions = self._records.setdefault(spec.name, [])
         record = AgentRecord(
             spec=spec,
