@@ -1,0 +1,39 @@
+/* Orkexa colors, sampled from the logo: navy #16243B, blue #0079FE. */
+
+:root {
+  --md-primary-fg-color: #16243b;
+  --md-primary-fg-color--light: #2b3d5c;
+  --md-primary-fg-color--dark: #0e1828;
+  --md-accent-fg-color: #0079fe;
+  --md-accent-fg-color--transparent: rgba(0, 121, 254, 0.1);
+}
+
+[data-md-color-scheme="default"] {
+  --md-typeset-a-color: #0062cc;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0f1726;
+  --md-default-bg-color--light: #16243b;
+  --md-code-bg-color: #16243b;
+  --md-typeset-a-color: #5aa9ff;
+  --md-accent-fg-color: #5aa9ff;
+}
+
+/* The header logo is the symbol on its own light tile; keep it a little larger. */
+.md-header__button.md-logo img {
+  height: 1.6rem;
+  border-radius: 0.3rem;
+}
+
+/* Landing page hero: the full logo on its light background, also in dark mode. */
+.orkexa-hero {
+  text-align: center;
+  margin: 0 0 1.5rem;
+}
+
+.orkexa-hero img {
+  width: 320px;
+  max-width: 100%;
+  border-radius: 0.6rem;
+}

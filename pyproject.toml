@@ -63,7 +63,7 @@ Changelog = "https://github.com/peterkarlhuber/orkexa/blob/master/CHANGELOG.md"
 packages = ["src/orkexa"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["compat/", ".github/"]
+exclude = ["compat/", ".github/", "assets/", "docs/assets/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
