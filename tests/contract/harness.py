@@ -11,16 +11,23 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
 from copy import deepcopy
+import inspect
 import json
 from types import SimpleNamespace
 from typing import Any
 
 import anthropic
+from anthropic.resources.beta.messages import Messages as _BetaMessagesSDK
+from anthropic.resources.messages import Messages as _MessagesSDK
 from anthropic.types import Message as AnthropicMessage
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
+from google.genai.models import Models as _GeminiSDK
 import httpx2
 import openai
+from openai.resources.chat.completions import Completions as _ChatSDK
+from openai.resources.responses import Responses as _ResponsesSDK
+from openai.resources.responses.input_tokens import InputTokens as _InputTokensSDK
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.responses import Response
 
@@ -45,7 +52,9 @@ class Script:
         self.responses = list(responses)
         self.calls: list[dict[str, Any]] = []
 
-    def next(self, kwargs: dict[str, Any]) -> Any:
+    def next(self, kwargs: dict[str, Any], method: Any = None) -> Any:
+        if method is not None:
+            accepts(method, kwargs)
         self.calls.append(
             deepcopy({k: v for k, v in kwargs.items() if k not in ("text_format", "output_format")})
         )
@@ -55,6 +64,11 @@ class Script:
         if isinstance(response, BaseException):
             raise response
         return response
+
+
+def accepts(method: Any, kwargs: dict[str, Any]) -> None:
+    """Fail like the real SDK method would on keyword arguments it does not take."""
+    inspect.signature(method).bind(None, **kwargs)
 
 
 class Harness:
@@ -214,12 +228,15 @@ class AnthropicHarness(Harness):
     def client(self, asynchronous: bool) -> Any:
         script = lambda: self.script  # noqa: E731
 
+        def sdk(name: str, kwargs: dict[str, Any]) -> Any:
+            return getattr(_BetaMessagesSDK if kwargs.get("betas") else _MessagesSDK, name)
+
         class Messages:
             def create(self, **kwargs: Any) -> Any:
-                return script().next(kwargs)
+                return script().next(kwargs, sdk("create", kwargs))
 
             def parse(self, **kwargs: Any) -> Any:
-                message = script().next(kwargs)
+                message = script().next(kwargs, sdk("parse", kwargs))
                 model = kwargs["output_format"]
                 parsed = (
                     model.model_validate_json(message.content[0].text)
@@ -229,9 +246,10 @@ class AnthropicHarness(Harness):
                 return _Parsed(message, parsed)
 
             def stream(self, **kwargs: Any) -> Any:
-                return _AnthropicStream(script().next(kwargs))
+                return _AnthropicStream(script().next(kwargs, sdk("stream", kwargs)))
 
             def count_tokens(self, **kwargs: Any) -> Any:
+                accepts(sdk("count_tokens", kwargs), kwargs)
                 script().calls.append(deepcopy({k: v for k, v in kwargs.items() if k != "output_format"}))
                 return SimpleNamespace(input_tokens=321)
 
@@ -302,6 +320,8 @@ class _ResponsesStream:
                         delta=item.arguments,
                     )
                 )
+        if self.response.status in ("incomplete", "failed"):
+            events.append(SimpleNamespace(type=f"response.{self.response.status}", response=self.response))
         return events
 
     def __enter__(self) -> _ResponsesStream:
@@ -314,6 +334,8 @@ class _ResponsesStream:
         return iter(self._events())
 
     def get_final_response(self) -> Response:
+        if self.response.status != "completed":  # like the SDK's ResponseStream
+            raise RuntimeError("Didn't receive a `response.completed` event.")
         return self.response
 
     async def __aenter__(self) -> _ResponsesStream:
@@ -438,7 +460,7 @@ class OpenAIHarness(Harness):
         script = lambda: self.script  # noqa: E731
 
         def parse(**kwargs: Any) -> Any:
-            response = script().next(kwargs)
+            response = script().next(kwargs, _ResponsesSDK.parse)
             model = kwargs["text_format"]
             if response.status == "completed" and response.output[0].type == "message":
                 content = response.output[0].content[0]
@@ -447,13 +469,14 @@ class OpenAIHarness(Harness):
             return response
 
         def count(**kwargs: Any) -> Any:
+            accepts(_InputTokensSDK.count, kwargs)
             script().calls.append(deepcopy(kwargs))
             return SimpleNamespace(input_tokens=321)
 
         if asynchronous:
 
             async def acreate(**kwargs: Any) -> Any:
-                return script().next(kwargs)
+                return script().next(kwargs, _ResponsesSDK.create)
 
             async def aparse(**kwargs: Any) -> Any:
                 return parse(**kwargs)
@@ -464,14 +487,14 @@ class OpenAIHarness(Harness):
             responses = SimpleNamespace(
                 create=acreate,
                 parse=aparse,
-                stream=lambda **kw: _AsyncResponsesStream(script().next(kw)),
+                stream=lambda **kw: _AsyncResponsesStream(script().next(kw, _ResponsesSDK.stream)),
                 input_tokens=SimpleNamespace(count=acount),
             )
         else:
             responses = SimpleNamespace(
-                create=lambda **kw: script().next(kw),
+                create=lambda **kw: script().next(kw, _ResponsesSDK.create),
                 parse=parse,
-                stream=lambda **kw: _ResponsesStream(script().next(kw)),
+                stream=lambda **kw: _ResponsesStream(script().next(kw, _ResponsesSDK.stream)),
                 input_tokens=SimpleNamespace(count=count),
             )
         return SimpleNamespace(responses=responses)
@@ -479,7 +502,7 @@ class OpenAIHarness(Harness):
 
 class _AsyncResponsesStream(_ResponsesStream):
     async def get_final_response(self) -> Response:  # type: ignore[override]
-        return self.response
+        return super().get_final_response()
 
 
 def _last_round(items: list[dict[str, Any]]) -> set[int]:
@@ -576,7 +599,7 @@ class GeminiHarness(Harness):
         script = lambda: self.script  # noqa: E731
 
         def stream(**kwargs: Any) -> Iterator[Any]:
-            response = script().next(kwargs)
+            response = script().next(kwargs, _GeminiSDK.generate_content_stream)
             parts = response.candidates[0].content.parts or []
             for index, part in enumerate(parts):
                 last = index == len(parts) - 1
@@ -594,17 +617,18 @@ class GeminiHarness(Harness):
                 yield response
 
         def count(**kwargs: Any) -> Any:
+            accepts(_GeminiSDK.count_tokens, kwargs)
             script().calls.append(deepcopy(kwargs))
             return SimpleNamespace(total_tokens=321)
 
         models = SimpleNamespace(
-            generate_content=lambda **kw: script().next(kw),
+            generate_content=lambda **kw: script().next(kw, _GeminiSDK.generate_content),
             generate_content_stream=stream,
             count_tokens=count,
         )
 
         async def agenerate(**kwargs: Any) -> Any:
-            return script().next(kwargs)
+            return script().next(kwargs, _GeminiSDK.generate_content)
 
         async def astream(**kwargs: Any) -> AsyncIterator[Any]:
             async def chunks() -> AsyncIterator[Any]:
@@ -767,7 +791,7 @@ class ChatHarness(Harness):
         script = lambda: self.script  # noqa: E731
 
         def create(**kwargs: Any) -> Any:
-            completion = script().next(kwargs)
+            completion = script().next(kwargs, _ChatSDK.create)
             return iter(self._chunks(completion)) if kwargs.get("stream") else completion
 
         async def acreate(**kwargs: Any) -> Any:

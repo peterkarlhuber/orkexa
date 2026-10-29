@@ -51,7 +51,7 @@ from ..core.types import (
     ToolDefinition,
     ToolResultPart,
 )
-from ..errors import ConfigurationError, HistoryConversionError, ProviderServerError
+from ..errors import ConfigurationError, HistoryConversionError, ProviderServerError, UnexpectedResponseError
 from .base import Provider, ProviderConfig, require_module
 from .options import _OPENAI_RESERVED, OpenAIOptions
 
@@ -224,8 +224,6 @@ class ResponsesCodec:
             if kind == "message":
                 first = True
                 for content in data.get("content") or []:
-                    meta = {"item": data} if first else {"item_ref": data.get("id")}
-                    first = False
                     if content.get("type") == "output_text":
                         part = TextPart(text=str(content.get("text", "")), citations=self._citations(content))
                     elif content.get("type") == "refusal":
@@ -233,6 +231,9 @@ class ResponsesCodec:
                         part = TextPart(text=refusal)
                     else:
                         continue
+                    # The first decoded part carries the whole item for replay, the rest refer to it.
+                    meta = {"item": data} if first else {"item_ref": data.get("id")}
+                    first = False
                     parts.append(part.with_native(self.provider, meta))
             elif kind == "function_call":
                 calls = True
@@ -393,6 +394,11 @@ class OpenAIProvider(Provider):
             raise ConfigurationError(
                 f"Set these via agent arguments, not request_options: {sorted(reserved)}"
             )
+        if options.request_options.get("background"):
+            raise ConfigurationError(
+                "request_options={'background': True} is not supported: an agent needs each "
+                "response to continue its turn and does not poll background responses"
+            )
 
     def server_tool_name(self, definition: Mapping[str, Any]) -> str:
         return str(definition.get("name") or definition.get("server_label") or definition.get("type") or "")
@@ -464,7 +470,7 @@ class OpenAIProvider(Provider):
         with self.client.responses.stream(**native) as stream:
             for event in stream:
                 yield from state.translate(event)
-            final = stream.get_final_response()
+            final = state.unfinished or stream.get_final_response()
         yield ResponseCompleted(self.normalize(final, request))
 
     async def astream(self, native: dict[str, Any], request: ModelRequest) -> AsyncIterator[StreamEvent]:
@@ -473,11 +479,15 @@ class OpenAIProvider(Provider):
             async for event in stream:
                 for translated in state.translate(event):
                     yield translated
-            final = await stream.get_final_response()
+            final = state.unfinished or await stream.get_final_response()
         yield ResponseCompleted(self.normalize(final, request))
 
     def normalize(self, response: Any, request: ModelRequest) -> ModelResponse:
         status = getattr(response, "status", None)
+        if status in ("queued", "in_progress"):
+            raise UnexpectedResponseError(
+                f"{self.name}: the response is still {status!r} (background responses are not polled)"
+            )
         if status == "failed":
             error = getattr(response, "error", None)
             raise ProviderServerError(
@@ -503,6 +513,8 @@ class OpenAIProvider(Provider):
                 stop_details = RefusalDetails(category="content_filter")
             else:
                 stop_reason = "other"
+        elif status not in (None, "completed"):
+            stop_reason = "other"  # "cancelled" or a status this version does not know: not a final answer
         if refusal is not None:
             stop_reason = "refusal"
             stop_details = RefusalDetails(explanation=refusal)
@@ -567,10 +579,15 @@ class _ResponsesStream:
 
     def __init__(self) -> None:
         self.calls: dict[str, str] = {}  # item id -> call id
+        #: The final response of a stream that ended without ``response.completed``; the
+        #: SDK's ``get_final_response()`` raises a bare ``RuntimeError`` for it.
+        self.unfinished: Any = None
 
     def translate(self, event: Any) -> Iterator[StreamEvent]:
         kind = getattr(event, "type", None)
-        if kind == "response.output_text.delta":
+        if kind in ("response.incomplete", "response.failed"):
+            self.unfinished = event.response
+        elif kind == "response.output_text.delta":
             yield TextDelta(str(event.delta))
         elif kind in ("response.reasoning_summary_text.delta", "response.reasoning_text.delta"):
             if event.delta:
