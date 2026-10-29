@@ -28,10 +28,32 @@
   `docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`.
 * `AutoApprover` is an **unsafe opt-in**: it emits `UnsafeOptInWarning` unless created
   with `AutoApprover(acknowledge_unsafe=True)`.
+* `ToolRegistry` treats tool names as untrusted: only `[A-Za-z0-9_-]{1,128}` is
+  accepted, records are written only inside the registry directory, and stored records
+  whose name does not match their directory are skipped on load.
+* `DynamicPolicy.allowed_agent_tools` limits the tools of generated agents and the
+  tools a model can attach to itself with `ToolBuilder.as_tools()`' `load_tool`.
+
+## Production configuration for generated code
+
+* Use `DockerSandbox` (or stronger isolation such as a VM) for both the tests and the
+  calls of generated tools: `ToolRegistry(path, sandbox=DockerSandbox())`. Use
+  `SubprocessSandbox` only on trusted development machines.
+* Use a human or LLM-plus-human `Approver`, never a bare `AutoApprover`.
+* Set `DynamicPolicy(allowed_models=..., allowed_agent_tools=..., max_generated_tools=...,
+  budget_usd=...)` and a `BudgetTracker(on_unpriced="reject")` with registered prices.
+* Register only side-effect-free functions as trusted tools that models may load, and
+  guard side-effecting tools with `before_tool`.
+* A tool timeout does not stop a running tool thread: Python threads cannot be killed,
+  so a timed-out tool may still finish its side effects. Put tools with risky side
+  effects behind a process boundary (a sandbox or a service) with its own timeout.
 
 ## Remaining risks
 
-* Budgets can only be enforced after a response; one request can exceed the limit.
+* Budgets are soft limits: the last admitted request, and one request per concurrently
+  running agent, can exceed the limit (see [Usage and budgets](usage-and-budgets.md)).
+* `DockerSandbox` isolation has not been audited; container escapes are out of scope
+  of Orkexa.
 * Models from unknown endpoints may ignore schemas; Orkexa validates locally but cannot
   prevent a server from logging prompts.
 * Prompt injection through tool results, search hits or files is not prevented by

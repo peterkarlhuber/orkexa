@@ -226,6 +226,12 @@ def test_orchestrator_with_three_providers_policy_and_budget() -> None:
     assert set(budget.usage_by_provider()) == {"openai", "anthropic", "gemini"}
     assert len(budget.unpriced_records) == 4  # 3 OpenAI + 1 Gemini request: no shipped prices
     assert budget.spent_usd > 0  # the Anthropic architect request has a known price
+    # One workflow label covers the orchestrator, the architect and the delegated specialist.
+    label = orchestrator.last_workflow
+    assert label is not None and label.startswith("Orchestrator:")
+    assert {r.workflow for r in budget.records} == {label}
+    assert budget.usage_by_workflow()[label].requests == len(budget.records) == 5
+    assert len(budget.usage_by_turn()) == 3  # orchestrator, architect, specialist
 
 
 def test_policy_accepts_bare_and_qualified_names_and_rejects_others() -> None:

@@ -299,7 +299,8 @@ class GeminiProvider(Provider):
             )
         )
 
-    def contents(self, messages: Sequence[Message]) -> list[Any]:
+    def contents(self, messages: Sequence[Message], model: str | None = None) -> list[Any]:
+        """Gemini ``contents``; thought signatures are only replayed to ``model``."""
         types = self.types
         names: dict[str, str] = {}
         synthetic: set[str] = set()
@@ -321,8 +322,12 @@ class GeminiProvider(Provider):
                 contents.append(types.Content(role="user", parts=parts))
                 continue
             parts = []
+            own_model = model is None or message.model is None or message.model == model
             for part in message.content:
                 extras = part.native(_PROVIDER)
+                if not own_model and "thought_signature" in extras.get("part", {}):
+                    # A signature is only valid for the model that produced it.
+                    extras["part"] = {k: v for k, v in extras["part"].items() if k != "thought_signature"}
                 if isinstance(part, ToolCallPart):
                     names[part.id] = part.name
                     if extras.get("synthetic_id"):
@@ -402,7 +407,7 @@ class GeminiProvider(Provider):
     def prepare(self, request: ModelRequest) -> dict[str, Any]:
         return {
             "model": request.model,
-            "contents": self.contents(request.messages),
+            "contents": self.contents(request.messages, request.model),
             "config": self.generation_config(request),
         }
 
@@ -524,7 +529,7 @@ class GeminiProvider(Provider):
             config = self.generation_config(request)
             return {
                 "model": request.model,
-                "contents": self.contents(request.messages),
+                "contents": self.contents(request.messages, request.model),
                 "config": {k: config[k] for k in ("system_instruction", "tools") if k in config},
             }
         # The Developer API counts contents only: the system prompt is counted as text,
@@ -532,7 +537,7 @@ class GeminiProvider(Provider):
         messages = list(request.messages)
         if request.system:
             messages.insert(0, Message(role="user", content=request.system))
-        return {"model": request.model, "contents": self.contents(messages)}
+        return {"model": request.model, "contents": self.contents(messages, request.model)}
 
     def count_tokens(self, request: ModelRequest) -> int:
         return int(self.client.models.count_tokens(**self._count_args(request)).total_tokens or 0)

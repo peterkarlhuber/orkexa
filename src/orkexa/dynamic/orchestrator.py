@@ -6,13 +6,15 @@ from collections.abc import Mapping
 from contextvars import ContextVar
 import json
 from typing import Any
+import uuid
 
 from pydantic import BaseModel
 
 from ..agent import Agent
 from ..core.types import Effort
 from ..tools import Tool
-from ..usage import UsageTracker
+from ..usage import UsageTracker, current_workflow
+from ..usage import workflow as usage_workflow
 from ._agents import ProviderSettings, build_agent
 from .agent_registry import AgentRecord, AgentRegistry
 from .approval import ApprovalRequest, Approver, share_usage_tracker
@@ -120,6 +122,7 @@ class Orchestrator:
         self.tool_builder = tool_builder
         self.tool_registry = tools
         self.agents = agents if agents is not None else AgentRegistry()
+        self.last_workflow: str | None = None
         self.output_formats = output_formats if output_formats is not None else OutputFormatRegistry()
 
         architect.agent.usage_tracker = self.usage_tracker
@@ -158,14 +161,24 @@ class Orchestrator:
 
     # ---- Python API ----------------------------------------------------------
 
-    def ask(self, task: str) -> str:
-        """Let the orchestrator solve ``task``."""
-        self._check_budget()
-        return self.agent.ask(task)
+    def ask(self, task: str, *, workflow: str | None = None) -> str:
+        """Let the orchestrator solve ``task``.
+
+        All requests of the run (orchestrator, architect, coding agent and every
+        delegated specialist) are recorded with one workflow label: ``workflow``,
+        the label of an enclosing :func:`orkexa.usage.workflow` block, or a new
+        ``"<name>:<id>"``. It is stored in :attr:`last_workflow`, so
+        ``usage_tracker.usage_by_workflow()[orchestrator.last_workflow]`` is the
+        cost of the run.
+        """
+        label = workflow or current_workflow() or f"{self.agent.name}:{uuid.uuid4().hex[:12]}"
+        self.last_workflow = label
+        with usage_workflow(label):
+            self._check_budget()
+            return self.agent.ask(task)
 
     def _check_budget(self) -> None:
-        if isinstance(self.usage_tracker, BudgetTracker):
-            self.usage_tracker.check()
+        self.usage_tracker.check()
 
     def create_agent(self, requirement: str) -> AgentRecord:
         """Design, validate, approve and register a new specialist agent.

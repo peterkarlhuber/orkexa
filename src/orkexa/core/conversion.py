@@ -109,15 +109,25 @@ def _check_files(parts: Iterable[Any], provider: str) -> None:
             _check_files(part.content, provider)
 
 
-def prepare_history(messages: Sequence[Message], provider: str, policy: HistoryPolicy) -> list[Message]:
-    """The conversation as ``provider`` may receive it.
+def prepare_history(
+    messages: Sequence[Message], provider: str, policy: HistoryPolicy, model: str | None = None
+) -> list[Message]:
+    """The conversation as ``model`` of ``provider`` may receive it.
 
-    Messages produced by ``provider`` itself pass unchanged. In messages of other
-    providers, reasoning parts and provider-only parts cannot be replayed: with
-    ``policy="strict"`` they raise :class:`HistoryConversionError`, with
+    Messages produced by the same provider and model pass unchanged. In messages
+    of other providers, reasoning parts and provider-only parts cannot be replayed:
+    with ``policy="strict"`` they raise :class:`HistoryConversionError`, with
     ``policy="convert"`` they are dropped (with a :class:`HistoryConversionWarning`).
     Text, media, tool calls and tool results are converted losslessly; foreign meta
     is ignored by the encoders. File ids of another provider always raise.
+
+    Reasoning is also bound to the model that produced it (signatures and
+    encrypted reasoning are only valid for that model). When ``model`` is given
+    and a message of the same provider names another model, its reasoning parts
+    are dropped under both policies with a :class:`HistoryConversionWarning`: no
+    visible content is lost, and the target model could not use them. Provider
+    parts (server tool calls and results) stay. Messages without a model (e.g. a
+    ``claude-agent`` history) are treated as coming from the current model.
     """
     prepared: list[Message] = []
     dropped: dict[str, int] = {}
@@ -125,10 +135,21 @@ def prepare_history(messages: Sequence[Message], provider: str, policy: HistoryP
         parts = message.content if isinstance(message.content, list) else []
         _check_files(parts, provider)
         origin = message.provider
-        if origin is None or origin == provider or not parts:
+        if origin is None or not parts:
             prepared.append(message)
             continue
-        kept: list[Part] = []
+        if origin == provider:
+            if model is None or message.model is None or message.model == model:
+                prepared.append(message)
+                continue
+            kept = [part for part in parts if not isinstance(part, ReasoningPart)]
+            if len(kept) < len(parts):
+                kind = f"{origin}:{message.model} reasoning"
+                dropped[kind] = dropped.get(kind, 0) + len(parts) - len(kept)
+            if kept:
+                prepared.append(message.model_copy(update={"content": kept}))
+            continue
+        kept = []
         for part in parts:
             if isinstance(part, (ReasoningPart, NativePart)):
                 kind = "native" if isinstance(part, NativePart) else "reasoning"
@@ -147,8 +168,9 @@ def prepare_history(messages: Sequence[Message], provider: str, policy: HistoryP
             dropped[f"{origin} empty message"] = dropped.get(f"{origin} empty message", 0) + 1
     if dropped:
         summary = ", ".join(f"{count} {kind} part(s)" for kind, count in dropped.items())
+        target = f"{provider}:{model}" if model is not None else provider
         warnings.warn(
-            f"history_policy='convert': dropped {summary} that {provider} cannot replay",
+            f"dropped {summary} that {target} cannot replay",
             HistoryConversionWarning,
             stacklevel=3,
         )

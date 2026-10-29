@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from ..tools import Tool
+from ..tools import _TOOL_NAME, Tool
 from ._search import keyword_search
 from .errors import RegistryError
 from .sandbox import Sandbox, SubprocessSandbox
@@ -26,6 +26,15 @@ ToolStatus = Literal["pending", "approved", "rejected", "revoked"]
 
 def _sha256(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def _valid_name(name: object) -> bool:
+    return isinstance(name, str) and _TOOL_NAME.fullmatch(name) is not None
+
+
+def _check_name(name: object) -> None:
+    if not _valid_name(name):
+        raise RegistryError(f"Invalid tool name {name!r}: use 1-128 characters of A-Z, a-z, 0-9, '_', '-'")
 
 
 def _now() -> str:
@@ -78,7 +87,12 @@ class ToolRegistry:
 
     def _file(self, record: ToolRecord) -> Path:
         assert self.path is not None
-        return self.path / record.name / f"v{record.version}.json"
+        _check_name(record.name)
+        root = self.path.resolve()
+        file = (root / record.name / f"v{int(record.version)}.json").resolve()
+        if file.parent.parent != root:
+            raise RegistryError(f"Tool record path escapes the registry directory: {record.name!r}")
+        return file
 
     def _save(self, record: ToolRecord) -> None:
         if self.path is None or record.kind != "generated":
@@ -94,6 +108,9 @@ class ToolRegistry:
                 record = ToolRecord(**json.loads(file.read_text(encoding="utf-8")))
             except (OSError, ValueError, TypeError) as exc:
                 logger.warning("Skipping unreadable tool record %s: %s", file, exc)
+                continue
+            if not _valid_name(record.name) or record.name != file.parent.name:
+                logger.warning("Skipping tool record %s: name does not match its directory", file)
                 continue
             if record.kind != "generated" or record.code is None or record.sha256 != _sha256(record.code):
                 logger.warning("Skipping tool record %s: code does not match its stored hash", file)
@@ -136,7 +153,13 @@ class ToolRegistry:
         output_schema: dict[str, Any] | None,
         requirement: str | None = None,
     ) -> ToolRecord:
-        """Store a validated, not yet approved generated tool as a new version."""
+        """Store a validated, not yet approved generated tool as a new version.
+
+        ``name`` is untrusted input: it must match ``[A-Za-z0-9_-]{1,128}`` (the
+        tool name rule of every provider), so it can never leave the registry
+        directory.
+        """
+        _check_name(name)
         versions = self._records.get(name, [])
         if any(r.kind == "trusted" for r in versions):
             raise RegistryError(f"Tool name is taken by a trusted tool: {name}")

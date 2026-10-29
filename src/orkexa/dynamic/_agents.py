@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+import logging
 from typing import Any
 
 from ..agent import Agent
@@ -19,6 +20,8 @@ from ..core.types import Effort
 from ..providers.registry import resolve_model
 
 __all__ = ["ProviderSettings", "build_agent", "same_model"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -77,8 +80,10 @@ def build_agent(
     (the same runtime; it keeps the ``claude-agent`` history format and hooks);
     all other models become a :class:`~orkexa.Agent`. ``client``/``api_key`` (the
     legacy Anthropic arguments) are ignored for other providers. For a model
-    whose provider reports reasoning as ``unsupported``, ``effort`` is dropped:
-    it is a cost and quality hint chosen by a model, not a requirement.
+    whose provider reports reasoning as ``unsupported``, ``effort`` is dropped
+    (and logged at INFO level): in the dynamic package it is a cost and quality
+    hint chosen by a model (``AgentSpec.effort``), not a requirement. A plain
+    :class:`~orkexa.Agent` with ``effort=`` still raises for such a model.
     """
     provider, _ = resolve_model(model)
     own = (settings or {}).get(provider)
@@ -94,5 +99,6 @@ def build_agent(
         probe: Agent[Any] = Agent(model=model, **agent_kwargs)
         caps = probe.adapter.capabilities(probe._model_id()).merged(probe.capability_overrides)
         if caps.reasoning == "unsupported":
+            logger.info("%s does not support reasoning effort; effort=%r is not used", model, effort)
             effort = None
     return Agent(model=model, effort=effort, **agent_kwargs, **kwargs)

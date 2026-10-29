@@ -224,6 +224,11 @@ class ToolBuilder:
         Returns ``find_tools``, ``load_tool`` and ``create_tool``. Add them with
         ``agent.add_tool()`` (or pass them as ``tools=``). Expected failures are
         returned to the model as text, so it can continue without the tool.
+
+        The model chooses what ``load_tool`` attaches, so it is checked against
+        ``policy.allowed_agent_tools`` (if set) like the tools of a generated
+        agent. A tool made by ``create_tool`` is attached after the approver
+        approved that very tool. :meth:`attach` (the Python API) is not checked.
         """
         builder = self
 
@@ -250,6 +255,9 @@ class ToolBuilder:
             Returns:
                 Status message; on success the tool can be called in the next step.
             """
+            allowed = builder.policy.allowed_agent_tools
+            if allowed is not None and name not in allowed:
+                return f"Error: tool {name!r} is not allowed by the policy (allowed_agent_tools)"
             try:
                 added = builder.attach(agent, name)
             except RegistryError as exc:
