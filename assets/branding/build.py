@@ -58,7 +58,13 @@ def main() -> None:
     social.save(HERE / "social-preview.png", optimize=True)
 
     DOCS.mkdir(parents=True, exist_ok=True)
-    for name in ("orkexa-logo.png", "orkexa-mark.png", "favicon.ico", "favicon-32.png", "apple-touch-icon.png"):
+    for name in (
+        "orkexa-logo.png",
+        "orkexa-mark.png",
+        "favicon.ico",
+        "favicon-32.png",
+        "apple-touch-icon.png",
+    ):
         shutil.copyfile(HERE / name, DOCS / name)
 
 

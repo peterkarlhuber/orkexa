@@ -1,0 +1,73 @@
+# Builds, verifies and publishes both distributions when a GitHub release is published.
+#
+# Nothing here runs on pushes or pull requests. Publishing needs one-time manual setup
+# (see docs/development/releasing.md): a PyPI trusted publisher for each project and a
+# protected GitHub environment named "pypi". Until then the publish job fails without
+# uploading anything.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # build provenance attestations
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check that the tag matches the package version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          compat=$(python -c "import tomllib; print(tomllib.load(open('compat/orkexa-claude-compat/pyproject.toml', 'rb'))['project']['version'])")
+          test "$TAG" = "v$version" || { echo "tag $TAG does not match version $version"; exit 1; }
+          pin=$(python -c "import tomllib; print(tomllib.load(open('compat/orkexa-claude-compat/pyproject.toml', 'rb'))['project']['dependencies'][0])")
+          test "$compat" = "$version" || { echo "orkexa-claude-compat $compat differs from orkexa $version"; exit 1; }
+          test "$pin" = "orkexa[anthropic]==$version" || { echo "orkexa-claude-compat depends on $pin, not orkexa $version"; exit 1; }
+      - run: pip install build pytest twine
+      - run: python -m build --outdir dist/orkexa
+      - run: python -m build compat/orkexa-claude-compat --outdir dist/compat
+      - run: twine check --strict dist/orkexa/* dist/compat/*
+      - run: pytest -m packaging tests/packaging -v --noconftest
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*/*"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+    permissions:
+      id-token: write # PyPI trusted publishing (OIDC); no API token is stored
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist/
+      # orkexa first: orkexa-claude-compat depends on it.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/orkexa/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/compat/

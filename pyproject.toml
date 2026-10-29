@@ -14,6 +14,7 @@ authors = [{ name = "Peter Karlhuber" }]
 keywords = ["llm", "agent", "multi-agent", "tool-use", "anthropic", "claude", "openai", "gemini", "ollama", "vllm", "pydantic", "rag", "evaluation"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Framework :: Pydantic :: 2",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -37,9 +38,11 @@ all = ["anthropic>=2.0,<3", "openai>=3.0,<4", "google-genai>=2.0,<3"]
 pdf = ["pypdf>=4"]
 vector = ["sqlite-vec>=0.1.6"]
 docs = [
+    "mkdocs>=1.6,<2",  # MkDocs 2 drops the plugin system that Material and mkdocstrings use
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.27",
-    "pymdown-extensions>=10,<11",  # 11+ breaks mkdocstrings' code highlighting
+    # 11.0.1 fixes PYSEC-2026-3609/3654; 12 needs mkdocstrings 1.0.7+, which needs Python 3.11+.
+    "pymdown-extensions>=11.0.1,<12",
 ]
 dev = [
     "anthropic>=2.0,<3",
@@ -58,6 +61,7 @@ dev = [
 Repository = "https://github.com/peterkarlhuber/orkexa"
 Issues = "https://github.com/peterkarlhuber/orkexa/issues"
 Changelog = "https://github.com/peterkarlhuber/orkexa/blob/master/CHANGELOG.md"
+Security = "https://github.com/peterkarlhuber/orkexa/blob/master/SECURITY.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/orkexa"]
@@ -76,6 +80,10 @@ markers = [
 [tool.coverage.run]
 source = ["orkexa"]
 omit = ["*/dynamic/_sandbox_runner.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
 
 [tool.ruff]
 line-length = 110

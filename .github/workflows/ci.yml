@@ -4,20 +4,28 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
     name: test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -27,14 +35,22 @@ jobs:
       - run: ruff format --check .
       - run: mypy --strict src
       - run: mypy --strict examples
-      # Offline only: no API keys are configured, live tests skip themselves.
-      - run: pytest --cov=orkexa --cov-report=term-missing
+      # Offline only: no API keys are configured, and live tests run only with -m live.
+      - run: pytest --cov=orkexa --cov-report=term-missing --cov-report=xml
+      - if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
 
   lowest-versions:
     name: test (lowest supported dependency versions)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -47,14 +63,18 @@ jobs:
   packaging:
     name: build and install (fresh virtual environments)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install build pytest
+      - run: pip install build pytest twine
       - run: python -m build
       - run: python -m build compat/orkexa-claude-compat
+      - run: twine check --strict dist/* compat/orkexa-claude-compat/dist/*
       # The private claude-agent reference is not available here; the tests then
       # build a stand-in claude-agent 0.8.0 distribution for the conflict checks.
       # --noconftest: the suite's root conftest needs the provider SDKs, which this
@@ -69,10 +89,29 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -e ".[docs]"
       - run: mkdocs build --strict
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Every runtime dependency, all provider SDKs and optional extras, and the docs toolchain.
+      - run: python -m pip install --upgrade pip
+      - run: pip install pip-audit -e ".[all,pdf,vector,docs]"
+      - run: pip-audit --skip-editable --progress-spinner off
