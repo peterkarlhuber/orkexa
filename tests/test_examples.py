@@ -256,6 +256,7 @@ def test_example_11(
 ) -> None:
     monkeypatch.setenv("ORKEXA_MODEL", "openai:gpt-5")
     monkeypatch.setattr(DockerSandbox, "available", staticmethod(lambda docker="docker": False))
+    monkeypatch.setenv("ORKEXA_ALLOW_SUBPROCESS_SANDBOX", "1")
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     o = offline.openai
     offline.script(
@@ -273,6 +274,17 @@ def test_example_11(
     assert "approval requested: tool calculate_operating_margin" in out
     assert "The operating margin is 25%." in out
     assert o.tool_results(o.script.calls[3])[0][1] == "0.25"
+
+
+def test_example_11_stops_without_an_isolated_sandbox(
+    offline: Offline, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ORKEXA_MODEL", "openai:gpt-5")
+    monkeypatch.setattr(DockerSandbox, "available", staticmethod(lambda docker="docker": False))
+    monkeypatch.delenv("ORKEXA_ALLOW_SUBPROCESS_SANDBOX", raising=False)
+    with pytest.raises(SystemExit, match="not a security boundary"):
+        run("11_dynamic_tools_sandbox.py")
+    assert offline.openai.script.calls == []
 
 
 def test_example_12(offline: Offline, capsys: pytest.CaptureFixture[str]) -> None:

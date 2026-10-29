@@ -69,7 +69,7 @@ class AsyncAgent(AgentCore[OutputT]):
             failure = self._provider_failure(exc)
             if failure is exc:
                 raise
-            raise failure from exc
+        raise failure  # outside the handler: no link to the SDK exception
 
     # ---- effects ------------------------------------------------------------------------
 
@@ -112,13 +112,15 @@ class AsyncAgent(AgentCore[OutputT]):
         if request.stream:
             response = await self._stream(native, request)
         else:
+            failure: Exception | None = None
             try:
                 response = await self.adapter.acall(native, request)
             except Exception as exc:
                 failure = self._provider_failure(exc)
                 if failure is exc:
                     raise
-                raise failure from exc
+            if failure is not None:
+                raise failure  # outside the handler: no link to the SDK exception
         if self.on_response is not None:
             try:
                 await _resolve(self.on_response(self._response_hook_arg(response)))
@@ -132,6 +134,7 @@ class AsyncAgent(AgentCore[OutputT]):
         final: StreamEvent | None = None
         try:
             while True:
+                failure: Exception | None = None
                 try:
                     event = await events.__anext__()
                 except StopAsyncIteration:
@@ -140,7 +143,8 @@ class AsyncAgent(AgentCore[OutputT]):
                     failure = self._provider_failure(exc)
                     if failure is exc:
                         raise
-                    raise failure from exc
+                if failure is not None:
+                    raise failure  # outside the handler: no link to the SDK exception
                 if isinstance(event, ResponseCompleted):
                     final = event
                 try:

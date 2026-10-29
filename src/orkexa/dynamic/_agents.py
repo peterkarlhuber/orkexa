@@ -17,6 +17,7 @@ from typing import Any
 from ..agent import Agent
 from ..claude import ClaudeAgent
 from ..core.types import Effort
+from ..providers.base import redact
 from ..providers.registry import resolve_model
 
 __all__ = ["ProviderSettings", "build_agent", "same_model"]
@@ -24,13 +25,14 @@ __all__ = ["ProviderSettings", "build_agent", "same_model"]
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class ProviderSettings:
     """Connection settings for the agents of one provider.
 
     Attributes:
         api_key: The provider's API key (never shown in ``repr``).
-        base_url: Endpoint override (required for ``compatible``).
+        base_url: Endpoint override (required for ``compatible``); credentials in
+            it (``user:password@``, ``?api_key=...``) are redacted in ``repr``.
         client: A preconfigured SDK client, used instead of ``api_key``/``base_url``.
         options: Provider options (e.g. :class:`~orkexa.OpenAIOptions`).
         capabilities: Capability overrides, e.g. ``{"tools": "supported"}`` for a
@@ -42,6 +44,14 @@ class ProviderSettings:
     client: Any | None = field(default=None, repr=False)
     options: Any | None = None
     capabilities: Mapping[str, Any] | None = None
+
+    def __repr__(self) -> str:
+        key = None if self.api_key is None else "**********"
+        base_url = None if self.base_url is None else redact(self.base_url)
+        return (
+            f"ProviderSettings(api_key={key!r}, base_url={base_url!r}, "
+            f"options={self.options!r}, capabilities={self.capabilities!r})"
+        )
 
     def agent_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}

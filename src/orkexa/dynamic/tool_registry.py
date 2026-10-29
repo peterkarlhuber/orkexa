@@ -8,15 +8,14 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Literal
-import uuid
 
+from .._storage import make_private_dirs, write_private_text
 from ..tools import _TOOL_NAME, Tool
 from ._search import keyword_search
 from .errors import RegistryError
-from .sandbox import Sandbox, SubprocessSandbox
+from .sandbox import DockerSandbox, Sandbox
 from .sandboxed_tool import SandboxedTool
 
 __all__ = ["ToolRecord", "ToolRegistry", "ToolStatus"]
@@ -40,14 +39,13 @@ def _check_name(name: object) -> None:
 
 
 def _write_json_atomic(file: Path, data: Any) -> None:
-    """Write ``data`` as JSON to ``file`` so readers see the old or the new file, never a torn one."""
-    file.parent.mkdir(parents=True, exist_ok=True)
-    temporary = file.with_name(f".{file.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(temporary, file)
-    finally:
-        temporary.unlink(missing_ok=True)
+    """Write ``data`` as JSON to ``file`` so readers see the old or the new file, never a torn one.
+
+    Missing directories are created with mode ``0700``, the file with ``0600``: records
+    hold generated code, specs and requirements that may contain confidential data.
+    """
+    make_private_dirs(file.parent)
+    write_private_text(file, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def _now() -> str:
@@ -85,12 +83,14 @@ class ToolRegistry:
         path: Directory for generated tools (one JSON file per version). ``None``
             keeps everything in memory.
         sandbox: Sandbox in which approved generated tools are executed.
-            Defaults to a :class:`SubprocessSandbox`.
+            Defaults to a :class:`DockerSandbox`, which fails closed without
+            Docker. Pass ``SubprocessSandbox(acknowledge_unsafe=True)`` only for
+            trusted or reviewed code.
     """
 
     def __init__(self, path: str | Path | None = None, *, sandbox: Sandbox | None = None) -> None:
         self.path = Path(path) if path is not None else None
-        self.sandbox = sandbox if sandbox is not None else SubprocessSandbox()
+        self.sandbox = sandbox if sandbox is not None else DockerSandbox()
         self._records: dict[str, list[ToolRecord]] = {}
         self._trusted: dict[str, Tool] = {}
         if self.path is not None:

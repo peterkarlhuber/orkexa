@@ -38,9 +38,13 @@ done by the repository owner by hand:
 3. Build and check locally: `python -m build`, `python -m build compat/orkexa-claude-compat`,
    `twine check --strict dist/* compat/orkexa-claude-compat/dist/*`,
    `pytest -m packaging tests/packaging --noconftest`.
-4. PyPI renders `README.md` but not images with relative paths: before the first
-   release, decide whether to point the README logo to an absolute URL of the public
-   repository.
+4. The published description is `README.md` with the logo and relative links
+   rewritten to absolute URLs on the default branch (`hatch-fancy-pypi-readme`, see
+   `pyproject.toml`); `tests/packaging/test_artifacts.py` checks that no relative path
+   is left and that the logo URL names a committed file. These URLs resolve only for a
+   **public** repository: make the repository public before uploading, then open
+   `https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/assets/branding/orkexa-logo.png`
+   and check the rendered description on TestPyPI or after `twine check --strict`.
 5. Create a tag `vX.Y.Z` and a GitHub release for it. Publishing the release starts
    the workflow, which checks that the tag matches both versions and the shim's pin, builds and checks
    both distributions, runs the packaging tests, creates build provenance

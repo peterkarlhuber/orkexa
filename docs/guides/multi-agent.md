@@ -72,5 +72,7 @@ orchestrator = Orchestrator(
 * An `effort` chosen by the architect is dropped for models whose provider reports
   reasoning as `unsupported`.
 * Generated code is checked statically, tested in a sandbox and approved before it is
-  registered, and every call runs in the sandbox, never in the host process.
+  registered, and every call runs in the sandbox, never in the host process. The
+  default is `DockerSandbox`, which fails closed without Docker; see
+  [Security](security.md#dynamic-code).
   A tool built by one provider's Coding Agent can be used by an agent of any provider.

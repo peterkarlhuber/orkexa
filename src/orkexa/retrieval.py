@@ -53,6 +53,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from ._storage import create_private_file
 from .content import ContentBlock, ToolContent
 from .core.types import Citation, Message, ModelResponse, SearchResultPart, TextPart, ToolResultPart
 from .tools import Tool
@@ -417,6 +418,7 @@ class SQLiteIndex(Index):
         self.embedder = embedder
         self.query_embedder = query_embedder or embedder
         self._lock = threading.RLock()
+        create_private_file(database)  # owner-only (0600) from the start; journals inherit it
         self._connection = sqlite3.connect(
             database, isolation_level=None, check_same_thread=False, timeout=30
         )

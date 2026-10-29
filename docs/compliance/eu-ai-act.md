@@ -67,7 +67,7 @@ tools, not the model, often decides the classification.
 | Transparency to deployers (Art. 13) | Explicit capability errors, typed provider errors, `retrieval_sources()` separating retrieved passages from model text, documented limits | Instructions for use of your system |
 | Human oversight (Art. 14) | `before_tool` can stop any tool call; approvers gate generated tools and agents; `LLMApprover` can only make decisions stricter and always needs a final approver; `AutoApprover` warns | See below |
 | Transparency to people (Art. 50) | None built in | Tell people they interact with an AI system; mark synthetic content where required |
-| Accuracy, robustness, cybersecurity (Art. 15) | Local validation of tool input and structured output, limits on tool rounds and parallelism, timeouts, sandboxes, credential isolation | `SubprocessSandbox` is not a security boundary; prompt injection is not prevented |
+| Accuracy, robustness, cybersecurity (Art. 15) | Local validation of tool input and structured output, limits on tool rounds and parallelism, timeouts, sandboxes, credential isolation | `SubprocessSandbox` (an explicit opt-in) is not a security boundary; `DockerSandbox` isolation is not audited; prompt injection is not prevented |
 
 ### Human oversight is a human
 

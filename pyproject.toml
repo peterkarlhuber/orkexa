@@ -1,12 +1,12 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.27", "hatch-fancy-pypi-readme>=24.1"]
 build-backend = "hatchling.build"
 
 [project]
 name = "orkexa"
 version = "0.1.0"
 description = "Provider-independent Python agents and multi-agent systems: one runtime for Anthropic Claude, OpenAI, Google Gemini and OpenAI-compatible endpoints, with strict tools, memory, RAG, evaluation, dynamic agents and cost tracking."
-readme = "README.md"
+dynamic = ["readme"]
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
@@ -42,7 +42,9 @@ docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.27",
     # 11.0.1 fixes PYSEC-2026-3609/3654; 12 needs mkdocstrings 1.0.7+, which needs Python 3.11+.
-    "pymdown-extensions>=11.0.1,<13",
+    "mkdocstrings>=1.0.7; python_version >= '3.11'",
+    "pymdown-extensions>=11.0.1,<12; python_version < '3.11'",
+    "pymdown-extensions>=11.0.1,<13; python_version >= '3.11'",
 ]
 dev = [
     "anthropic>=2.0,<3",
@@ -62,6 +64,27 @@ Repository = "https://github.com/peterkarlhuber/orkexa"
 Issues = "https://github.com/peterkarlhuber/orkexa/issues"
 Changelog = "https://github.com/peterkarlhuber/orkexa/blob/master/CHANGELOG.md"
 Security = "https://github.com/peterkarlhuber/orkexa/blob/master/SECURITY.md"
+
+# PyPI cannot resolve repository-relative paths: the published description points the
+# logo and the relative links to stable absolute URLs on the default branch, while
+# README.md keeps relative paths for GitHub (tests/packaging checks the result).
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '<img src="(?!https?:)([^"]+)"'
+replacement = '<img src="https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/\1"'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = 'href="(?!https?:|#|mailto:)([^"]+)"'
+replacement = 'href="https://github.com/peterkarlhuber/orkexa/blob/master/\1"'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((?!https?:|#|mailto:)([^)\s]+)\)'
+replacement = '](https://github.com/peterkarlhuber/orkexa/blob/master/\1)'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/orkexa"]

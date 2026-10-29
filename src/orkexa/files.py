@@ -46,6 +46,7 @@ import uuid
 
 from pydantic import BaseModel, Field
 
+from ._storage import create_private_file, make_private_dirs
 from .content import ContentBlock, ToolContent, document, image, uploaded_file
 from .errors import ToolResultError
 from .tools import Tool
@@ -368,7 +369,7 @@ class LocalFileStore(FileStore):
             files_api=files_api, max_image_bytes=max_image_bytes, max_document_bytes=max_document_bytes
         )
         self.root = Path(root)
-        (self.root / "blobs").mkdir(mode=0o700, parents=True, exist_ok=True)
+        make_private_dirs(self.root / "blobs")
         os.chmod(self.root, 0o700)
         self._catalog_path = self.root / "catalog.json"
 
@@ -445,6 +446,7 @@ class SQLiteFileStore(FileStore):
         if not namespace:
             raise ValueError("namespace must not be empty")
         self.namespace = namespace
+        create_private_file(database)  # owner-only (0600) from the start; journals inherit it
         self._connection = sqlite3.connect(
             database, isolation_level=None, check_same_thread=False, timeout=30
         )

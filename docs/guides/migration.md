@@ -34,6 +34,10 @@ Repair: `pip uninstall -y claude-agent orkexa-claude-compat && pip install orkex
 | `AutoApprover()` | silent | emits `UnsafeOptInWarning` (pass `acknowledge_unsafe=True`) |
 | `BudgetTracker(limit)` with unpriced models | counts them as 0 | counts them as 0 **and warns**; `on_unpriced="ignore"` restores silence |
 | `UsageRecord` | 14 fields | 4 more trailing fields: `provider`, `turn_id`, `workflow`, `pricing_source` |
+| `ToolRegistry()` default sandbox | `SubprocessSandbox()` | `DockerSandbox()`, failing closed without Docker; pass `sandbox=SubprocessSandbox(acknowledge_unsafe=True)` for trusted code |
+| `SubprocessSandbox()` | silent | emits `UnsafeOptInWarning` (pass `acknowledge_unsafe=True`) |
+| static check of generated code | allowed modules' attributes unchecked | rejects access to modules through attributes (`calendar.sys`, `json.codecs` ...) |
+| `save_history()` and registry record files | process umask (usually `0644`) | `0600`, replaced atomically; new SQLite databases `0600` |
 
 The legacy test for the temp directory prefix is the only changed line in the copied
 0.8.0 suite (marked with a comment in `tests/legacy/test_dynamic_sandbox.py`).

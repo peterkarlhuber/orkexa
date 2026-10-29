@@ -8,7 +8,9 @@ models (``"openai:gpt-5.5"``) and per-provider :class:`ProviderSettings`.
 * :class:`ToolBuilder` checks the code statically, runs its tests in a
   :class:`Sandbox`, asks an :class:`Approver` and stores it in a :class:`ToolRegistry`.
   Generated code never runs in the host process; each call goes through the sandbox
-  (:class:`SandboxedTool`).
+  (:class:`SandboxedTool`). The default is :class:`DockerSandbox`, which fails closed
+  without Docker; :class:`SubprocessSandbox` is no security boundary and needs
+  ``acknowledge_unsafe=True``.
 * :class:`AgentArchitect` designs specialist agents (:class:`AgentSpec`),
   :class:`AgentFactory` validates them against the :class:`DynamicPolicy` and
   instantiates them, :class:`AgentRegistry` keeps them.
@@ -23,6 +25,7 @@ Quick start (one ``ask()`` that creates and then uses a tool)::
     from orkexa.dynamic import AutoApprover, CodingAgent, ToolBuilder, ToolRegistry
 
     # AutoApprover is an unsafe opt-in: no human reviews the generated code.
+    # ToolRegistry() runs the code in DockerSandbox (build the orkexa-sandbox image first).
     builder = ToolBuilder(CodingAgent(), ToolRegistry(), approver=AutoApprover(acknowledge_unsafe=True))
     analyst = Agent(model="openai:gpt-5.5", system_prompt="You are an investment analyst.")
     for tool in builder.as_tools(analyst):

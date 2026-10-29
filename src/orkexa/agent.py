@@ -120,7 +120,7 @@ class Agent(AgentCore[OutputT]):
             failure = self._provider_failure(exc)
             if failure is exc:
                 raise
-            raise failure from exc
+        raise failure  # outside the handler: no link to the SDK exception
 
     # ---- effects ------------------------------------------------------------------------
 
@@ -159,13 +159,15 @@ class Agent(AgentCore[OutputT]):
         if request.stream:
             response = self._stream(native, request)
         else:
+            failure: Exception | None = None
             try:
                 response = self.adapter.call(native, request)
             except Exception as exc:
                 failure = self._provider_failure(exc)
                 if failure is exc:
                     raise
-                raise failure from exc
+            if failure is not None:
+                raise failure  # outside the handler: no link to the SDK exception
         if self.on_response is not None:
             try:
                 self.on_response(self._response_hook_arg(response))
@@ -179,6 +181,7 @@ class Agent(AgentCore[OutputT]):
         final: StreamEvent | None = None
         try:
             while True:
+                failure: Exception | None = None
                 try:
                     event = next(events)
                 except StopIteration:
@@ -187,7 +190,8 @@ class Agent(AgentCore[OutputT]):
                     failure = self._provider_failure(exc)
                     if failure is exc:
                         raise
-                    raise failure from exc
+                if failure is not None:
+                    raise failure  # outside the handler: no link to the SDK exception
                 if isinstance(event, ResponseCompleted):
                     final = event
                 try:

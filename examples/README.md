@@ -55,9 +55,10 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
   one. `OPENAI_API_KEY` is never sent to such a server. Whether tool calling works
   depends on the model and the server.
 * **Example 11** uses `DockerSandbox` when the `orkexa-sandbox` image exists
-  (`docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`) and otherwise
-  `SubprocessSandbox`, which is **not a security boundary**. Approve only code you
-  have read.
+  (`docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`). Without Docker it
+  stops before any model call, unless you set `ORKEXA_ALLOW_SUBPROCESS_SANDBOX=1`; then
+  it uses `SubprocessSandbox`, which is **not a security boundary**. Approve only code
+  you have read.
 * **Example 12** is kept byte for byte as a `claude-agent` 0.8.0 script, so its
   docstring still names its original file name. It needs `orkexa-claude-compat`
   (`pip install --no-deps -e compat/orkexa-claude-compat`).

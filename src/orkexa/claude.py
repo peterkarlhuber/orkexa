@@ -15,6 +15,7 @@ import json
 import os
 from typing import Any, Literal
 
+from ._storage import write_private_text
 from .agent import Agent
 from .async_agent import AsyncAgent
 from .core.conversion import HISTORY_FORMAT, parse_history, prepare_history
@@ -190,9 +191,11 @@ class _ClaudeFacade(AgentCore[OutputT]):
         self.messages = codec.encode_messages(history)
 
     def save_history(self, path: str | os.PathLike[str]) -> None:
-        """Write the committed conversation history to a JSON file (Messages API format)."""
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(self.messages, handle, ensure_ascii=False, indent=1)
+        """Write the committed conversation history to a JSON file (Messages API format).
+
+        The file is replaced atomically and readable only by its owner (mode ``0600``).
+        """
+        write_private_text(path, json.dumps(self.messages, ensure_ascii=False, indent=1))
 
     def load_history(self, path: str | os.PathLike[str]) -> None:
         """Replace the conversation history with one written by :meth:`save_history`.
