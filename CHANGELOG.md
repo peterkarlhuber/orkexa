@@ -98,3 +98,11 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
   `PRAGMA secure_delete=ON`: deleted content no longer stays readable in free pages of
   the database file. New `SQLiteIndex.optimize()` also erases the terms of deleted
   chunks from the FTS5 index segments.
+* Tests marked `live` run only when selected with `pytest -m live`; an API key in the
+  environment no longer makes a plain `pytest` call a paid API.
+* Docs extra: `pymdown-extensions>=11.0.1,<12` (fixes PYSEC-2026-3609 and
+  PYSEC-2026-3654) and `mkdocs<2`.
+* Repository: brand assets, README and documentation overhaul (compliance pages,
+  troubleshooting, development and release guides), community files, issue and pull
+  request templates, Dependabot, a dependency audit and `twine check` in CI, and a
+  release workflow prepared for PyPI trusted publishing.
