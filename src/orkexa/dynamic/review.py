@@ -1,4 +1,4 @@
-"""LLM review of generated tools and agent specs (see :mod:`claude_agent.evaluation`).
+"""LLM review of generated tools and agent specs (see :mod:`orkexa.evaluation`).
 
 A review complements the static check, the sandbox tests and the policy; it
 never replaces them. Its verdict can only reject, escalate or trigger a revision.

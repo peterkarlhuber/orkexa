@@ -5,10 +5,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
+import warnings
 
 from ..evaluation import Criterion, Evaluation, Evaluator
 from ..usage import UsageTracker
+from .errors import UnsafeOptInWarning
 from .review import AGENT_REVIEW_CRITERIA, TOOL_REVIEW_CRITERIA, review_agent, review_tool
 
 __all__ = [
@@ -47,12 +49,29 @@ class Approver(ABC):
 
 
 class AutoApprover(Approver):
-    """Approves everything that reached it.
+    """Approves everything that reached it. **Unsafe opt-in.**
 
     A tool only reaches the approver after it passed the static check and all
     its tests in the sandbox; an agent only after its spec passed the policy.
-    Choose this for fully automatic operation inside a single ``ask()``.
+    Nobody looks at model-written code before it runs; the static check is a
+    filter, not a proof of safety, and :class:`SubprocessSandbox` is no security
+    boundary. Use it for development and demos, or together with
+    :class:`DockerSandbox` (or a stronger isolation) for fully automatic operation.
+
+    Creating one emits an :class:`UnsafeOptInWarning`; pass
+    ``acknowledge_unsafe=True`` to state the choice explicitly and silence it.
     """
+
+    unsafe: ClassVar[bool] = True
+
+    def __init__(self, *, acknowledge_unsafe: bool = False) -> None:
+        if not acknowledge_unsafe:
+            warnings.warn(
+                "AutoApprover approves model-written tools and agents without a human review; "
+                "pass AutoApprover(acknowledge_unsafe=True) if that is intended",
+                UnsafeOptInWarning,
+                stacklevel=2,
+            )
 
     def approve(self, request: ApprovalRequest) -> bool:
         return True
@@ -109,7 +128,8 @@ class LLMApprover(Approver):
     Args:
         then: Decides about requests the review passed. Required on purpose;
             ``AutoApprover()`` gives fully automatic operation.
-        evaluator: The judge; defaults to an :class:`~claude_agent.Evaluator`.
+        evaluator: The judge; defaults to an Anthropic :class:`~orkexa.Evaluator`;
+            pass an Evaluator of any provider.
         on_reject: Decides about requests the review failed; ``None`` rejects them.
         tool_criteria: Criteria for tools.
         agent_criteria: Criteria for agents.

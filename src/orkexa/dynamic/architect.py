@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
+from typing import Any
 
-from anthropic import Anthropic
-
-from ..claude import ClaudeAgent
+from ..agent import Agent
 from ..core.types import Effort
 from ..usage import UsageTracker
+from ._agents import ProviderSettings, build_agent
 from .agent_spec import AgentSpec
 from .policy import DynamicPolicy
 
@@ -31,7 +32,9 @@ for the given requirement and return it as an AgentSpec:
 
 
 class AgentArchitect:
-    """Wraps a :class:`~claude_agent.ClaudeAgent` that returns :class:`AgentSpec` objects.
+    """Wraps an agent that returns :class:`AgentSpec` objects.
+
+    ``model``, ``credentials``, ``client`` and ``api_key`` work as in :class:`CodingAgent`.
 
     The architect only proposes; the :class:`AgentFactory` enforces the policy.
     The underlying agent is available as ``architect.agent``.
@@ -44,21 +47,23 @@ class AgentArchitect:
         system_prompt: str = DEFAULT_ARCHITECT_PROMPT,
         effort: Effort | None = "high",
         max_tokens: int = 8192,
-        client: Anthropic | None = None,
+        client: Any | None = None,
         api_key: str | None = None,
+        credentials: Mapping[str, ProviderSettings] | None = None,
         usage_tracker: UsageTracker | None = None,
         name: str = "Agent Architect",
     ) -> None:
-        self.agent: ClaudeAgent[AgentSpec] = ClaudeAgent(
+        self.agent: Agent[AgentSpec] = build_agent(
+            model,
+            settings=credentials,
+            client=client,
+            api_key=api_key,
             name=name,
-            model=model,
             system_prompt=system_prompt,
             output_format=AgentSpec,
             effort=effort,
             max_tokens=max_tokens,
             max_tool_rounds=0,
-            client=client,
-            api_key=api_key,
             usage_tracker=usage_tracker,
         )
 

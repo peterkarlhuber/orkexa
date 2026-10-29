@@ -1,15 +1,15 @@
-"""Turns a validated AgentSpec into a ClaudeAgent; the policy has the last word."""
+"""Turns a validated AgentSpec into an agent of any provider; the policy has the last word."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import re
 from typing import Any
 
-from anthropic import Anthropic
-
-from ..claude import ClaudeAgent
+from ..agent import Agent
 from ..tools import Tool
 from ..usage import UsageTracker
+from ._agents import ProviderSettings, build_agent, same_model
 from .agent_spec import AgentSpec
 from .errors import PolicyViolationError
 from .output_registry import OutputFormatRegistry
@@ -30,8 +30,10 @@ class AgentFactory:
         policy: Limits that override whatever the spec asks for.
         delegation_tools: Orchestration tools (``run_agent`` ...) that generated
             agents may receive if ``policy.allow_agent_delegation`` is set.
-        client: Anthropic client passed to every created agent.
-        api_key: API key passed to every created agent.
+        client: Anthropic client passed to every created Anthropic agent.
+        api_key: Anthropic API key passed to every created Anthropic agent.
+        credentials: :class:`ProviderSettings` per provider; an agent only receives
+            the settings of its own model's provider.
         usage_tracker: Shared tracker injected into every created agent.
     """
 
@@ -42,8 +44,9 @@ class AgentFactory:
         policy: DynamicPolicy | None = None,
         *,
         delegation_tools: dict[str, Tool] | None = None,
-        client: Anthropic | None = None,
+        client: Any | None = None,
         api_key: str | None = None,
+        credentials: Mapping[str, ProviderSettings] | None = None,
         usage_tracker: UsageTracker | None = None,
     ) -> None:
         self.tools = tools
@@ -52,6 +55,7 @@ class AgentFactory:
         self.delegation_tools = dict(delegation_tools or {})
         self.client = client
         self.api_key = api_key
+        self.credentials = dict(credentials or {})
         self.usage_tracker = usage_tracker
 
     def validate(self, spec: AgentSpec) -> AgentSpec:
@@ -67,7 +71,7 @@ class AgentFactory:
             errors.append(f"invalid agent name {spec.name!r}")
         if not spec.system_prompt.strip():
             errors.append("empty system prompt")
-        if spec.model not in policy.allowed_models:
+        if not any(same_model(spec.model, allowed) for allowed in policy.allowed_models):
             errors.append(f"model {spec.model!r} not allowed (allowed: {list(policy.allowed_models)})")
         if spec.missing_tools:
             errors.append(f"unresolved missing tools: {[t.name for t in spec.missing_tools]}")
@@ -93,7 +97,7 @@ class AgentFactory:
             }
         )
 
-    def create(self, spec: AgentSpec) -> ClaudeAgent[Any]:
+    def create(self, spec: AgentSpec) -> Agent[Any]:
         """Validate ``spec`` and build a fresh agent from it."""
         spec = self.validate(spec)
         tools = [
@@ -101,9 +105,12 @@ class AgentFactory:
             for name in spec.tools
         ]
         output_format = self.output_formats.get(spec.output_format) if spec.output_format else None
-        return ClaudeAgent(
+        return build_agent(
+            spec.model,
+            settings=self.credentials,
+            client=self.client,
+            api_key=self.api_key,
             name=spec.name,
-            model=spec.model,
             system_prompt=spec.system_prompt,
             tools=tools,
             output_format=output_format,
@@ -111,7 +118,5 @@ class AgentFactory:
             max_tokens=spec.max_tokens,
             max_tool_rounds=spec.max_tool_rounds,
             raise_tool_errors=False,
-            client=self.client,
-            api_key=self.api_key,
             usage_tracker=self.usage_tracker,
         )

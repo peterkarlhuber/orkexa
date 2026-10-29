@@ -68,7 +68,9 @@ def test_extra_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_working_directory_is_temporary(sandbox: SubprocessSandbox) -> None:
     code = f"import os\n\ndef cwd() -> str:\n    {_DOC}\n    return os.getcwd()\n"
     cwd = sandbox.call(code, "cwd", {})
-    assert "claude-agent-sandbox-" in cwd
+    # Orkexa deviation (documented in docs/feature-parity.md): the temporary
+    # directory prefix is "orkexa-sandbox-" (0.8.0: "claude-agent-sandbox-").
+    assert "orkexa-sandbox-" in cwd
     assert not Path(cwd).exists()
 
 
@@ -187,7 +189,7 @@ def test_docker_command_is_locked_down(tmp_path: Path) -> None:
     assert "-e" not in command and "--env" not in command
 
 
-def _docker_image_ready(image: str = "claude-agent-sandbox") -> bool:
+def _docker_image_ready(image: str = "orkexa-sandbox") -> bool:  # Orkexa: renamed image
     if not DockerSandbox.available():
         return False
     completed = subprocess.run(["docker", "image", "inspect", image], capture_output=True, check=False)

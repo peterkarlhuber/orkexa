@@ -38,7 +38,7 @@ from .static_check import TOOL_MODULE
 __all__ = ["DockerSandbox", "Sandbox", "SandboxTestResult", "SubprocessSandbox", "ValidationResult"]
 
 _RUNNER = Path(__file__).with_name("_sandbox_runner.py")
-_PACKAGE_DIR = Path(__file__).resolve().parents[1]  # .../claude_agent
+_PACKAGE_DIR = Path(__file__).resolve().parents[1]  # .../orkexa
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,7 @@ class Sandbox(ABC):
     def _run(self, files: dict[str, str], request: dict[str, Any]) -> dict[str, Any]:
         # CPU limit slightly above the wall-clock timeout, so the timeout normally fires first.
         request["limits"] = {"cpu_seconds": int(self.timeout) + 1, "memory_mb": self.memory_mb}
-        with tempfile.TemporaryDirectory(prefix="claude-agent-sandbox-") as directory:
+        with tempfile.TemporaryDirectory(prefix="orkexa-sandbox-") as directory:
             workdir = Path(directory)
             workdir.chmod(0o755)  # readable for an unprivileged container user
             for name, content in files.items():
@@ -180,7 +180,7 @@ class SubprocessSandbox(Sandbox):
 
     Args:
         python: Interpreter to use; defaults to the current one. It needs
-            ``pydantic`` and ``typing-extensions``; ``claude_agent`` itself is
+            ``pydantic`` and ``typing-extensions``; ``orkexa`` itself is
             loaded from this package. A virtual environment's interpreter makes
             the packages installed there importable for the generated code.
         env: Variables for the sandbox process, e.g. ``{"OPENBLAS_NUM_THREADS": "1"}``
@@ -228,15 +228,15 @@ class DockerSandbox(Sandbox):
     The image needs Python 3.10+ with ``pydantic`` and ``typing-extensions`` installed;
     ``docker/sandbox.Dockerfile`` in the repository builds a suitable one::
 
-        docker build -t claude-agent-sandbox -f docker/sandbox.Dockerfile .
+        docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
 
-    The installed ``claude_agent`` package is mounted read-only into the container.
+    The installed ``orkexa`` package is mounted read-only into the container.
     """
 
     def __init__(
         self,
         *,
-        image: str = "claude-agent-sandbox",
+        image: str = "orkexa-sandbox",
         timeout: float = 20.0,
         memory_mb: int = 512,
         max_output_chars: int = 65_536,
@@ -293,18 +293,18 @@ class DockerSandbox(Sandbox):
             "-v",
             f"{workdir}:/work:ro",
             "-v",
-            f"{_PACKAGE_DIR}:/opt/claude-agent/claude_agent:ro",
+            f"{_PACKAGE_DIR}:/opt/orkexa/orkexa:ro",
             "-w",
             "/work",
             self.image,
             "python",
             "-I",
             "-B",
-            "/opt/claude-agent/claude_agent/dynamic/_sandbox_runner.py",
+            "/opt/orkexa/orkexa/dynamic/_sandbox_runner.py",
         ]
 
     def _execute(self, workdir: Path, request: str) -> str:
-        name = f"claude-agent-sandbox-{uuid.uuid4().hex[:12]}"
+        name = f"orkexa-sandbox-{uuid.uuid4().hex[:12]}"
         try:
             completed = subprocess.run(
                 self.command(workdir, name),

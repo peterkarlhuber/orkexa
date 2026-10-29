@@ -22,7 +22,7 @@ class AgentSpec(BaseModel):
     """Machine-readable description of a specialist agent.
 
     The Agent Architect proposes it; :class:`AgentFactory` validates it against
-    the :class:`DynamicPolicy` and turns it into a :class:`~claude_agent.ClaudeAgent`.
+    the :class:`DynamicPolicy` and turns it into an agent of the provider named by ``model``.
     """
 
     name: str = Field(description="Unique name: letters, digits, '_' or '-', starting with a letter.")

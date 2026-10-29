@@ -8,7 +8,7 @@ Request keys: ``mode`` ("validate" or "call"), ``function_name``, ``payload``
 "validate", ``test_tool.py``.
 
 This file only uses the standard library until the limits are applied; it then
-imports ``claude_agent.tools.Tool`` (without the package's ``__init__``) to
+imports ``orkexa.tools.Tool`` (without the package's ``__init__``) to
 derive the tool schema exactly like the host would for a hand-written tool.
 """
 
@@ -64,14 +64,15 @@ def _error(exc: BaseException) -> str:
 
 
 def _import_tool_class() -> Any:
-    # Register claude_agent as a bare namespace so that importing
-    # claude_agent.tools does not run claude_agent/__init__.py, which would
-    # import the (slow, unneeded) anthropic SDK.
+    # Register orkexa as a bare namespace so that importing orkexa.tools does
+    # not run orkexa/__init__.py, which would import every subsystem. The
+    # directory is this file's package, so the runner works for an installed
+    # orkexa, a source checkout and the read-only Docker mount alike.
     package_dir = Path(__file__).resolve().parents[1]
-    package = types.ModuleType("claude_agent")
+    package = types.ModuleType("orkexa")
     package.__path__ = [str(package_dir)]
-    sys.modules.setdefault("claude_agent", package)
-    from claude_agent.tools import Tool
+    sys.modules.setdefault("orkexa", package)
+    from orkexa.tools import Tool
 
     return Tool
 

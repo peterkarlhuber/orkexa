@@ -99,7 +99,7 @@ from .providers import (
     ProviderConfig,
     register_provider,
 )
-from .retrieval import Chunk, Citation, Hit, Index, SQLiteIndex, citations, split_text
+from .retrieval import Chunk, Citation, Hit, Index, SQLiteIndex, citations, retrieval_sources, split_text
 from .tools import Tool
 from .usage import UsageRecord, UsageSummary, UsageTracker
 
@@ -203,6 +203,7 @@ __all__ = [
     "register_pricing",
     "register_provider",
     "resolve_pricing",
+    "retrieval_sources",
     "split_text",
     "uploaded_file",
 ]

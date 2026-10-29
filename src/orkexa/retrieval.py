@@ -1,30 +1,40 @@
-"""Retrieval-augmented generation (RAG): a search index Claude queries as a tool.
+"""Retrieval-augmented generation (RAG): a search index the model queries as a tool.
 
 An :class:`Index` holds text chunks of a larger corpus (handbooks, reports,
-tickets). With ``index=`` an agent offers Claude the tool ``search``; its hits
-come back as ``search_result`` blocks, so Claude's answer carries citations
-that name the source::
+tickets). With ``index=`` an agent of any provider offers the model the tool
+``search``. Its hits are neutral search results: Anthropic receives them as
+``search_result`` blocks (so the answer carries API-native citations); OpenAI,
+Gemini and compatible endpoints receive them as attributed text, because their
+APIs have no search-result blocks::
 
-    from claude_agent import ClaudeAgent, SQLiteIndex, citations
+    from orkexa import Agent, SQLiteIndex, citations, retrieval_sources
 
     index = SQLiteIndex("agent.db", namespace="handbook")
     index.add_file("handbook.md")
 
-    agent = ClaudeAgent(index=index)
+    agent = Agent(model="gemini:gemini-3-pro", index=index)
     answer = agent.ask("How long is the warranty?")
-    for cite in citations(agent.last_response):
+    for source in retrieval_sources(agent):  # hits the search tool really returned
+        print(source.source, source.title)
+    for cite in citations(agent.last_response):  # API-native citations, if any
         print(cite.source, cite.cited_text)
+
+Three kinds of source information are kept apart: :func:`citations` returns
+citations the provider API attached (``kind="api_native"``),
+:func:`retrieval_sources` returns the passages Orkexa's search tool actually
+delivered in the last turn (``kind="retrieval"``), and source claims the model
+writes into its text are neither and are never parsed as sources.
 
 :class:`SQLiteIndex` uses SQLite's built-in FTS5 full-text search (BM25 ranking)
 and needs no extra package. Pass ``embedder=`` for vector search with
 `sqlite-vec <https://github.com/asg017/sqlite-vec>`_ (``pip install
-"claude-agent[vector]"``); the index then combines both rankings (hybrid search).
-PDF text extraction uses ``pypdf`` (``pip install "claude-agent[pdf]"``).
+"orkexa[vector]"``); the index then combines both rankings (hybrid search).
+PDF text extraction uses ``pypdf`` (``pip install "orkexa[pdf]"``).
 
-Memory and RAG complement each other: memory is the notebook Claude writes
+Memory and RAG complement each other: memory is the notebook the model writes
 itself, the index is the library your application fills. With ``store=`` a
-chunk remembers the :class:`~claude_agent.FileStore` id of its original, so
-Claude can load the whole file after a hit.
+chunk remembers the The :class:`~orkexa.FileStore` id of its original, so
+the model can load the whole file after a hit.
 """
 
 from __future__ import annotations
@@ -44,7 +54,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from .content import ContentBlock, ToolContent
-from .core.types import Citation, ModelResponse
+from .core.types import Citation, Message, ModelResponse, SearchResultPart, TextPart, ToolResultPart
 from .tools import Tool
 
 if TYPE_CHECKING:
@@ -59,6 +69,7 @@ __all__ = [
     "Index",
     "SQLiteIndex",
     "citations",
+    "retrieval_sources",
     "split_text",
 ]
 
@@ -127,6 +138,45 @@ def citations(response: Any) -> list[Citation]:
     return found
 
 
+def retrieval_sources(conversation: Any, *, tool_name: str | None = None) -> list[Citation]:
+    """The search hits the ``search`` tool returned in the last turn (every provider).
+
+    ``conversation`` is an agent (``Agent``, ``ClaudeAgent``, ...) or a list of
+    neutral :class:`~orkexa.Message` objects. The result lists each delivered
+    passage once, as a :class:`Citation` with ``kind="retrieval"``: verified
+    sources the model *received*, not a claim that the answer used them.
+    """
+    name = tool_name or SEARCH_TOOL_NAME
+    if hasattr(conversation, "conversation"):
+        messages: list[Message] = conversation.conversation()
+    else:
+        messages = list(conversation)
+    start = 0
+    for index, message in enumerate(messages):
+        if message.role == "user" and any(not isinstance(p, ToolResultPart) for p in message.parts()):
+            start = index
+    found: list[Citation] = []
+    seen: set[tuple[str, str]] = set()
+    for message in messages[start:]:
+        for part in message.parts():
+            if not isinstance(part, ToolResultPart) or part.is_error or part.name not in (name, None):
+                continue
+            if not isinstance(part.content, list):
+                continue
+            for item in part.content:
+                if not isinstance(item, SearchResultPart):
+                    continue
+                text = "\n".join(p.text for p in item.content if isinstance(p, TextPart))
+                key = (item.source, text)
+                if key in seen:
+                    continue
+                seen.add(key)
+                found.append(
+                    Citation(source=item.source, title=item.title, cited_text=text, kind="retrieval")
+                )
+    return found
+
+
 def split_text(text: str, *, max_chars: int = 1500, overlap: int = 200) -> list[str]:
     """Split text into chunks of at most about ``max_chars`` at paragraph boundaries.
 
@@ -187,7 +237,9 @@ def _pdf_pages(data: bytes) -> list[str]:
     try:
         from pypdf import PdfReader  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
-        raise ImportError('Indexing PDFs needs pypdf: pip install "claude-agent[pdf]"') from None
+        raise ImportError(
+            'Indexing PDFs needs pypdf: pip install "orkexa[pdf]" (formerly "claude-agent[pdf]")'
+        ) from None
     return [page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages]
 
 
@@ -391,7 +443,10 @@ class SQLiteIndex(Index):
         try:
             import sqlite_vec  # type: ignore[import-not-found,import-untyped,unused-ignore]
         except ImportError:
-            raise ImportError('Vector search needs sqlite-vec: pip install "claude-agent[vector]"') from None
+            raise ImportError(
+                "Vector search needs sqlite-vec: "
+                'pip install "orkexa[vector]" (formerly "claude-agent[vector]")'
+            ) from None
         try:
             self._connection.enable_load_extension(True)
             sqlite_vec.load(self._connection)

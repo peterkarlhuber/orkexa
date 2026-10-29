@@ -1,6 +1,6 @@
 """Exceptions of the dynamic agent extension.
 
-All of them derive from :class:`claude_agent.ClaudeAgentError` via
+All of them derive from :class:`orkexa.OrkexaError` (alias ``ClaudeAgentError``) via
 :class:`DynamicAgentError`, and additionally from the closest builtin exception.
 """
 
@@ -17,11 +17,14 @@ __all__ = [
     "RegistryError",
     "SandboxError",
     "ToolValidationError",
+    "UnpricedModelError",
+    "UnpricedUsageWarning",
+    "UnsafeOptInWarning",
 ]
 
 
 class DynamicAgentError(ClaudeAgentError):
-    """Base class of all errors raised by claude_agent.dynamic."""
+    """Base class of all errors raised by orkexa.dynamic."""
 
 
 class PolicyViolationError(DynamicAgentError, ValueError):
@@ -30,6 +33,18 @@ class PolicyViolationError(DynamicAgentError, ValueError):
 
 class BudgetExceededError(DynamicAgentError, RuntimeError):
     """The shared USD budget of a BudgetTracker has been used up."""
+
+
+class UnpricedModelError(BudgetExceededError):
+    """A request was refused because its model has no known price (``on_unpriced="reject"``)."""
+
+
+class UnpricedUsageWarning(UserWarning):
+    """Usage of a model without a known price; its cost is unknown, not zero."""
+
+
+class UnsafeOptInWarning(UserWarning):
+    """An unsafe opt-in such as :class:`~orkexa.dynamic.AutoApprover` is in use."""
 
 
 class RecursionLimitError(DynamicAgentError, RuntimeError):

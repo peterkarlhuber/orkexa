@@ -1,17 +1,17 @@
-"""Stores for raw files (PDFs, images, text) that Claude loads on demand.
+"""Stores for raw files (PDFs, images, text) that the model loads on demand.
 
 The memory tool holds text notes; originals such as a scanned contract or a
-chart live in a :class:`FileStore`. With ``files=`` an agent offers Claude the
+chart live in a :class:`FileStore`. With ``files=`` an agent offers the model the
 tool ``files``: ``list`` shows the catalog, ``load`` brings one original into the
-conversation as a document or image block, only when Claude needs it::
+conversation as a document or image block, only when the model needs it::
 
-    from claude_agent import ClaudeAgent, LocalFileStore
+    from orkexa import Agent, LocalFileStore
 
     store = LocalFileStore("./data/files")
     report = store.add("q3-report.pdf", description="Quarterly report Q3 2026")
 
-    agent = ClaudeAgent(files=store)
-    agent.ask("Which risks does the Q3 report name?")  # Claude loads report.id
+    agent = Agent(model="openai:gpt-5.5", files=store)
+    agent.ask("Which risks does the Q3 report name?")  # the model loads report.id
 
 Two backends share one implementation:
 
@@ -23,7 +23,7 @@ With ``files_api=client`` (an ``anthropic.Anthropic``) a store uploads each file
 to Anthropic's Files API the first time it is loaded and from then on sends only
 the ``file_id`` instead of the base64 bytes. The original stays in the store.
 
-Claude never passes paths, only the ids the store hands out. For other storage
+The model never passes paths, only the ids the store hands out. For other storage
 (object storage, a database server) subclass :class:`FileStore` and implement
 its storage methods.
 """

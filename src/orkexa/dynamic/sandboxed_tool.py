@@ -22,7 +22,7 @@ class SandboxedTool(Tool):
     type hints and docstring) and is passed in as JSON. Every call, both
     :meth:`execute` and a direct Python call, starts a new sandbox run; the
     code is never imported into the host process. It can be added to any
-    agent with :meth:`ClaudeAgent.add_tool <claude_agent.ClaudeAgent.add_tool>`.
+    agent with :meth:`Agent.add_tool <orkexa.Agent.add_tool>`.
     """
 
     def __init__(

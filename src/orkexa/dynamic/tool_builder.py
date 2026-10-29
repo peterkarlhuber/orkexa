@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any
 
-from ..claude import ClaudeAgent
+from ..agent import Agent
 from ..evaluation import Criterion, Evaluation, Evaluator
 from ..tools import Tool
 from ..usage import UsageTracker
@@ -84,7 +84,7 @@ class ToolBuilder:
         self.extra_imports = frozenset(extra_imports)
         self.test_sandbox = sandbox
         self.generated_count = 0
-        self._attached: dict[str, list[ClaudeAgent[Any]]] = {}
+        self._attached: dict[str, list[Agent[Any]]] = {}
         if usage_tracker is not None:
             coding_agent.agent.usage_tracker = usage_tracker
             if reviewer is not None:
@@ -203,7 +203,7 @@ class ToolBuilder:
 
     # ---- tools for agents ----------------------------------------------------
 
-    def attach(self, agent: ClaudeAgent[Any], name: str) -> bool:
+    def attach(self, agent: Agent[Any], name: str) -> bool:
         """Add a registered tool to ``agent``; False if it already has it."""
         if name in agent.tools:
             return False
@@ -218,7 +218,7 @@ class ToolBuilder:
             if name in agent.tools:
                 agent.remove_tool(name)
 
-    def as_tools(self, agent: ClaudeAgent[Any]) -> list[Tool]:
+    def as_tools(self, agent: Agent[Any]) -> list[Tool]:
         """Tools that let ``agent`` find, load and create tools for itself.
 
         Returns ``find_tools``, ``load_tool`` and ``create_tool``. Add them with

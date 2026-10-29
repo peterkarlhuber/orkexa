@@ -5,13 +5,15 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import get_args
+import threading
+from typing import Literal, get_args
+import warnings
 
 from ..core.types import Effort
 from ..usage import UsageRecord, UsageTracker
-from .errors import BudgetExceededError
+from .errors import BudgetExceededError, UnpricedModelError, UnpricedUsageWarning
 
-__all__ = ["RESERVED_TOOL_NAMES", "BudgetTracker", "DynamicPolicy", "clamp_effort"]
+__all__ = ["RESERVED_TOOL_NAMES", "BudgetTracker", "DynamicPolicy", "UnpricedPolicy", "clamp_effort"]
 
 _EFFORT_ORDER: tuple[Effort, ...] = get_args(Effort)
 
@@ -37,7 +39,9 @@ class DynamicPolicy:
     set by the developer, decides what is accepted.
 
     Attributes:
-        allowed_models: Models a generated agent may use.
+        allowed_models: Models a generated agent may use. Entries may be
+            provider-qualified (``"openai:gpt-5.5"``); a bare name means the
+            provider it resolves to (``"claude-opus-5-5"`` is Anthropic).
         max_effort: Highest effort a generated agent may use (higher is lowered).
         max_tokens: Upper bound for a generated agent's ``max_tokens`` (higher is lowered).
         max_tool_rounds: Upper bound for a generated agent's ``max_tool_rounds``.
@@ -104,19 +108,48 @@ class DynamicPolicy:
         set_(self, "budget_usd", budget)
 
 
+UnpricedPolicy = Literal["ignore", "warn", "reject"]
+
+
 class BudgetTracker(UsageTracker):
-    """A :class:`~claude_agent.UsageTracker` that enforces a USD limit.
+    """A :class:`~orkexa.UsageTracker` that enforces a USD limit across providers.
 
     Every request is recorded first; if the summed estimated cost then exceeds
     ``limit_usd``, :class:`BudgetExceededError` is raised. Because the agent
     records usage right after each API response, this aborts a running tool
-    loop. A single request can therefore overshoot the limit slightly.
-    Requests without a known price count as zero.
+    loop. A single request can therefore overshoot the limit slightly: the cost
+    of a request is only known after it ran. Before each request the tracker
+    also refuses to start when the budget is already used up.
+
+    Requests of a model without a known price (no built-in price, no
+    ``pricing=``/:func:`~orkexa.register_pricing`) have an *unknown* cost, which
+    is not the same as zero. ``on_unpriced`` decides deterministically:
+
+    * ``"ignore"`` (the ``claude-agent`` 0.8.0 behavior): count them as zero.
+    * ``"warn"``: count them as zero and emit one :class:`UnpricedUsageWarning`
+      per provider and model.
+    * ``"reject"``: raise :class:`UnpricedModelError` *before* the request is
+      sent, so no unbudgeted cost is incurred.
+
+    The default is ``"ignore"`` without a limit and ``"warn"`` with one.
+    :attr:`unpriced_records` lists the requests whose cost is unknown.
     """
 
-    def __init__(self, limit_usd: Decimal | float | str | None = None) -> None:
+    def __init__(
+        self,
+        limit_usd: Decimal | float | str | None = None,
+        *,
+        on_unpriced: UnpricedPolicy | None = None,
+    ) -> None:
         super().__init__()
         self.limit_usd = None if limit_usd is None else Decimal(str(limit_usd))
+        if on_unpriced is None:
+            on_unpriced = "ignore" if self.limit_usd is None else "warn"
+        if on_unpriced not in ("ignore", "warn", "reject"):
+            raise ValueError(f"on_unpriced must be 'ignore', 'warn' or 'reject', not {on_unpriced!r}")
+        self.on_unpriced: UnpricedPolicy = on_unpriced
+        self._warned: set[tuple[str | None, str]] = set()
+        self._lock = threading.Lock()
 
     @property
     def spent_usd(self) -> Decimal:
@@ -129,6 +162,11 @@ class BudgetTracker(UsageTracker):
     def remaining_usd(self) -> Decimal | None:
         return None if self.limit_usd is None else self.limit_usd - self.spent_usd
 
+    @property
+    def unpriced_records(self) -> tuple[UsageRecord, ...]:
+        """Recorded requests whose cost is unknown (not counted in :attr:`spent_usd`)."""
+        return tuple(r for r in self.records if r.estimated_cost_usd is None)
+
     def check(self) -> None:
         """Raise :class:`BudgetExceededError` if the budget is already used up."""
         if self.limit_usd is not None and self.spent_usd > self.limit_usd:
@@ -136,6 +174,27 @@ class BudgetTracker(UsageTracker):
                 f"Budget exceeded: spent ${self.spent_usd:.4f} of ${self.limit_usd:.4f}"
             )
 
+    def before_request(self, *, agent: str, provider: str, model: str, priced: bool) -> None:
+        self.check()
+        if not priced and self.on_unpriced == "reject":
+            raise UnpricedModelError(
+                f"No price known for {provider}:{model} (agent {agent!r}); the budget cannot be enforced. "
+                "Pass pricing=ModelPricing(...) to the agent, call orkexa.register_pricing(...), "
+                "or use BudgetTracker(on_unpriced='warn')."
+            )
+
     def add(self, record: UsageRecord) -> None:
         super().add(record)
+        if record.estimated_cost_usd is None and self.on_unpriced == "warn":
+            key = (record.provider, record.model)
+            with self._lock:
+                new = key not in self._warned
+                self._warned.add(key)
+            if new:
+                warnings.warn(
+                    f"No price known for {record.provider or 'anthropic'}:{record.model}; "
+                    "its cost is unknown and not counted against the budget",
+                    UnpricedUsageWarning,
+                    stacklevel=2,
+                )
         self.check()

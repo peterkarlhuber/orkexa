@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar
 import json
 from typing import Any
 
-from anthropic import Anthropic
 from pydantic import BaseModel
 
-from ..claude import ClaudeAgent
+from ..agent import Agent
 from ..core.types import Effort
 from ..tools import Tool
 from ..usage import UsageTracker
+from ._agents import ProviderSettings, build_agent
 from .agent_registry import AgentRecord, AgentRegistry
 from .approval import ApprovalRequest, Approver, share_usage_tracker
 from .architect import AgentArchitect
@@ -40,7 +41,7 @@ _EXPECTED_ERRORS = (
 )
 
 #: Current delegation depth; 0 in the orchestrator, 1 in a specialist it called.
-_depth: ContextVar[int] = ContextVar("claude_agent_dynamic_depth", default=0)
+_depth: ContextVar[int] = ContextVar("orkexa_dynamic_depth", default=0)
 
 
 DEFAULT_ORCHESTRATOR_PROMPT = """\
@@ -61,7 +62,7 @@ adapt your plan instead of retrying the same call.
 class Orchestrator:
     """Coordinates a Dynamic Agent Architecture.
 
-    The orchestrator is a :class:`~claude_agent.ClaudeAgent` with three generic
+    The orchestrator is an agent (any provider) with three generic
     tools: ``list_agents``, ``create_agent`` and ``run_agent``. ``create_agent``
     asks the :class:`AgentArchitect` for an :class:`AgentSpec`, has missing tools
     built by the :class:`ToolBuilder`, validates the spec with the
@@ -98,8 +99,9 @@ class Orchestrator:
         effort: Effort | None = "high",
         max_tokens: int = 8192,
         max_tool_rounds: int = 12,
-        client: Anthropic | None = None,
+        client: Any | None = None,
         api_key: str | None = None,
+        credentials: Mapping[str, ProviderSettings] | None = None,
         usage_tracker: UsageTracker | None = None,
         name: str = "Orchestrator",
     ) -> None:
@@ -136,19 +138,21 @@ class Orchestrator:
             delegation_tools={"list_agents": list_agents, "run_agent": run_agent},
             client=client,
             api_key=api_key,
+            credentials=credentials,
             usage_tracker=self.usage_tracker,
         )
-        self.agent: ClaudeAgent[str] = ClaudeAgent(
+        self.agent: Agent[str] = build_agent(
+            model,
+            settings=credentials,
+            client=client,
+            api_key=api_key,
             name=name,
-            model=model,
             system_prompt=system_prompt,
             tools=[list_agents, create_agent, run_agent],
             effort=effort,
             max_tokens=max_tokens,
             max_tool_rounds=max_tool_rounds,
             raise_tool_errors=False,
-            client=client,
-            api_key=api_key,
             usage_tracker=self.usage_tracker,
         )
 

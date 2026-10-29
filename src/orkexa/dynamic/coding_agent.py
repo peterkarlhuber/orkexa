@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from anthropic import Anthropic
+from collections.abc import Mapping
+from typing import Any
+
 from pydantic import BaseModel, Field
 
-from ..claude import ClaudeAgent
+from ..agent import Agent
 from ..core.types import Effort
 from ..usage import UsageTracker
+from ._agents import ProviderSettings, build_agent
 from .static_check import ALLOWED_IMPORTS, TOOL_MODULE
 
 __all__ = ["DEFAULT_CODING_PROMPT", "CodingAgent", "ToolProposal"]
@@ -54,7 +57,11 @@ errors for a previous proposal, return a complete corrected proposal.
 
 
 class CodingAgent:
-    """Wraps a :class:`~claude_agent.ClaudeAgent` that returns :class:`ToolProposal` objects.
+    """Wraps an agent that returns :class:`ToolProposal` objects.
+
+    ``model`` may name any provider (``"openai:gpt-5.5"``); ``credentials`` holds
+    the :class:`ProviderSettings` per provider. ``client``/``api_key`` are the
+    Anthropic credentials of ``claude-agent`` 0.8.0 and apply to Anthropic models only.
 
     The Coding Agent only writes code; it never runs it. The underlying agent
     is available as ``coding_agent.agent``.
@@ -67,21 +74,23 @@ class CodingAgent:
         system_prompt: str = DEFAULT_CODING_PROMPT,
         effort: Effort | None = "high",
         max_tokens: int = 8192,
-        client: Anthropic | None = None,
+        client: Any | None = None,
         api_key: str | None = None,
+        credentials: Mapping[str, ProviderSettings] | None = None,
         usage_tracker: UsageTracker | None = None,
         name: str = "Coding Agent",
     ) -> None:
-        self.agent: ClaudeAgent[ToolProposal] = ClaudeAgent(
+        self.agent: Agent[ToolProposal] = build_agent(
+            model,
+            settings=credentials,
+            client=client,
+            api_key=api_key,
             name=name,
-            model=model,
             system_prompt=system_prompt,
             output_format=ToolProposal,
             effort=effort,
             max_tokens=max_tokens,
             max_tool_rounds=0,
-            client=client,
-            api_key=api_key,
             usage_tracker=usage_tracker,
         )
 
