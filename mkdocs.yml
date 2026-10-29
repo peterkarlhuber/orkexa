@@ -6,12 +6,35 @@ copyright: Copyright &copy; 2026 Peter Karlhuber – MIT License
 
 theme:
   name: material
+  logo: assets/branding/orkexa-mark.png
+  favicon: assets/branding/favicon-32.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
   features:
     - navigation.sections
     - navigation.top
+    - navigation.footer
+    - navigation.indexes
     - search.suggest
+    - search.highlight
     - content.code.copy
     - toc.follow
+
+extra_css:
+  - assets/stylesheets/orkexa.css
 
 plugins:
   - search
@@ -32,6 +55,7 @@ plugins:
 markdown_extensions:
   - admonition
   - attr_list
+  - md_in_html
   - tables
   - toc:
       permalink: true
@@ -57,6 +81,13 @@ nav:
       - Usage, pricing and budgets: guides/usage-and-budgets.md
       - Multi-agent and dynamic agents: guides/multi-agent.md
       - Security: guides/security.md
+  - Data protection and AI regulation:
+      - compliance/index.md
+      - Data flows and retention: compliance/data-flows.md
+      - GDPR: compliance/gdpr.md
+      - EU AI Act: compliance/eu-ai-act.md
+      - ISO/IEC 42001: compliance/iso-iec-42001.md
+  - Troubleshooting and FAQ: troubleshooting.md
   - Feature matrix: feature-matrix.md
   - Examples: examples.md
   - API reference:
@@ -83,4 +114,7 @@ nav:
       - ADR 0005 module layout: architecture/decisions/0005-module-layout.md
       - ADR 0006 provider APIs: architecture/decisions/0006-provider-apis.md
       - ADR 0007 credentials and endpoints: architecture/decisions/0007-credentials-and-endpoints.md
+  - Development:
+      - development/index.md
+      - Releasing: development/releasing.md
   - Changelog: changelog.md

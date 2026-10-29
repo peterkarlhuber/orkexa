@@ -144,7 +144,7 @@ class GeminiOptions:
     Attributes:
         include_thoughts: Return thought summaries (streamed as reasoning deltas).
         thinking_budget: Token budget for thinking (Gemini 2.5 models); ``effort``
-            maps to ``thinking_level`` instead (Gemini 3 models). Not both.
+            maps to ``thinking_level`` instead (Gemini 3 and 4 models). Not both.
         safety_settings: Native ``SafetySetting`` dicts.
         request_options: Merged into ``GenerateContentConfig``.
     """

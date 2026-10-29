@@ -255,7 +255,11 @@ class FileStore(ABC):
         return sorted(entries, key=lambda e: e.created_at, reverse=True)
 
     def delete(self, file_id: str) -> None:
-        """Remove a file; raises ``KeyError`` if it is unknown."""
+        """Remove a file; raises ``KeyError`` if it is unknown.
+
+        A copy uploaded to the Files API (``files_api=``) is not deleted; delete it
+        with the client first, using ``info(file_id).api_file_id``.
+        """
         with self._lock:
             self.info(file_id)
             self._remove(file_id)
@@ -444,6 +448,8 @@ class SQLiteFileStore(FileStore):
         self._connection = sqlite3.connect(
             database, isolation_level=None, check_same_thread=False, timeout=30
         )
+        # Deleted rows are overwritten instead of left in free pages of the file.
+        self._connection.execute("PRAGMA secure_delete=ON")
         if str(database) != ":memory:":
             self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute(

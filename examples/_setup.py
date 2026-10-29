@@ -6,8 +6,8 @@ import os
 
 MODELS = {
     "anthropic": ("ANTHROPIC_API_KEY", os.environ.get("ORKEXA_ANTHROPIC_MODEL", "claude-sonnet-5-5")),
-    "openai": ("OPENAI_API_KEY", os.environ.get("ORKEXA_OPENAI_MODEL", "gpt-5")),
-    "gemini": ("GEMINI_API_KEY", os.environ.get("ORKEXA_GEMINI_MODEL", "gemini-2.5-flash")),
+    "openai": ("OPENAI_API_KEY", os.environ.get("ORKEXA_OPENAI_MODEL", "gpt-6.1-sol")),
+    "gemini": ("GEMINI_API_KEY", os.environ.get("ORKEXA_GEMINI_MODEL", "gemini-3.8-flash")),
 }
 
 

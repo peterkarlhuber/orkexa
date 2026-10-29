@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in Orkexa does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security issues do not belong here; see SECURITY.md. Remove API keys and personal data from everything you paste.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A short script, ideally with FakeProvider or without network access.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Full exception or output
+      render: text
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      placeholder: "e.g. openai:gpt-6.1-sol, or compatible (vLLM 0.x)"
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `python -c "import sys, orkexa; print(sys.version, orkexa.__version__)"` and `pip show anthropic openai google-genai pydantic`.
+      render: text
+    validations:
+      required: true

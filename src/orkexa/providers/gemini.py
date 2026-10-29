@@ -8,7 +8,7 @@
   approval hooks, limits and budget checks.
 * Native parts are kept in ``Part.meta["gemini"]`` and replayed unchanged, including
   ``thought_signature`` (required by Gemini 3 for multi-round function calling).
-* ``effort`` maps to ``thinking_level`` (``low``/``medium``/``high``; Gemini 3 models);
+* ``effort`` maps to ``thinking_level`` (``low``/``medium``/``high``; Gemini 3 and 4 models);
   ``"xhigh"``/``"max"`` have no Gemini equivalent and are rejected. Gemini 2.5 models
   take ``GeminiOptions(thinking_budget=...)`` instead.
 * Gemini does not enforce tool schemas: Orkexa validates every call locally and
@@ -69,7 +69,7 @@ _REFUSALS = frozenset(
         "IMAGE_RECITATION",
     }
 )
-_GEMINI_3 = re.compile(r"^(models/)?gemini-3")
+_THINKING_LEVEL = re.compile(r"^(models/)?gemini-[34]([.-]|$)")  # Gemini 3.x and 4 (e.g. gemini-4-argon)
 _GEMINI_2 = re.compile(r"^(models/)?gemini-(2|1)\.")
 _RESERVED = frozenset(
     {
@@ -161,7 +161,7 @@ class GeminiProvider(Provider):
             "strict_tool_schemas": "Gemini does not enforce tool schemas; Orkexa validates arguments locally",
             "batch": "Orkexa does not implement Gemini batch mode; use evaluate_many(batch=False)",
         }
-        if _GEMINI_3.match(model):
+        if _THINKING_LEVEL.match(model):
             reasoning = "supported"
         elif _GEMINI_2.match(model):
             reasoning = "unsupported"

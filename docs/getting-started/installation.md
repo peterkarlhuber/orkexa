@@ -1,7 +1,18 @@
 # Installation
 
 Orkexa needs Python 3.10 or newer. The core depends only on Pydantic; each provider
-SDK is an extra:
+SDK is an extra.
+
+!!! note "Not yet on PyPI"
+    Orkexa 0.1.0 is unreleased. Until it is published, install it from the repository:
+
+    ```bash
+    pip install "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"
+    # or, from a clone, for development:
+    pip install -e ".[dev]"
+    ```
+
+    The commands below show the extras as they will be installed from PyPI.
 
 ```bash
 pip install "orkexa[anthropic]"   # Anthropic Claude (anthropic SDK)
@@ -16,6 +27,15 @@ pip install "orkexa[vector]"      # vector/hybrid search (sqlite-vec)
 raises `MissingDependencyError` naming the extra, e.g. `pip install 'orkexa[openai]'`.
 
 ## API keys
+
+Set the variable of each provider you use, e.g. in your shell profile or a secrets
+manager (never in code or in the repository):
+
+```bash
+export ANTHROPIC_API_KEY=...
+export OPENAI_API_KEY=...
+export GEMINI_API_KEY=...
+```
 
 | Provider | Variable read by the SDK | Explicit argument |
 | --- | --- | --- |

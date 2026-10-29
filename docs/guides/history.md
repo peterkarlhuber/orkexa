@@ -7,7 +7,7 @@ continues with the same provider exactly as the API produced it.
 
 ```python
 agent.save_history("chat.json")  # {"format": "orkexa.history", "version": 1, ...}
-other = Agent(model="openai:gpt-5")
+other = Agent(model="openai:gpt-6.1-sol")
 other.load_history("chat.json")  # also reads claude-agent 0.8.0 files
 ```
 

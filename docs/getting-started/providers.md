@@ -36,7 +36,7 @@ effective values for encoding decisions (e.g. strict schemas on a compatible end
 | structured_output | ✓ | ✓ (strict JSON schema) | ✓ (response JSON schema) | unknown | ✓ |
 | streaming | ✓ | ✓ | ✓ | unknown | ✓ |
 | image_input / document_input | ✓ | ✓ for multimodal model families, else unknown | ✓ | unknown | unknown |
-| reasoning (`effort`) | ✓ | ✓ reasoning models (`gpt-6*`, `gpt-5*`, `o*`), ✗ classic models, else unknown | ✓ Gemini 3 (`thinking_level`), ✗ Gemini 2.x (use `thinking_budget`) | unknown (`send_reasoning_effort`) | unknown |
+| reasoning (`effort`) | ✓ | ✓ reasoning models (`gpt-6*`, `gpt-5*`, `o*`), ✗ classic models, else unknown | ✓ Gemini 3 and 4 (`thinking_level`), ✗ Gemini 2.x (use `thinking_budget`) | unknown (`send_reasoning_effort`) | unknown |
 | caching | ✓ (`cache_control`) | ✓ (automatic) | ✓ (implicit) | unknown | unknown |
 | server_tools | ✓ | ✓ (hosted tools as native dicts) | ✓ (native tool dicts) | ✗ in Chat mode | ✗ in Chat mode |
 | native_memory_tool | ✓ | ✗ (memory is a function tool) | ✗ (function tool) | ✗ | ✗ |
@@ -70,7 +70,7 @@ response to continue its turn and does not poll.
 **Gemini** builds `google-genai` `Content`/`Part` objects, always disables the SDK's
 automatic function calling (Orkexa executes tools after `before_tool`), keeps
 `thought_signature` values of function-call parts and replays them, maps `effort`
-to `thinking_level` on Gemini 3, inlines `$ref`s of response schemas, and maps
+to `thinking_level` on Gemini 3 and 4, inlines `$ref`s of response schemas, and maps
 `SAFETY`/`PROHIBITED_CONTENT` endings to refusals. Function calls without an id get
 a synthetic id that is never sent back.
 

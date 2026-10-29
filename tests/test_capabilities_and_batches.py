@@ -1,4 +1,4 @@
-"""Model capabilities of current OpenAI families and Anthropic batch items built like
+"""Model capabilities of current OpenAI and Gemini families and Anthropic batch items built like
 normal requests (fake clients, no network access)."""
 
 from __future__ import annotations
@@ -46,6 +46,26 @@ def test_unknown_openai_family_needs_a_declared_capability() -> None:
 def test_classic_models_still_reject_effort() -> None:
     with pytest.raises(UnsupportedCapabilityError):
         Agent(model="openai:gpt-4.1", effort="high", client=object())
+
+
+# ---- Gemini model families -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "model", ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.5-flash-lite", "models/gemini-4-argon"]
+)
+def test_current_gemini_models_take_a_thinking_level(model: str) -> None:
+    agent = Agent(model=f"gemini:{model}", effort="medium", client=object())
+    assert agent.capabilities.reasoning == "supported"
+
+
+def test_gemini_effort_beyond_high_and_old_families_are_refused() -> None:
+    with pytest.raises(UnsupportedCapabilityError, match="'high'"):
+        Agent(model="gemini:gemini-4-argon", effort="max", client=object())
+    with pytest.raises(UnsupportedCapabilityError, match="thinking budget"):
+        Agent(model="gemini:gemini-2.5-flash", effort="high", client=object())
+    with pytest.raises(UnknownCapabilityError):
+        Agent(model="gemini:gemini-exp-next", effort="high", client=object())
 
 
 # ---- Anthropic batches ---------------------------------------------------------------------------

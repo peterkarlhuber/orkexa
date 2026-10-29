@@ -1,0 +1,31 @@
+# Conservative update policy: grouped weekly pull requests for Python dependencies,
+# monthly ones for GitHub Actions. Major versions of the provider SDKs change the
+# supported ranges in pyproject.toml and are reviewed by hand, so they are ignored here.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: anthropic
+        update-types: [version-update:semver-major]
+      - dependency-name: openai
+        update-types: [version-update:semver-major]
+      - dependency-name: google-genai
+        update-types: [version-update:semver-major]
+      - dependency-name: pydantic
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
