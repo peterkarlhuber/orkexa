@@ -2,8 +2,10 @@
 fresh virtual environments and check imports, the conflict guard and uninstallation.
 
 The original distribution is built from a copy of the reference checkout given by
-``CLAUDE_AGENT_SOURCE`` (default: ``../claude-agent`` next to this repository); the
-conflict tests are skipped without it.
+``CLAUDE_AGENT_SOURCE`` (default: ``../claude-agent`` next to this repository). Without
+it (e.g. in CI, where the reference repository is private) a stand-in distribution
+named ``claude-agent`` 0.8.0 that ships a ``claude_agent`` package is built instead:
+the conflict guard and the diagnostics only look at distribution metadata and files.
 """
 
 from __future__ import annotations
@@ -69,6 +71,20 @@ class Venv:
         return _run(self.python, "-I", "-c", code, check=check, cwd=self.path)
 
 
+def _stand_in_original(path: Path) -> None:
+    """A minimal ``claude-agent`` 0.8.0 distribution with its own ``claude_agent`` package."""
+    package = path / "src" / "claude_agent"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(
+        '"""Stand-in for the original claude-agent."""\n__version__ = "0.8.0"\n'
+    )
+    (path / "pyproject.toml").write_text(
+        '[build-system]\nrequires = ["hatchling>=1.27"]\nbuild-backend = "hatchling.build"\n\n'
+        '[project]\nname = "claude-agent"\nversion = "0.8.0"\nrequires-python = ">=3.10"\n\n'
+        '[tool.hatch.build.targets.wheel]\npackages = ["src/claude_agent"]\n'
+    )
+
+
 @pytest.fixture(scope="module")
 def wheels(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Path]]:
     out = tmp_path_factory.mktemp("wheels")
@@ -76,12 +92,14 @@ def wheels(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Path]
         "orkexa": _build(ROOT, out / "orkexa"),
         "shim": _build(ROOT / "compat" / "orkexa-claude-compat", out / "shim"),
     }
+    copy = tmp_path_factory.mktemp("reference") / "claude-agent"
     if (REFERENCE / "pyproject.toml").exists():
-        copy = tmp_path_factory.mktemp("reference") / "claude-agent"
         shutil.copytree(
             REFERENCE, copy, ignore=shutil.ignore_patterns(".git", ".venv", "dist", "__pycache__")
         )
-        built["original"] = _build(copy, out / "original")
+    else:
+        _stand_in_original(copy)
+    built["original"] = _build(copy, out / "original")
     for wheel in list(built.values()):
         shutil.copy(wheel, out)
     built["dir"] = out
@@ -139,8 +157,6 @@ def test_shim_serves_unchanged_imports_and_uninstalls_cleanly(
 def test_conflict_with_the_original_distribution_is_detected(
     wheels: dict[str, Path], tmp_path: Path, order: str
 ) -> None:
-    if "original" not in wheels:
-        pytest.skip(f"reference checkout not found at {REFERENCE}")
     venv = Venv(tmp_path / order, wheels["dir"])
     first, second = ("original", "shim") if order == "original_then_shim" else ("shim", "original")
     venv.install(wheels[first])

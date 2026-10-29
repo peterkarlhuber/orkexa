@@ -35,19 +35,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: peterkarlhuber/claude-agent
-          path: reference/claude-agent
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install build pytest
       - run: python -m build
       - run: python -m build compat/orkexa-claude-compat
+      # The private claude-agent reference is not available here; the tests then
+      # build a stand-in claude-agent 0.8.0 distribution for the conflict checks.
       - run: pytest -m packaging tests/packaging -v
-        env:
-          CLAUDE_AGENT_SOURCE: ${{ github.workspace }}/reference/claude-agent
       - uses: actions/upload-artifact@v4
         with:
           name: dist
