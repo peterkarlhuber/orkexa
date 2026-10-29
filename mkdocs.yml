@@ -1,0 +1,86 @@
+site_name: Orkexa
+site_description: One agent runtime for Anthropic Claude, OpenAI, Google Gemini and OpenAI-compatible endpoints.
+repo_url: https://github.com/peterkarlhuber/orkexa
+repo_name: peterkarlhuber/orkexa
+copyright: Copyright &copy; 2026 Peter Karlhuber – MIT License
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            merge_init_into_class: true
+            members_order: source
+            filters: ["!^_"]
+            heading_level: 2
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Providers and capabilities: getting-started/providers.md
+  - Guides:
+      - Migrating from claude-agent: guides/migration.md
+      - Tools and structured output: guides/tools-and-structured-output.md
+      - Streaming, hooks and errors: guides/streaming-hooks-errors.md
+      - History and provider switching: guides/history.md
+      - Memory, files and RAG: guides/memory-files-rag.md
+      - Usage, pricing and budgets: guides/usage-and-budgets.md
+      - Multi-agent and dynamic agents: guides/multi-agent.md
+      - Security: guides/security.md
+  - Feature matrix: feature-matrix.md
+  - Examples: examples.md
+  - API reference:
+      - Agents: reference/agents.md
+      - Providers: reference/providers.md
+      - Types and events: reference/types.md
+      - Tools and content: reference/tools.md
+      - Memory, files, retrieval: reference/storage.md
+      - Evaluation: reference/evaluation.md
+      - Dynamic agents: reference/dynamic.md
+      - Usage and pricing: reference/usage.md
+      - Errors: reference/errors.md
+      - Compatibility diagnostics: reference/compat.md
+  - Architecture:
+      - Target architecture: architecture/target-architecture.md
+      - Source inventory: architecture/source-inventory.md
+      - Provider coupling: architecture/provider-coupling.md
+      - Public API compatibility: architecture/public-api-compatibility.md
+      - Feature parity: architecture/feature-parity.md
+      - ADR 0001 single runtime: architecture/decisions/0001-single-runtime.md
+      - ADR 0002 neutral history: architecture/decisions/0002-neutral-history.md
+      - ADR 0003 capabilities: architecture/decisions/0003-capabilities.md
+      - ADR 0004 legacy import distribution: architecture/decisions/0004-legacy-import-distribution.md
+      - ADR 0005 module layout: architecture/decisions/0005-module-layout.md
+      - ADR 0006 provider APIs: architecture/decisions/0006-provider-apis.md
+      - ADR 0007 credentials and endpoints: architecture/decisions/0007-credentials-and-endpoints.md
+  - Changelog: changelog.md
