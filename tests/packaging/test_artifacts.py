@@ -77,3 +77,19 @@ def test_compat_wheel_holds_only_the_shim(artifacts: dict[str, tuple[Path, Path]
     top = {name.split("/")[0] for name in wheel_names}
     assert "claude_agent" in top and len(top) == 2
     assert not any(name.startswith("orkexa/") for name in wheel_names)
+
+
+def test_published_description_uses_only_absolute_urls(artifacts: dict[str, tuple[Path, Path]]) -> None:
+    """PyPI cannot resolve repository-relative paths, so the logo would not render."""
+    _, wheel = artifacts["orkexa"]
+    with zipfile.ZipFile(wheel) as archive:
+        (metadata,) = (n for n in archive.namelist() if n.endswith(".dist-info/METADATA"))
+        description = archive.read(metadata).decode("utf-8").split("\n\n", 1)[1]
+    logo = "https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/assets/branding/orkexa-logo.png"
+    assert f'<img src="{logo}"' in description
+    assert (ROOT / logo.split("/master/", 1)[1]).is_file()  # the URL names a committed file
+    targets = re.findall(r'(?:src|href)="([^"]+)"|\]\(([^)\s]+)\)', description)
+    relative = [t for pair in targets for t in pair if t and not re.match(r"(https?:|mailto:|#)", t)]
+    assert relative == []
+    for target in re.findall(r"github\.com/peterkarlhuber/orkexa/blob/master/([^)\"#\s]+)", description):
+        assert (ROOT / target).exists(), target
