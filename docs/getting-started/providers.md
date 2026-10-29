@@ -36,7 +36,7 @@ effective values for encoding decisions (e.g. strict schemas on a compatible end
 | structured_output | ✓ | ✓ (strict JSON schema) | ✓ (response JSON schema) | unknown | ✓ |
 | streaming | ✓ | ✓ | ✓ | unknown | ✓ |
 | image_input / document_input | ✓ | ✓ for multimodal model families, else unknown | ✓ | unknown | unknown |
-| reasoning (`effort`) | ✓ | ✓ reasoning models, ✗ classic models | ✓ Gemini 3 (`thinking_level`), ✗ Gemini 2.x (use `thinking_budget`) | unknown (`send_reasoning_effort`) | unknown |
+| reasoning (`effort`) | ✓ | ✓ reasoning models (`gpt-6*`, `gpt-5*`, `o*`), ✗ classic models, else unknown | ✓ Gemini 3 (`thinking_level`), ✗ Gemini 2.x (use `thinking_budget`) | unknown (`send_reasoning_effort`) | unknown |
 | caching | ✓ (`cache_control`) | ✓ (automatic) | ✓ (implicit) | unknown | unknown |
 | server_tools | ✓ | ✓ (hosted tools as native dicts) | ✓ (native tool dicts) | ✗ in Chat mode | ✗ in Chat mode |
 | native_memory_tool | ✓ | ✗ (memory is a function tool) | ✗ (function tool) | ✗ | ✗ |
@@ -87,7 +87,10 @@ sent back. `OPENAI_API_KEY` is never read.
 
 * Batch processing is implemented for Anthropic only; `Evaluator.evaluate_many(...,
   batch=True)` raises `UnsupportedCapabilityError` elsewhere; `batch=False` evaluates
-  sequentially with the same timeout semantics.
+  sequentially with the same timeout semantics. Batch items are built like normal
+  requests (thinking, effort, cache TTL, server tools, `tool_choice`,
+  `request_options`; betas use the beta batch API). Local tools are rejected, since a
+  batch item is a single request in which they cannot run.
 * Provider file uploads (`uploaded_file()`, Anthropic Files API) are Anthropic-only;
   inline images and documents work on every provider with media input.
 * Reasoning and thinking parts are provider-specific. Continuing a conversation with

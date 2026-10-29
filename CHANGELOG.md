@@ -83,3 +83,11 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
   sends the schema as `output_config.format`; the beta method has no `output_format`.
 * Text of a Responses message item is replayed even when an unknown content type
   precedes it.
+* OpenAI capabilities cover the GPT-6 family (`gpt-6-astra`, `gpt-6.1-sol`,
+  `gpt-6.1-terra`, `gpt-6-luna`, ...): reasoning effort and image/document input are
+  `supported` instead of `unknown`.
+* Anthropic batch items are built like normal requests: thinking, cache TTL, server
+  tools, native `tool_choice`, `request_options` (with `extra_body` merged into the
+  item) and betas (through the beta batch API) are no longer dropped. Local tools and
+  `extra_headers`/`extra_query`/`timeout` are rejected before submission.
+* CI also runs the test suite with the lowest supported dependency versions.

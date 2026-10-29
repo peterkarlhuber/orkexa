@@ -30,6 +30,20 @@ jobs:
       # Offline only: no API keys are configured, live tests skip themselves.
       - run: pytest --cov=orkexa --cov-report=term-missing
 
+  lowest-versions:
+    name: test (lowest supported dependency versions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install -e ".[dev]"
+      - run: pip install --no-deps -e compat/orkexa-claude-compat
+      # The lower bounds of pyproject.toml (pydantic 2.9 is the minimum of google-genai 2.0).
+      - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "pydantic==2.9.0" "typing-extensions==4.14.0"
+      - run: pytest
+
   packaging:
     name: build and install (fresh virtual environments)
     runs-on: ubuntu-latest
