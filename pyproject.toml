@@ -42,7 +42,7 @@ docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.27",
     # 11.0.1 fixes PYSEC-2026-3609/3654; 12 needs mkdocstrings 1.0.7+, which needs Python 3.11+.
-    "pymdown-extensions>=11.0.1,<12",
+    "pymdown-extensions>=11.0.1,<13",
 ]
 dev = [
     "anthropic>=2.0,<3",
