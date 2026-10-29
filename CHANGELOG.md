@@ -71,3 +71,15 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
 * `revoke()` of both registries documents and tests its behavior on a failed write: the
   active version is revoked last, so it stays active until a retry completes.
 * Dropping `effort` for models without reasoning in the dynamic package is logged.
+* OpenAI Responses: only `completed` responses are answers; `queued`, `in_progress`
+  and `cancelled` raise `UnexpectedResponseError` without changing the history
+  (previously an empty answer was committed), and `request_options={"background":
+  True}` is rejected. A stream that ends with `response.incomplete` or
+  `response.failed` raises `IncompleteResponseError` or `ProviderServerError` and
+  records its usage, instead of the SDK's bare `RuntimeError`.
+* Anthropic: `temperature`, `top_p` and `top_k` in `request_options` raise
+  `ConfigurationError` (API version 2026-10-21 of `anthropic>=2.0` removed them).
+  `count_tokens()` with `output_format` and a beta (e.g. `thinking_display="updates"`)
+  sends the schema as `output_config.format`; the beta method has no `output_format`.
+* Text of a Responses message item is replayed even when an unknown content type
+  precedes it.

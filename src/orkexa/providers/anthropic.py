@@ -351,7 +351,12 @@ class AnthropicProvider(Provider):
         if "betas" in args:
             allowed |= {"betas", "context_management", "mcp_servers"}
         counted = {key: value for key, value in args.items() if key in allowed}
-        if request.output_format is not None:
+        if request.output_format is not None and "betas" in counted:
+            # The beta count_tokens() has no output_format helper; send the API field.
+            sdk = require_module("anthropic", "anthropic")
+            schema = {"type": "json_schema", "schema": sdk.transform_schema(request.output_format)}
+            counted["output_config"] = {**counted.get("output_config", {}), "format": schema}
+        elif request.output_format is not None:
             counted["output_format"] = request.output_format
         return counted
 

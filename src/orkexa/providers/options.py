@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from ..errors import ConfigurationError
+
 _ANTHROPIC_TOOL_CHOICES = ("auto", "none", "any", "tool")
 _THINKING_DISPLAYS = ("summarized", "omitted", "updates")
 #: Request fields the agent manages itself; they cannot be set via request_options.
@@ -29,6 +31,9 @@ _ANTHROPIC_RESERVED = frozenset(
         "fallbacks",
     }
 )
+#: Sampling fields that Anthropic API version 2026-10-21 (sent by anthropic>=2.0) rejects with
+#: HTTP 400 and that the SDK no longer accepts as arguments.
+_ANTHROPIC_REMOVED = ("temperature", "top_p", "top_k")
 _OPENAI_RESERVED = frozenset(
     {
         "model",
@@ -95,6 +100,14 @@ class AnthropicOptions:
         reserved = _ANTHROPIC_RESERVED & set(self.request_options or {})
         if reserved:
             raise ValueError(f"Set these via constructor arguments, not request_options: {sorted(reserved)}")
+        removed = [key for key in _ANTHROPIC_REMOVED if key in (self.request_options or {})]
+        if removed:
+            raise ConfigurationError(
+                f"request_options {removed}: Anthropic API version 2026-10-21 (anthropic>=2.0) "
+                "removed temperature, top_p and top_k and rejects requests that send them. "
+                "Remove them; a client pinned to anthropic-version 2023-06-01 can send them "
+                "via request_options={'extra_body': {...}}"
+            )
 
 
 @dataclass

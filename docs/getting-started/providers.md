@@ -49,7 +49,10 @@ effective values for encoding decisions (e.g. strict schemas on a compatible end
 **Anthropic** encodes requests exactly like `claude-agent` 0.8.0 (prompt caching,
 thinking modes, betas through `client.beta.messages`, fallbacks, eager input streaming,
 `request_options`). History parts keep every native field, including thinking
-signatures; unknown block types are preserved as native parts.
+signatures; unknown block types are preserved as native parts. `anthropic>=2.0` uses
+API version 2026-10-21, which removed `temperature`, `top_p` and `top_k`; Orkexa
+rejects them in `request_options` before anything is sent (a client pinned to
+`anthropic-version: 2023-06-01` can still send them via `extra_body`).
 
 **OpenAI** uses the Responses API statelessly: `store=False` by default, full input on
 every request, and for reasoning models `include=["reasoning.encrypted_content"]` so
@@ -57,7 +60,12 @@ reasoning items are replayed unchanged in later requests. Tools are strict funct
 optional parameters become nullable and the `null` values are removed again before
 local validation, so the Python defaults apply. Structured output uses the same strict
 schema transformation in `text.format` and is validated locally. Refusals map to
-`RefusalError`; `max_output_tokens` truncation to `IncompleteResponseError`.
+`RefusalError`; `max_output_tokens` truncation to `IncompleteResponseError` (also when a
+stream ends with `response.incomplete`); `failed` responses to `ProviderServerError`.
+Only `completed` responses are answers: `queued`/`in_progress` and `cancelled` raise
+`UnexpectedResponseError` and leave the history unchanged. Background mode
+(`request_options={"background": True}`) is rejected, because an agent needs each
+response to continue its turn and does not poll.
 
 **Gemini** builds `google-genai` `Content`/`Part` objects, always disables the SDK's
 automatic function calling (Orkexa executes tools after `before_tool`), keeps

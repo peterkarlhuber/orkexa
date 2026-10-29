@@ -122,11 +122,14 @@ def test_refusal_raises_and_return_mode(harness: Harness) -> None:
     assert isinstance(agent.ask("bad"), str)
 
 
-def test_truncation_raises_and_records_usage(harness: Harness) -> None:
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_truncation_raises_and_records_usage(harness: Harness, stream: bool, asynchronous: bool) -> None:
     tracker = UsageTracker()
-    agent = harness.agent([harness.truncated("partial")], usage_tracker=tracker)
+    build = harness.async_agent if asynchronous else harness.agent
+    agent = build([harness.truncated("partial")], usage_tracker=tracker, stream=stream)
     with pytest.raises(IncompleteResponseError):
-        agent.ask("long")
+        asyncio.run(agent.ask("long")) if asynchronous else agent.ask("long")
     assert len(tracker.records) == 1
     assert agent.messages == []
 
