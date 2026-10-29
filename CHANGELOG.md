@@ -94,3 +94,7 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
   item) and betas (through the beta batch API) are no longer dropped. Local tools and
   `extra_headers`/`extra_query`/`timeout` are rejected before submission.
 * CI also runs the test suite with the lowest supported dependency versions.
+* `SQLiteMemory`, `SQLiteFileStore` and `SQLiteIndex` open their connections with
+  `PRAGMA secure_delete=ON`: deleted content no longer stays readable in free pages of
+  the database file. New `SQLiteIndex.optimize()` also erases the terms of deleted
+  chunks from the FTS5 index segments.

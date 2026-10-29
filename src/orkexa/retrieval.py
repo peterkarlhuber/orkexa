@@ -420,6 +420,8 @@ class SQLiteIndex(Index):
         self._connection = sqlite3.connect(
             database, isolation_level=None, check_same_thread=False, timeout=30
         )
+        # Deleted rows are overwritten instead of left in free pages of the file.
+        self._connection.execute("PRAGMA secure_delete=ON")
         if str(database) != ":memory:":
             self._connection.execute("PRAGMA journal_mode=WAL")
         try:
@@ -460,6 +462,17 @@ class SQLiteIndex(Index):
         """Close the database connection."""
         with self._lock:
             self._connection.close()
+
+    def optimize(self) -> None:
+        """Merge the full-text index, erasing the terms of deleted chunks from the file.
+
+        :meth:`delete` removes chunks from search results at once, but FTS5 keeps the
+        terms of deleted rows in its index segments until they are merged. Call this
+        after deleting data that must be erased. It rewrites the full-text index of
+        every namespace in the database, so it takes time proportional to its size.
+        """
+        with self._lock:
+            self._connection.execute("INSERT INTO index_fts (index_fts) VALUES ('optimize')")
 
     def __enter__(self) -> SQLiteIndex:
         return self
