@@ -1,10 +1,19 @@
+<div class="orkexa-hero" markdown>
+![Orkexa](assets/branding/orkexa-logo.png)
+</div>
+
 # Orkexa
 
-Orkexa is a Python framework for AI agents and multi-agent systems with **one**
-agent runtime for Anthropic Claude, OpenAI (Responses API), Google Gemini and
+Orkexa is a Python library for tool-using AI agents and multi-agent systems with
+**one** runtime for Anthropic Claude, OpenAI (Responses API), Google Gemini and
 OpenAI-compatible endpoints (Ollama, vLLM, gateways). Providers are adapters; tools,
 history, structured output, streaming, memory, RAG, evaluation, dynamic agents and
-cost tracking are shared.
+cost tracking are shared. Where a provider cannot do what you asked for, Orkexa raises
+an error instead of silently doing something else.
+
+!!! note "Status"
+    Alpha (0.1.0, unreleased). The API may still change, and the package is not yet
+    published on PyPI; see [Installation](getting-started/installation.md).
 
 ```python
 from orkexa import Agent, Tool
@@ -28,12 +37,21 @@ for model in ("anthropic:claude-sonnet-5-5", "openai:gpt-6.1-sol", "gemini:gemin
     print(Agent(model=model, tools=[add]).ask("What is 17 + 25?"))
 ```
 
+## Where to go next
+
+| If you want to | Read |
+| --- | --- |
+| Install Orkexa and set up API keys | [Installation](getting-started/installation.md) |
+| Build your first agent | [Quickstart](getting-started/quickstart.md) |
+| Know what works on which provider | [Providers and capabilities](getting-started/providers.md) |
+| Add tools, structured output, streaming, memory or RAG | [Guides](guides/tools-and-structured-output.md) |
+| Run agents in production | [Security](guides/security.md) · [Data protection and AI regulation](compliance/index.md) · [Troubleshooting](troubleshooting.md) |
+| Move from `claude-agent` 0.8.0 | [Migrating from claude-agent](guides/migration.md) · [Feature matrix](feature-matrix.md) |
+| Understand the design | [Architecture and ADRs](architecture/target-architecture.md) |
+| Contribute or release | [Development](development/index.md) |
+
 Orkexa grew out of [`claude-agent`](https://github.com/peterkarlhuber/claude-agent)
 0.8.0. Its API lives on unchanged as `ClaudeAgent`/`AsyncClaudeAgent`, and unchanged
 `import claude_agent` code runs through the separate distribution
-`orkexa-claude-compat` (see [Migrating from claude-agent](guides/migration.md)).
-
-* [Installation](getting-started/installation.md) and [Quickstart](getting-started/quickstart.md)
-* [Providers and capabilities](getting-started/providers.md): what works where
-* [Feature matrix](feature-matrix.md): every claude-agent feature and its status
-* [Security](guides/security.md): defaults and remaining risks
+`orkexa-claude-compat`. Orkexa is an independent project, not affiliated with
+Anthropic, OpenAI or Google.
