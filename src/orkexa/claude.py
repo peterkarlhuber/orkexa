@@ -206,14 +206,16 @@ class _ClaudeFacade(AgentCore[OutputT]):
             data = json.load(handle)
         if isinstance(data, dict) and data.get("format") == HISTORY_FORMAT:
             neutral = parse_history(data, codec.decode_messages, str(path))
-            self.messages = codec.encode_messages(prepare_history(neutral, "anthropic", "strict"))
+            messages = codec.encode_messages(prepare_history(neutral, "anthropic", "strict"))
         else:
             if not isinstance(data, list) or not all(
                 isinstance(m, dict) and m.get("role") in ("user", "assistant", "system") for m in data
             ):
                 raise ValueError(f"{path}: not a conversation history")
-            self.messages = data
-        self.last_response = None
+            messages = data
+        with self._history_change("load_history()"):
+            self.messages = messages
+            self.last_response = None
 
 
 class ClaudeAgent(_ClaudeFacade[OutputT], Agent[OutputT]):

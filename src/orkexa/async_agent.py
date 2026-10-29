@@ -120,7 +120,11 @@ class AsyncAgent(AgentCore[OutputT]):
                     raise
                 raise failure from exc
         if self.on_response is not None:
-            await _resolve(self.on_response(self._response_hook_arg(response)))
+            try:
+                await _resolve(self.on_response(self._response_hook_arg(response)))
+            except BaseException:  # also cancellation: the answered request is billed
+                self._record_before_failure(response)
+                raise
         return response
 
     async def _stream(self, native: dict[str, Any], request: ModelRequest) -> ModelResponse:
@@ -139,7 +143,12 @@ class AsyncAgent(AgentCore[OutputT]):
                     raise failure from exc
                 if isinstance(event, ResponseCompleted):
                     final = event
-                await self._dispatch(event)
+                try:
+                    await self._dispatch(event)
+                except BaseException:
+                    if isinstance(final, ResponseCompleted):
+                        self._record_before_failure(final.response)
+                    raise
         finally:
             close = getattr(events, "aclose", None)
             if close is not None:

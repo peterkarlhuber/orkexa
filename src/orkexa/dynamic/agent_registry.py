@@ -116,6 +116,13 @@ class AgentRegistry:
         return record
 
     def revoke(self, name: str) -> None:
+        """Revoke every approved version of ``name``.
+
+        Versions are revoked oldest first, so the version :meth:`get` returns is
+        revoked last: if a write fails, ``get`` still returns the version it
+        returned before (in memory and after a restart), the error is raised, and
+        calling ``revoke`` again completes the revocation.
+        """
         versions = self._records.get(name, [])
         if not any(r.status == "approved" for r in versions):
             raise RegistryError(f"No approved agent named {name!r}")
