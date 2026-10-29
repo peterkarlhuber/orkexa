@@ -8,7 +8,7 @@ Agents of different providers share tools, trackers, judges and orchestration:
 from orkexa import Agent, ClaudeAgent, Criterion, Evaluator, Tool, UsageTracker, refine
 
 usage = UsageTracker()
-researcher = Agent(model="openai:gpt-5", usage_tracker=usage)
+researcher = Agent(model="openai:gpt-6.1-sol", usage_tracker=usage)
 
 
 @Tool
@@ -27,7 +27,7 @@ def research(question: str) -> str:
 lead = ClaudeAgent(model="claude-sonnet-5-5", tools=[research], usage_tracker=usage)
 judge = Evaluator(
     criteria=[Criterion(name="sourced", description="Every claim names its source.")],
-    model="gemini:gemini-2.5-flash",
+    model="gemini:gemini-3.8-flash",
     usage_tracker=usage,
 )
 result = refine(lead, "Write a sourced brief on the Danube.", judge)
@@ -57,8 +57,8 @@ orchestrator = Orchestrator(
     architect=AgentArchitect(model="anthropic:claude-sonnet-5-5", credentials=credentials),
     approver=CallbackApprover(my_review),
     tools=ToolRegistry(),
-    policy=DynamicPolicy(allowed_models=["openai:gpt-5", "gemini:gemini-2.5-flash"], budget_usd=5),
-    model="openai:gpt-5",
+    policy=DynamicPolicy(allowed_models=["openai:gpt-6.1-sol", "gemini:gemini-3.8-flash"], budget_usd=5),
+    model="openai:gpt-6.1-sol",
     credentials=credentials,
 )
 ```

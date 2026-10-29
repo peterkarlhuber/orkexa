@@ -45,7 +45,7 @@ def main() -> None:
     print("ClaudeAgent messages:", len(claude.messages))
 
     # 2. A neutral agent reads it too; the assistant turns are marked as Anthropic output.
-    agent = Agent(model="openai:gpt-5", api_key="not-needed-offline", history_policy="convert")
+    agent = Agent(model="openai:gpt-6.1-sol", api_key="not-needed-offline", history_policy="convert")
     agent.load_history(legacy)
     for message in agent.conversation():
         print(f"  {message.role:<9} provider={message.provider} parts={[p.type for p in message.parts()]}")

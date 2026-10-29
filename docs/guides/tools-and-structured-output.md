@@ -25,7 +25,7 @@ SDKs (Gemini) is disabled; tool calls are never executed by an SDK.
 
 ```python
 agent = Agent(
-    model="gemini:gemini-2.5-flash",
+    model="gemini:gemini-3.8-flash",
     tools=[price, multiply],
     max_tool_rounds=8,  # MaxToolRoundsError after that
     max_parallel_tools=4,  # tool calls of one response run concurrently
@@ -48,7 +48,7 @@ class Invoice(BaseModel):
     currency: str = "EUR"
 
 
-invoice = Agent(model="openai:gpt-5", output_format=Invoice).ask("Extract: Invoice 17, 120.50 EUR")
+invoice = Agent(model="openai:gpt-6.1-sol", output_format=Invoice).ask("Extract: Invoice 17, 120.50 EUR")
 ```
 
 `ask()` returns an `Invoice` instance; the agent is typed `Agent[Invoice]`. The JSON is

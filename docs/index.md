@@ -24,7 +24,7 @@ def add(a: int, b: int) -> int:
     return a + b
 
 
-for model in ("anthropic:claude-sonnet-5-5", "openai:gpt-5", "gemini:gemini-2.5-flash"):
+for model in ("anthropic:claude-sonnet-5-5", "openai:gpt-6.1-sol", "gemini:gemini-3.8-flash"):
     print(Agent(model=model, tools=[add]).ask("What is 17 + 25?"))
 ```
 

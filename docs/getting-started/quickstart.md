@@ -5,7 +5,7 @@
 ```python
 from orkexa import Agent
 
-agent = Agent(model="openai:gpt-5", system_prompt="Answer briefly.")
+agent = Agent(model="openai:gpt-6.1-sol", system_prompt="Answer briefly.")
 print(agent.ask("What is the capital of Austria?"))
 print(agent.ask("And its population?"))  # the agent keeps the conversation
 print(agent.usage.total_tokens)
@@ -30,7 +30,7 @@ class City(BaseModel):
     population: int
 
 
-for model in ("anthropic:claude-sonnet-5-5", "openai:gpt-5", "gemini:gemini-2.5-flash"):
+for model in ("anthropic:claude-sonnet-5-5", "openai:gpt-6.1-sol", "gemini:gemini-3.8-flash"):
     city = Agent(model=model, output_format=City).ask("Largest city in Austria?")
     print(model, city.population)
 ```
@@ -63,7 +63,7 @@ from orkexa import AsyncAgent
 
 
 async def main() -> None:
-    agent = AsyncAgent(model="gemini:gemini-2.5-flash", max_parallel_tools=4)
+    agent = AsyncAgent(model="gemini:gemini-3.8-flash", max_parallel_tools=4)
     print(await agent.ask("Hello!"))
 
 

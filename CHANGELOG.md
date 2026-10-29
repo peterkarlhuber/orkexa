@@ -86,6 +86,9 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
 * OpenAI capabilities cover the GPT-6 family (`gpt-6-astra`, `gpt-6.1-sol`,
   `gpt-6.1-terra`, `gpt-6-luna`, ...): reasoning effort and image/document input are
   `supported` instead of `unknown`.
+* Gemini 4 models (`gemini-4-argon`) map `effort` to `thinking_level` like Gemini 3
+  instead of raising `UnknownCapabilityError`. Docs and examples use current model ids
+  (`gpt-6.1-sol`, `gemini-3.8-flash`).
 * Anthropic batch items are built like normal requests: thinking, cache TTL, server
   tools, native `tool_choice`, `request_options` (with `extra_body` merged into the
   item) and betas (through the beta batch API) are no longer dropped. Local tools and

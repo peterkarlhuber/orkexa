@@ -22,10 +22,10 @@ Every example is a standalone script: `python examples/01_text_agents.py`.
 * `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`): the
   provider keys. Examples skip providers whose key is missing.
 * `ORKEXA_ANTHROPIC_MODEL` (default `claude-sonnet-5-5`), `ORKEXA_OPENAI_MODEL`
-  (default `gpt-5`), `ORKEXA_GEMINI_MODEL` (default `gemini-2.5-flash`): model ids;
+  (default `gpt-6.1-sol`), `ORKEXA_GEMINI_MODEL` (default `gemini-3.8-flash`): model ids;
   the defaults are examples, use any model your account can access.
 * `ORKEXA_MODEL`: the model of the single-provider examples (4, 5, 6, 8, 11), e.g.
-  `openai:gpt-5` (default: the first provider with a key).
+  `openai:gpt-6.1-sol` (default: the first provider with a key).
 * `ORKEXA_BASE_URL`, `ORKEXA_COMPATIBLE_MODEL`, `ORKEXA_COMPATIBLE_API`: example 3.
 
 ## How the examples are tested
