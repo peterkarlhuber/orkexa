@@ -1,0 +1,97 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "orkexa"
+version = "0.1.0"
+description = "Provider-independent Python agents and multi-agent systems: one runtime for Anthropic Claude, OpenAI, Google Gemini and OpenAI-compatible endpoints, with strict tools, memory, RAG, evaluation, dynamic agents and cost tracking."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Peter Karlhuber" }]
+keywords = ["llm", "agent", "multi-agent", "tool-use", "anthropic", "claude", "openai", "gemini", "ollama", "vllm", "pydantic", "rag", "evaluation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.6,<3",
+    "typing-extensions>=4.14",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=2.0,<3"]
+openai = ["openai>=3.0,<4"]
+gemini = ["google-genai>=2.0,<3"]
+all = ["anthropic>=2.0,<3", "openai>=3.0,<4", "google-genai>=2.0,<3"]
+pdf = ["pypdf>=4"]
+vector = ["sqlite-vec>=0.1.6"]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+]
+dev = [
+    "anthropic>=2.0,<3",
+    "openai>=3.0,<4",
+    "google-genai>=2.0,<3",
+    "build>=1.2",
+    "mypy>=1.13",
+    "pypdf>=4",
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.8",
+    "sqlite-vec>=0.1.6",
+]
+
+[project.urls]
+Repository = "https://github.com/peterkarlhuber/orkexa"
+Issues = "https://github.com/peterkarlhuber/orkexa/issues"
+Changelog = "https://github.com/peterkarlhuber/orkexa/blob/master/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orkexa"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["compat/", ".github/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "live: calls a real provider API (needs API keys, costs money); run with -m live",
+    "packaging: builds wheels and creates fresh virtual environments (slow)",
+]
+
+[tool.coverage.run]
+source = ["orkexa"]
+omit = ["*/dynamic/_sandbox_runner.py"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["docs/examples.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/legacy/*" = ["RUF", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+packages = ["orkexa"]
+mypy_path = "src"
