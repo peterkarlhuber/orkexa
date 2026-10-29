@@ -163,3 +163,22 @@ def test_merging_after_dropped_parts_keeps_models_apart() -> None:
         ("fake", "model-one", "B"),
         ("fake", "model-two", "C"),
     ]
+
+
+def test_dropping_a_foreign_message_keeps_neighbouring_boundaries() -> None:
+    history = [
+        Message(role="user", content="go"),
+        Message(
+            role="assistant",
+            content=[ToolCallPart(id="t1", name="add", arguments={"a": 1, "b": 2})],
+            provider="fake",
+            model="m",
+        ),
+        Message(role="user", content=[ToolResultPart(call_id="t1", content="3")]),
+        Message(role="assistant", content=[TextPart(text="three")], provider="fake", model="m"),
+        Message(role="assistant", content=[ReasoningPart(text="foreign")], provider="other", model="x"),
+        Message(role="assistant", content=[TextPart(text="later")], provider="fake", model="m"),
+    ]
+    with pytest.warns(HistoryConversionWarning, match="empty message"):
+        prepared = prepare_history(history, "fake", "convert", "m")
+    assert prepared == history[:4] + history[5:]

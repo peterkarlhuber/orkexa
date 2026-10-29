@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Literal
+import uuid
 
 from ..tools import _TOOL_NAME, Tool
 from ._search import keyword_search
@@ -35,6 +37,17 @@ def _valid_name(name: object) -> bool:
 def _check_name(name: object) -> None:
     if not _valid_name(name):
         raise RegistryError(f"Invalid tool name {name!r}: use 1-128 characters of A-Z, a-z, 0-9, '_', '-'")
+
+
+def _write_json_atomic(file: Path, data: Any) -> None:
+    """Write ``data`` as JSON to ``file`` so readers see the old or the new file, never a torn one."""
+    file.parent.mkdir(parents=True, exist_ok=True)
+    temporary = file.with_name(f".{file.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporary, file)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _now() -> str:
@@ -97,9 +110,7 @@ class ToolRegistry:
     def _save(self, record: ToolRecord) -> None:
         if self.path is None or record.kind != "generated":
             return
-        file = self._file(record)
-        file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_text(json.dumps(asdict(record), indent=2, ensure_ascii=False), encoding="utf-8")
+        _write_json_atomic(self._file(record), asdict(record))
 
     def _load(self) -> None:
         assert self.path is not None
@@ -178,8 +189,8 @@ class ToolRegistry:
             output_schema=output_schema,
             requirement=requirement,
         )
+        self._save(record)  # persist first: a failed write leaves the registry unchanged
         self._records.setdefault(name, []).append(record)
-        self._save(record)
         return record
 
     def set_status(self, name: str, version: int, status: ToolStatus) -> ToolRecord:
@@ -189,8 +200,8 @@ class ToolRegistry:
                 if record.kind == "trusted":
                     raise RegistryError(f"Status of trusted tool {name!r} cannot be changed")
                 updated = replace(record, status=status)
-                versions[index] = updated
                 self._save(updated)
+                versions[index] = updated
                 return updated
         raise RegistryError(f"Unknown tool version: {name} v{version}")
 

@@ -123,7 +123,8 @@ class BudgetTracker(UsageTracker):
 
     The limit is a *soft* limit: the cost of a request is only known after it
     ran, so the last admitted request can overshoot it, and agents that share a
-    tracker and run concurrently can each overshoot it by one request.
+    tracker and run concurrently can each overshoot it by one request. A native
+    batch is admitted as one request, so it can overshoot by all of its items.
 
     Requests of a model without a known price (no built-in price, no
     ``pricing=``/:func:`~orkexa.register_pricing`) have an *unknown* cost, which

@@ -51,8 +51,9 @@
 
 ## Remaining risks
 
-* Budgets are soft limits: the last admitted request, and one request per concurrently
-  running agent, can exceed the limit (see [Usage and budgets](usage-and-budgets.md)).
+* Budgets are soft limits: the last admitted request, one request per concurrently
+  running agent, and every item of an admitted native batch can exceed the limit (see
+  [Usage and budgets](usage-and-budgets.md)).
 * `DockerSandbox` isolation has not been audited; container escapes are out of scope
   of Orkexa.
 * Models from unknown endpoints may ignore schemas; Orkexa validates locally but cannot

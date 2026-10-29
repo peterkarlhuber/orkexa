@@ -196,3 +196,74 @@ def test_agent_registry_skips_records_whose_name_does_not_match_the_directory(tm
         json.loads((tmp_path / "agents" / "Analyst" / "v1.json").read_text(encoding="utf-8"))["status"]
         == "revoked"
     )
+
+
+# ---- registries stay consistent when a write fails ---------------------------------------
+
+
+def _fail_writes(monkeypatch: pytest.MonkeyPatch) -> None:
+    import orkexa.dynamic.agent_registry as agent_module
+    import orkexa.dynamic.tool_registry as tool_module
+
+    def fail(file: Path, data: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(tool_module, "_write_json_atomic", fail)
+    monkeypatch.setattr(agent_module, "_write_json_atomic", fail)
+
+
+def test_agent_registry_changes_nothing_when_persisting_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = AgentRegistry(tmp_path)
+    registry.register(_spec("Analyst"))
+    _fail_writes(monkeypatch)
+    with pytest.raises(OSError):
+        registry.register(_spec("Writer"))
+    assert "Writer" not in registry and registry.versions("Writer") == ()
+    with pytest.raises(OSError):
+        registry.register(_spec("Analyst"))
+    assert [r.version for r in registry.versions("Analyst")] == [1]
+    with pytest.raises(OSError):
+        registry.revoke("Analyst")
+    assert registry.get("Analyst").status == "approved"
+    monkeypatch.undo()
+    assert AgentRegistry(tmp_path).names() == registry.names() == ["Analyst"]
+
+
+def test_tool_registry_changes_nothing_when_persisting_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = ToolRegistry(tmp_path)
+    _add(registry, "kept")
+    _fail_writes(monkeypatch)
+    with pytest.raises(OSError):
+        _add(registry, "lost")
+    assert registry.versions("lost") == ()
+    with pytest.raises(OSError):
+        registry.approve("kept", 1)
+    assert registry.versions("kept")[0].status == "pending" and "kept" not in registry
+    monkeypatch.undo()
+    assert ToolRegistry(tmp_path).versions("kept")[0].status == "pending"
+
+
+def test_registry_rejects_a_symlinked_directory_without_registering(tmp_path: Path) -> None:
+    (tmp_path / "agents").mkdir()
+    (tmp_path / "agents" / "safe").symlink_to(tmp_path, target_is_directory=True)
+    registry = AgentRegistry(tmp_path / "agents")
+    with pytest.raises(RegistryError, match="escapes"):
+        registry.register(_spec("safe"))
+    assert "safe" not in registry and registry.versions("safe") == ()
+    (tmp_path / "tools").mkdir()
+    tools = ToolRegistry(tmp_path / "tools")
+    (tmp_path / "tools" / "safe").symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(RegistryError, match="escapes"):
+        _add(tools, "safe")
+    assert tools.versions("safe") == ()
+
+
+def test_registry_writes_leave_no_temporary_files(tmp_path: Path) -> None:
+    registry = ToolRegistry(tmp_path)
+    _add(registry, "tool")
+    registry.approve("tool", 1)
+    assert sorted(p.name for p in (tmp_path / "tool").iterdir()) == ["v1.json"]

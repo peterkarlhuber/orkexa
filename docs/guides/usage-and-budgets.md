@@ -48,8 +48,14 @@ budget = BudgetTracker("5.00", on_unpriced="reject")
   budget-critical agents sequentially.
 * A native batch (`Evaluator.evaluate_many(batch=True)`) is admitted as a whole like
   one request: it is not submitted when the budget is used up or, with
-  `on_unpriced="reject"`, when the model has no price. All of its results are recorded
-  before `BudgetExceededError` is raised, so the ledger stays complete.
+  `on_unpriced="reject"`, when the model has no price. Its cost is only known when it
+  has ended, so a batch with *n* items can overshoot the limit by up to *n* requests
+  (at batch prices). All of its results are recorded before `BudgetExceededError` is
+  raised, so the ledger stays complete. To keep a tight limit, evaluate with
+  `batch=False` (every request is admitted separately) or split the cases into smaller
+  batches.
+* Batch usage counts in `agent.usage` and the tracker, not in `agent.last_turn_usage`,
+  which covers the most recent `ask()` only.
 * `on_unpriced` decides what happens to models without a price: `"ignore"` (count as
   0; the 0.8.0 behavior and the default without a limit), `"warn"` (default with a
   limit; one `UnpricedUsageWarning` per model), `"reject"` (`UnpricedModelError`

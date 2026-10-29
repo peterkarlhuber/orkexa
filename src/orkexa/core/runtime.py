@@ -339,12 +339,13 @@ class AgentCore(Generic[OutputT]):
         self._usage_records.clear()
         self._last_turn_records.clear()
 
-    def _add_usage_record(self, record: UsageRecord) -> None:
+    def _add_usage_record(self, record: UsageRecord, *, turn: bool = True) -> None:
         label = current_workflow()
         if record.workflow is None and label is not None:
             record = replace(record, workflow=label)
         self._usage_records.append(record)
-        self._last_turn_records.append(record)
+        if turn:  # batch requests are not part of an ask() turn
+            self._last_turn_records.append(record)
         self.usage_tracker.add(record)
 
     # ---- tools -----------------------------------------------------------------------
@@ -581,7 +582,7 @@ class AgentCore(Generic[OutputT]):
                 )
                 if record is not None:
                     try:
-                        self._add_usage_record(record)
+                        self._add_usage_record(record, turn=False)
                     except Exception as exc:  # the tracker keeps the record; raise after all are in
                         failure = failure or exc
         if failure is not None:

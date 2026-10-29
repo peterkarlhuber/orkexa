@@ -262,3 +262,16 @@ def test_evaluator_batch_respects_the_budget() -> None:
     with pytest.raises(BudgetExceededError):
         evaluator.evaluate_many([EvaluationCase(task="Task", output="Result")], batch=True)
     assert calls == []
+
+
+def test_batch_usage_is_not_part_of_the_last_turn() -> None:
+    calls: list[int] = []
+    tracker = UsageTracker()
+    agent = _batch_agent(tracker, calls)
+    agent._run_batch({"a": "x"}, poll_interval=1, timeout=None)
+    assert agent.last_turn_usage.requests == 0  # no ask() yet
+    agent.client.script.append(text("answer"))
+    agent.ask("hi")
+    agent._run_batch({"a": "x", "b": "y"}, poll_interval=1, timeout=None)
+    assert agent.last_turn_usage.requests == 1
+    assert agent.usage.requests == tracker.usage.requests == 4

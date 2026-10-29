@@ -329,7 +329,9 @@ class Evaluator:
         polls every ``poll_interval`` seconds until the batch has ended. Other
         providers raise :class:`~orkexa.UnsupportedCapabilityError`; use
         ``batch=False``, which evaluates one case after the other at normal prices
-        (``timeout`` is then checked before every case).
+        (``timeout`` is then checked before every case). A budget admits a batch as
+        one request and can be overshot by all of its items; with ``batch=False``
+        every request is admitted separately.
 
         Raises:
             TimeoutError: ``timeout`` seconds passed; a batch keeps running.
