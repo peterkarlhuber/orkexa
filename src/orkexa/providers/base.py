@@ -172,6 +172,10 @@ class Provider(ABC):
     def check(self, request: ModelRequest) -> None:  # noqa: B027 - optional hook
         """Provider- and model-specific validation before anything is sent."""
 
+    def server_tool_name(self, definition: Mapping[str, Any]) -> str:
+        """The name a server tool definition occupies (for duplicate checks and removal)."""
+        return str(definition.get("name") or definition.get("mcp_server_name") or "")
+
     def parse_block(self, block: ContentBlock) -> Part:
         """Parse a prompt block; providers with native block fields override it."""
         return parse_block(block)

@@ -351,9 +351,8 @@ class AgentCore(Generic[OutputT]):
         if tool.is_async and not self._asynchronous:
             raise ToolDefinitionError(f"{tool.name}: async tools require {self._async_name}")
 
-    @staticmethod
-    def _server_tool_name(definition: dict[str, Any]) -> str:
-        return str(definition.get("name") or definition.get("mcp_server_name") or "")
+    def _server_tool_name(self, definition: dict[str, Any]) -> str:
+        return self.adapter.server_tool_name(definition)
 
     def _tool_names(self) -> list[str]:
         names = [*self.tools, *(self._server_tool_name(t) for t in self.server_tools)]
