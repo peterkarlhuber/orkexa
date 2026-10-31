@@ -138,6 +138,16 @@ def test_a_failing_member_is_shown_to_the_model_but_budget_errors_end_it() -> No
     with pytest.raises(BudgetExceededError):
         run_orchestration("t", POOL, decide=decide, delegate=expensive, limits=LIMITS)
 
+    class Cancelled(Exception):
+        pass
+
+    def cancelled(member: Member, task: str) -> str:
+        raise Cancelled
+
+    decide, _ = scripted(Delegate(member="write", task="draft"))
+    with pytest.raises(Cancelled):
+        run_orchestration("t", POOL, decide=decide, delegate=cancelled, limits=LIMITS, stop_on=(Cancelled,))
+
 
 def test_the_record_is_json_and_replays_without_model_calls() -> None:
     decide, _ = scripted(

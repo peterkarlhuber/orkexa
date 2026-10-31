@@ -99,6 +99,7 @@ def run_orchestration(
     limits: OrchestrationLimits | None = None,
     state: OrchestrationState | None = None,
     on_step: Callable[[OrchestrationState], None] | None = None,
+    stop_on: tuple[type[BaseException], ...] = (),
 ) -> OrchestrationState:
     """Run an orchestration to its end.
 
@@ -113,6 +114,8 @@ def run_orchestration(
         limits: Hard limits (default :class:`OrchestrationLimits`).
         state: A recorded state to continue (e.g. after a restart).
         on_step: Called with the new state after every step (to save or show it).
+        stop_on: Further exceptions of ``delegate`` that end the orchestration (e.g. the
+            application's cancellation), in addition to budget errors.
     """
     limits = limits or OrchestrationLimits()
     state = state or OrchestrationState(task=task)
@@ -125,7 +128,7 @@ def run_orchestration(
             assert member is not None
             try:
                 result = delegate(member, decision.task)
-            except FATAL:
+            except (*FATAL, *stop_on):
                 raise
             except Exception as exc:  # the member failed; the orchestrator may react to it
                 error = f"{type(exc).__name__}: {exc}"
@@ -144,6 +147,7 @@ async def arun_orchestration(
     limits: OrchestrationLimits | None = None,
     state: OrchestrationState | None = None,
     on_step: Callable[[OrchestrationState], None] | None = None,
+    stop_on: tuple[type[BaseException], ...] = (),
 ) -> OrchestrationState:
     """The asyncio variant of :func:`run_orchestration` (same arguments, awaitable callables)."""
     limits = limits or OrchestrationLimits()
@@ -157,7 +161,7 @@ async def arun_orchestration(
             assert member is not None
             try:
                 result = await delegate(member, decision.task)
-            except FATAL:
+            except (*FATAL, *stop_on):
                 raise
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"

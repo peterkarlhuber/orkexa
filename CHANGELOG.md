@@ -14,7 +14,8 @@ First release of Orkexa.
   result or error) as JSON; `replay()` re-validates a record without model calls.
 * Reference drivers `run_orchestration()` and `arun_orchestration()` with `decide` and
   `delegate` callables; refused decisions are explained to the model, member failures
-  are recorded, a `BudgetExceededError` ends the orchestration.
+  are recorded, a `BudgetExceededError` (and any exception in `stop_on`) ends the
+  orchestration.
 
 ### Added: budget reservations (Adaptive Orchestration AO-12)
 
