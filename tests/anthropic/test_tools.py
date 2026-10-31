@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 import pytest
 
-from claude_agent import Tool, ToolDefinitionError, ToolExecutionError
+from orkexa import Tool, ToolDefinitionError, ToolExecutionError
 
 
 class Unit(Enum):

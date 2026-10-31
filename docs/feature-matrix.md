@@ -32,8 +32,3 @@ the automated tests.
 
 The test matrix lives in `tests/contract/test_contract.py` (11 scenarios × 5 adapters
 plus cross-provider continuation into every other adapter).
-
-## claude-agent features
-
-See [Feature parity](architecture/feature-parity.md) for every 0.8.0 feature, its
-Orkexa component, compatibility strategy, tests and status.

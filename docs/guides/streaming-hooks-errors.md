@@ -43,6 +43,6 @@ that last event leaves the completed turn in the history.
 is redacted (API keys never appear) and names the SDK exception type. The SDK exception
 itself is not attached: `__cause__` and `__context__` are `None`, so a traceback or
 `logging.exception()` cannot print the request or its headers.
-`ClaudeAgent` keeps raising the Anthropic SDK exceptions, as in 0.8.0. The
+`ClaudeAgent` raises the Anthropic SDK exceptions unchanged. The
 conversation is committed only after a complete turn; a failed turn leaves the
 history unchanged.

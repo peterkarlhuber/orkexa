@@ -46,9 +46,8 @@ effective values for encoding decisions (e.g. strict schemas on a compatible end
 
 ## What each adapter does
 
-**Anthropic** encodes requests exactly like `claude-agent` 0.8.0 (prompt caching,
-thinking modes, betas through `client.beta.messages`, fallbacks, eager input streaming,
-`request_options`). History parts keep every native field, including thinking
+**Anthropic** supports prompt caching, thinking modes, betas through
+`client.beta.messages`, fallbacks, eager input streaming and `request_options`. History parts keep every native field, including thinking
 signatures; unknown block types are preserved as native parts. `anthropic>=2.0` uses
 API version 2026-10-21, which removed `temperature`, `top_p` and `top_k`; Orkexa
 rejects them in `request_options` before anything is sent (a client pinned to

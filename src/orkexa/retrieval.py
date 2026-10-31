@@ -120,7 +120,7 @@ def citations(response: Any) -> list[Citation]:
 
     Accepts a normalized :class:`~orkexa.core.types.ModelResponse` (every provider:
     Anthropic search-result citations, OpenAI URL/file annotations, ...) or a native
-    Anthropic message (only ``search_result_location`` citations, as in ``claude-agent``).
+    Anthropic message (only ``search_result_location`` citations).
     """
     if isinstance(response, ModelResponse):
         return response.citations
@@ -238,9 +238,7 @@ def _pdf_pages(data: bytes) -> list[str]:
     try:
         from pypdf import PdfReader  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
-        raise ImportError(
-            'Indexing PDFs needs pypdf: pip install "orkexa[pdf]" (formerly "claude-agent[pdf]")'
-        ) from None
+        raise ImportError('Indexing PDFs needs pypdf: pip install "orkexa[pdf]"') from None
     return [page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages]
 
 
@@ -447,10 +445,7 @@ class SQLiteIndex(Index):
         try:
             import sqlite_vec  # type: ignore[import-not-found,import-untyped,unused-ignore]
         except ImportError:
-            raise ImportError(
-                "Vector search needs sqlite-vec: "
-                'pip install "orkexa[vector]" (formerly "claude-agent[vector]")'
-            ) from None
+            raise ImportError('Vector search needs sqlite-vec: pip install "orkexa[vector]"') from None
         try:
             self._connection.enable_load_extension(True)
             sqlite_vec.load(self._connection)

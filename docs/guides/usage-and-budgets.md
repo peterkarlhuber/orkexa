@@ -57,7 +57,7 @@ budget = BudgetTracker("5.00", on_unpriced="reject")
 * Batch usage counts in `agent.usage` and the tracker, not in `agent.last_turn_usage`,
   which covers the most recent `ask()` only.
 * `on_unpriced` decides what happens to models without a price: `"ignore"` (count as
-  0; the 0.8.0 behavior and the default without a limit), `"warn"` (default with a
+  0; the default without a limit), `"warn"` (default with a
   limit; one `UnpricedUsageWarning` per model), `"reject"` (`UnpricedModelError`
   before the request is sent).
 

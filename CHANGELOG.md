@@ -2,7 +2,7 @@
 
 ## 0.1.0 – unreleased
 
-First release of Orkexa, the provider-independent successor of `claude-agent` 0.8.0.
+First release of Orkexa.
 
 ### Added
 
@@ -24,27 +24,24 @@ First release of Orkexa, the provider-independent successor of `claude-agent` 0.
   and `DynamicPolicy.allowed_models`; `BudgetTracker(on_unpriced=...)` with a pre-request
   check; `UnpricedModelError`, `UnpricedUsageWarning`, `UnsafeOptInWarning`.
 * `retrieval_sources()`: verified search hits of the last turn, for every provider.
-* `python -m orkexa.compat` diagnostics; distribution `orkexa-claude-compat` providing
-  unchanged `import claude_agent`.
-* Docs (quickstart, provider guide, migration guide, API reference, feature matrix),
-  12 examples, CI for Python 3.10 to 3.13, packaging tests in fresh virtual environments.
+* `ClaudeAgent`/`AsyncClaudeAgent`: Anthropic-native agents with Messages API
+  histories, native SDK objects in hooks and SDK exceptions, on the shared runtime.
+* Docs (quickstart, provider guide, API reference, feature matrix),
+  11 examples, CI for Python 3.10 to 3.13, packaging tests in fresh virtual environments.
 
-### Changed compared to claude-agent 0.8.0
+### Defaults
 
-* Sandbox temp directory prefix, Docker image and mount path use `orkexa`
-  (`orkexa-sandbox-`, `orkexa-sandbox`, `/opt/orkexa/orkexa`).
 * `AutoApprover()` warns (`UnsafeOptInWarning`) unless `acknowledge_unsafe=True`.
-* `ToolRegistry()` uses `DockerSandbox()` instead of `SubprocessSandbox()`;
+* `ToolRegistry()` uses `DockerSandbox()`;
   `SubprocessSandbox()` warns unless `acknowledge_unsafe=True` (see Security below).
 * History and registry files are `0600`, new SQLite databases `0600`.
 * `BudgetTracker` with a limit warns about requests without known price.
-* Install hints name the `orkexa[...]` extras.
 * `BudgetTracker` refuses a request when the budget is exactly used up
   (`spent_usd >= limit_usd`, e.g. a limit of 0); the limit is documented as a soft limit
   for concurrent agents.
 * `ToolRegistry.add_generated()` validates the tool name (`[A-Za-z0-9_-]{1,128}`) and
   never writes outside the registry directory; stored records with a name that does
-  not match their directory are skipped (0.8.0 accepted names such as `../x`).
+  not match their directory are skipped.
 
 ### Security (independent release audit, 2026-10-29)
 
@@ -107,7 +104,7 @@ See "Migrating to the secure defaults" in the security guide.
   record files are replaced atomically.
 * Batch usage no longer counts in `last_turn_usage` (it covers the most recent `ask()`).
 * A request that was answered is recorded even when `on_response` (or a hook of the
-  final stream event) raises; 0.8.0 lost its usage.
+  final stream event) raises.
 * `reset()` and `load_history()` raise `ConcurrentTurnError` while a turn runs instead
   of being undone when the turn commits.
 * `revoke()` of both registries documents and tests its behavior on a failed write: the

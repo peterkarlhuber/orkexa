@@ -1,4 +1,4 @@
-"""Shared fixtures for the claude_agent.dynamic tests."""
+"""Shared fixtures for the orkexa.dynamic tests."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from claude_agent.dynamic import ToolProposal
+from orkexa.dynamic import ToolProposal
 
 from .conftest import ParsedResponse, make_message
 

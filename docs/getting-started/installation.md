@@ -47,15 +47,3 @@ export GEMINI_API_KEY=...
 A custom `base_url` for `anthropic`, `openai` or `gemini` requires an explicit
 `api_key=`: Orkexa never sends a provider's environment key to another host.
 OpenAI's `OPENAI_BASE_URL` variable is ignored for the same reason.
-
-## Existing claude-agent code
-
-```bash
-pip uninstall claude-agent
-pip install orkexa-claude-compat     # provides `import claude_agent`, depends on orkexa[anthropic]
-python -m orkexa.compat              # shows which distribution serves claude_agent
-```
-
-Both distributions contain the package `claude_agent`, so they must not be
-installed together; the shim refuses to import if the original is present and
-`python -m orkexa.compat` exits with status 1. Details: [Migration](../guides/migration.md).

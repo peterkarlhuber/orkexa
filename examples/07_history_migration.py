@@ -1,7 +1,7 @@
-"""7. Conversation save/load and migration of ``claude-agent`` 0.8.0 histories.
+"""7. Conversation save/load and migration of Messages API histories between providers.
 
-Runs offline: it writes a 0.8.0 history file (a plain Messages API list, as
-``ClaudeAgent.save_history`` wrote it), loads it into a provider-neutral agent,
+Runs offline: it writes a plain Messages API history file (the format
+``ClaudeAgent.save_history`` writes), loads it into a provider-neutral agent,
 shows what the history-conversion policy does and writes the versioned Orkexa
 history format. If ``ORKEXA_MODEL`` (or a provider key) is set, it continues the
 conversation with that provider.
@@ -20,7 +20,7 @@ from _setup import available_models
 from orkexa import Agent, ClaudeAgent, HistoryConversionError, HistoryConversionWarning
 from orkexa.core.conversion import prepare_history
 
-LEGACY_HISTORY = [
+MESSAGES_API_HISTORY = [
     {"role": "user", "content": "What is 17 * 23?"},
     {
         "role": "assistant",
@@ -36,17 +36,17 @@ LEGACY_HISTORY = [
 
 def main() -> None:
     directory = Path(tempfile.mkdtemp(prefix="orkexa-history-"))
-    legacy = directory / "claude_agent_0_8_0.json"
-    legacy.write_text(json.dumps(LEGACY_HISTORY), encoding="utf-8")
+    plain = directory / "messages_api_history.json"
+    plain.write_text(json.dumps(MESSAGES_API_HISTORY), encoding="utf-8")
 
-    # 1. A ClaudeAgent reads the 0.8.0 file unchanged (same format, same model family).
+    # 1. A ClaudeAgent reads the file unchanged (its own format, same model family).
     claude = ClaudeAgent(api_key="not-needed-offline")
-    claude.load_history(legacy)
+    claude.load_history(plain)
     print("ClaudeAgent messages:", len(claude.messages))
 
     # 2. A neutral agent reads it too; the assistant turns are marked as Anthropic output.
     agent = Agent(model="openai:gpt-6.1-sol", api_key="not-needed-offline", history_policy="convert")
-    agent.load_history(legacy)
+    agent.load_history(plain)
     for message in agent.conversation():
         print(f"  {message.role:<9} provider={message.provider} parts={[p.type for p in message.parts()]}")
 

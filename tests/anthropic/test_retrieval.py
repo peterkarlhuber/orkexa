@@ -8,14 +8,14 @@ from typing import Any
 
 import pytest
 
-from claude_agent import (
+from orkexa import (
     ClaudeAgent,
     SQLiteFileStore,
     SQLiteIndex,
     citations,
     split_text,
 )
-from claude_agent.retrieval import _fts_query
+from orkexa.retrieval import _fts_query
 
 from .conftest import FakeClient, make_message
 
@@ -146,7 +146,7 @@ def test_add_file_indexes_pdfs_page_by_page(tmp_path: Path) -> None:
     index = SQLiteIndex(":memory:")
     assert index.add_file(path) == []  # blank pages have no text
 
-    import claude_agent.retrieval as retrieval
+    import orkexa.retrieval as retrieval
 
     pages = ["Page one talks about warranty.", "", "Page three is about shipping."]
     original = retrieval._pdf_pages
@@ -264,5 +264,5 @@ def test_missing_sqlite_vec_gives_a_clear_error(monkeypatch: pytest.MonkeyPatch)
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    with pytest.raises(ImportError, match=r"claude-agent\[vector\]"):
+    with pytest.raises(ImportError, match=r"orkexa\[vector\]"):
         SQLiteIndex(":memory:", embedder=_embed)

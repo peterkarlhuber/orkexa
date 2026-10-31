@@ -4,9 +4,9 @@ Status: accepted
 
 ## Context
 
-0.8.0 stored Messages-API dicts. OpenAI Responses needs item ids, encrypted
+Anthropic stores Messages-API dicts. OpenAI Responses needs item ids, encrypted
 reasoning and `call_id`s; Gemini needs thought signatures on parts; Chat Completions
-needs role `tool` messages. The legacy API exposes and persists the Anthropic format.
+needs role `tool` messages. `ClaudeAgent` exposes and persists the Anthropic format.
 
 ## Decision
 
@@ -19,9 +19,9 @@ needs role `tool` messages. The legacy API exposes and persists the Anthropic fo
   ignores foreign meta; foreign reasoning and native-only parts are a
   `HistoryConversionError` unless `history_policy="convert"` (drop + warning);
   provider file references are never converted.
-* History files: versioned `{"format": "orkexa.history", "version": 1, ...}`; 0.8.0
-  lists are detected and decoded with the Anthropic codec. `ClaudeAgent` keeps storing
-  and writing the 0.8.0 list.
+* History files: versioned `{"format": "orkexa.history", "version": 1, ...}`; plain
+  Messages API lists are detected and decoded with the Anthropic codec. `ClaudeAgent`
+  stores and writes the plain list.
 
 ## Consequences
 

@@ -1,12 +1,6 @@
 Orkexa
 Copyright (c) 2026 Peter Karlhuber
 
-Orkexa is derived from claude-agent 0.8.0
-(https://github.com/peterkarlhuber/claude-agent), Copyright (c) 2026 Peter Karlhuber,
-released under the MIT License. Its tool, memory, file, retrieval, evaluation, usage and
-dynamic-agent modules were migrated to Orkexa, and its test suite is included unchanged
-(except for documented lines) in tests/legacy/ as the compatibility regression suite.
-
 Orkexa is not affiliated with Anthropic, OpenAI or Google. "Claude", "OpenAI", "GPT",
 "Gemini", "Ollama" and "vLLM" are names of their respective owners and are used only to
 describe compatibility.

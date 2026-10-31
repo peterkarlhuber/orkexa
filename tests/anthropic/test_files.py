@@ -15,7 +15,7 @@ import zlib
 
 import pytest
 
-from claude_agent import (
+from orkexa import (
     AsyncClaudeAgent,
     ClaudeAgent,
     EphemeralMemory,
@@ -28,7 +28,7 @@ from claude_agent import (
     ToolResultError,
     image,
 )
-from claude_agent.content import describe_content, to_tool_content
+from orkexa.content import describe_content, to_tool_content
 
 from .conftest import AsyncFakeClient, FakeClient, make_message
 

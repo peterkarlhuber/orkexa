@@ -1,12 +1,12 @@
 """Exceptions of the dynamic agent extension.
 
-All of them derive from :class:`orkexa.OrkexaError` (alias ``ClaudeAgentError``) via
+All of them derive from :class:`orkexa.OrkexaError` via
 :class:`DynamicAgentError`, and additionally from the closest builtin exception.
 """
 
 from __future__ import annotations
 
-from ..errors import ClaudeAgentError
+from ..errors import OrkexaError
 
 __all__ = [
     "ApprovalDeniedError",
@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 
-class DynamicAgentError(ClaudeAgentError):
+class DynamicAgentError(OrkexaError):
     """Base class of all errors raised by orkexa.dynamic."""
 
 

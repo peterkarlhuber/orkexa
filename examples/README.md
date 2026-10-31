@@ -19,7 +19,7 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
 | 1 | `01_text_agents.py` | Live | The same text agent on Anthropic, OpenAI and Gemini | One short answer per provider with a key |
 | 2 | `02_same_tool_three_providers.py` | Live | One `@Tool` rendered for three native providers; Orkexa runs the tool | Each provider's answer, computed with the tool |
 | 5 | `05_structured_output.py` | Live (one key) | A Pydantic model as `output_format`, validated locally | The extracted object as JSON |
-| 7 | `07_history_migration.py` | Offline, optionally live | Saving and loading histories, migrating a `claude-agent` 0.8.0 history, the conversion policy | Message counts, the strict policy's error, the converted parts and the saved file; with a key, one more live turn |
+| 7 | `07_history_migration.py` | Offline, optionally live | Saving and loading histories, moving a Messages API history to another provider, the conversion policy | Message counts, the strict policy's error, the converted parts and the saved file; with a key, one more live turn |
 
 ## Intermediate
 
@@ -30,7 +30,6 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
 | 6 | `06_streaming_hooks_errors.py` | Live (one key) | Streaming, hooks and events, a `before_tool` hook that refuses a dangerous tool, error handling | Streamed text, usage and turn events, the answer without the refused tool, error handling |
 | 8 | `08_memory_files_rag.py` | Live (one key) | Memory, a file store, image input, RAG with verified sources | The answer and the passages the search tool really delivered |
 | 9 | `09_usage_budget.py` | Live | Usage per provider, custom prices, a budget policy for unpriced models | Usage records per provider and the budget spent; unpriced requests are refused or reported, depending on the policy |
-| 12 | `12_unchanged_claude_agent_script.py` | Live (Anthropic) | A `claude-agent` 0.8.0 script, unchanged, running on Orkexa | A weather answer, structured advice and the cost per agent |
 
 ## Advanced
 
@@ -59,9 +58,6 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
   stops before any model call, unless you set `ORKEXA_ALLOW_SUBPROCESS_SANDBOX=1`; then
   it uses `SubprocessSandbox`, which is **not a security boundary**. Approve only code
   you have read.
-* **Example 12** is kept byte for byte as a `claude-agent` 0.8.0 script, so its
-  docstring still names its original file name. It needs `orkexa-claude-compat`
-  (`pip install --no-deps -e compat/orkexa-claude-compat`).
 * Model output varies between runs and providers; the output described above is what
   to expect, not an exact transcript.
 

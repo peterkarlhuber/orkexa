@@ -1,10 +1,10 @@
-"""``ClaudeAgent`` and ``AsyncClaudeAgent``: the ``claude-agent`` 0.8.0 API on the Orkexa runtime.
+"""``ClaudeAgent`` and ``AsyncClaudeAgent``: Anthropic-native agents on the Orkexa runtime.
 
-The classes are thin facades: the same constructor arguments and defaults, the
-same ``ask()`` semantics, ``messages`` as a list of Messages API dicts, native SDK
-objects for ``on_request``/``on_response``/``last_response`` and unchanged SDK
-exceptions. Every turn runs through the shared runtime
-(:class:`~orkexa.core.runtime.AgentCore`) and the Anthropic adapter.
+The classes are thin facades with Anthropic-specific constructor arguments,
+``messages`` as a list of Messages API dicts, native SDK objects for
+``on_request``/``on_response``/``last_response`` and unchanged SDK exceptions. Every
+turn runs through the shared runtime (:class:`~orkexa.core.runtime.AgentCore`) and the
+Anthropic adapter.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ Fallbacks = Literal["default"] | list[dict[str, Any]]
 
 
 class _ClaudeFacade(AgentCore[OutputT]):
-    """The 0.8.0 constructor, attributes and history format, shared by both facades."""
+    """The Anthropic constructor, attributes and history format, shared by both facades."""
 
     _native_hooks = True
     _map_errors = False
@@ -98,7 +98,7 @@ class _ClaudeFacade(AgentCore[OutputT]):
             fallbacks=fallbacks,
             request_options=request_options or {},
             tool_choice=tool_choice,
-        )  # validates with the 0.8.0 messages
+        )  # validates with the Messages API messages
         self.thinking = thinking
         self.thinking_display = thinking_display
         self.cache_control = cache_control
@@ -106,7 +106,7 @@ class _ClaudeFacade(AgentCore[OutputT]):
         self.eager_input_streaming = eager_input_streaming
         self.fallbacks = deepcopy(fallbacks)
         self.request_options: dict[str, Any] = deepcopy(request_options) if request_options else {}
-        self._legacy_tool_choice: dict[str, Any] = deepcopy(tool_choice) if tool_choice else {"type": "auto"}
+        self._tool_choice_param: dict[str, Any] = deepcopy(tool_choice) if tool_choice else {"type": "auto"}
         super().__init__(
             model=model,
             provider="anthropic",
@@ -138,21 +138,21 @@ class _ClaudeFacade(AgentCore[OutputT]):
             pricing=pricing,
         )
 
-    # ---- the 0.8.0 attributes ------------------------------------------------------
+    # ---- Anthropic attributes ------------------------------------------------------
 
     @property  # type: ignore[override]
     def tool_choice(self) -> dict[str, Any]:
         """The native ``tool_choice`` dict (``{"type": "auto"}`` by default)."""
-        return self._legacy_tool_choice
+        return self._tool_choice_param
 
     @tool_choice.setter
     def tool_choice(self, value: Any) -> None:
         if isinstance(value, ToolChoice):  # set by the shared constructor
             return
-        self._legacy_tool_choice = value
+        self._tool_choice_param = value
 
     def _native_tool_choice(self) -> ToolChoice:
-        choice = self._legacy_tool_choice
+        choice = self._tool_choice_param
         if choice.get("type") == "any":
             return ToolChoice("required")
         if choice.get("type") == "tool":
@@ -168,7 +168,7 @@ class _ClaudeFacade(AgentCore[OutputT]):
             eager_input_streaming=self.eager_input_streaming,
             fallbacks=deepcopy(self.fallbacks),
             request_options=deepcopy(self.request_options),
-            tool_choice=deepcopy(self._legacy_tool_choice),
+            tool_choice=deepcopy(self._tool_choice_param),
         )
 
     def _tool_definitions(self) -> list[dict[str, Any]]:
@@ -179,7 +179,7 @@ class _ClaudeFacade(AgentCore[OutputT]):
         assert isinstance(self.adapter, AnthropicProvider)
         return self.adapter.tool_definitions(request)
 
-    # ---- the 0.8.0 history format ------------------------------------------------------
+    # ---- Messages API history format ------------------------------------------------------
 
     def _init_messages(self, messages: Sequence[Message | Mapping[str, Any]] | None) -> None:
         self.messages = deepcopy(list(messages)) if messages is not None else []
@@ -222,7 +222,7 @@ class _ClaudeFacade(AgentCore[OutputT]):
 
 
 class ClaudeAgent(_ClaudeFacade[OutputT], Agent[OutputT]):
-    """A synchronous, stateful Claude agent with strict local tools (``claude-agent`` API).
+    """A synchronous, stateful Claude agent with strict local tools (Anthropic Messages API).
 
     With ``output_format=None``, :meth:`ask` returns ``str`` (the agent is a
     ``ClaudeAgent[str]``). With a Pydantic ``BaseModel`` subclass ``M``,

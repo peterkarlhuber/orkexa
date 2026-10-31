@@ -11,7 +11,6 @@ Python 3.10 or newer. From a clone:
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-pip install --no-deps -e compat/orkexa-claude-compat
 ```
 
 `.[dev]` installs all provider SDKs, the test and lint tools, `pypdf` and
@@ -29,7 +28,7 @@ CI runs these on every pull request; run them before you push:
 | Tests (offline) | `pytest` |
 | Coverage | `pytest --cov=orkexa --cov-report=term-missing` |
 | Packaging | `pytest -m packaging tests/packaging --noconftest` (builds wheels, installs them into fresh virtual environments; needs network access to a package index) |
-| Build | `python -m build` and `python -m build compat/orkexa-claude-compat` |
+| Build | `python -m build` |
 | Docs | `mkdocs build --strict` |
 | Examples | covered by `pytest` (`tests/test_examples.py`) and `mypy --strict examples` |
 
@@ -43,8 +42,6 @@ dependencies with `pip-audit`.
 * Tests that call a real API are marked `live` and run only with `pytest -m live`;
   they need API keys and cost money. Never make them part of the default run.
 * Every bug fix comes with a test that fails without the fix.
-* `tests/legacy` is the unchanged `claude-agent` 0.8.0 suite. Do not edit it; it
-  proves compatibility.
 * Every new example needs a test in `tests/test_examples.py`.
 
 ## Conventions
@@ -52,9 +49,8 @@ dependencies with `pip-audit`.
 * **Language:** everything in the repository is written in English with American
   spelling: code, comments, docstrings, messages, docs, tests, examples, commit
   messages. Multilingual test data (e.g. German text for the search index) is fine.
-* **Compatibility:** the public API of `claude-agent` 0.8.0 (`ClaudeAgent`,
-  `AsyncClaudeAgent`, `import claude_agent` through `orkexa-claude-compat`) must keep
-  working. Do not rename public symbols.
+* **Compatibility:** do not rename or remove public symbols without a changelog entry
+  and a migration note.
 * **Errors** say what failed, why, whether retrying helps, and how to fix it. They
   never contain credentials.
 * **Security defaults** are not weakened without discussion: no keys in logs,

@@ -278,17 +278,3 @@ def test_declared_capabilities_drive_the_encoding() -> None:
     response_format = harness.script.calls[0]["response_format"]["json_schema"]
     assert response_format["strict"] is True
     assert response_format["schema"]["required"] == ["a", "b", "c"]
-
-
-def test_compat_diagnostics_report_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    from orkexa import compat
-
-    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
-    report = compat.diagnose()
-    text = "\n".join(report.lines())
-    assert "OPENAI_API_KEY" in text and SECRET not in text
-    assert report.orkexa is not None
-    assert compat.main([]) == (1 if report.conflict else 0)
-    conflict = compat.CompatReport(orkexa="0.1.0", shim="0.1.0", original="0.8.0", claude_agent_path=None)
-    assert conflict.conflict and conflict.provider == "conflict"
-    assert "pip uninstall -y claude-agent orkexa-claude-compat" in "\n".join(conflict.lines())

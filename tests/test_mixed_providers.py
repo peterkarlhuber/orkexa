@@ -46,8 +46,8 @@ from orkexa.dynamic import (
     UnsafeOptInWarning,
 )
 
+from .anthropic.dynamic_helpers import MARGIN
 from .contract.harness import AnthropicHarness, GeminiHarness, OpenAIHarness, Script
-from .legacy.dynamic_helpers import MARGIN
 
 pytestmark = pytest.mark.filterwarnings("ignore::orkexa.dynamic.UnpricedUsageWarning")
 
@@ -258,18 +258,18 @@ def test_factory_never_shares_credentials_between_providers(monkeypatch: pytest.
         ToolRegistry(),
         OutputFormatRegistry([Report]),
         DynamicPolicy(allowed_models=["openai:gpt-5.5", "claude-opus-5-5"]),
-        api_key="sk-ant-legacy-anthropic-key",
+        api_key="sk-ant-single-anthropic-key",
         credentials={"openai": ProviderSettings(api_key="sk-openai-key")},
     )
     openai_agent = factory.create(_spec("openai:gpt-5.5"))
     assert openai_agent.adapter.config.secret() == "sk-openai-key"
     claude = factory.create(_spec("claude-opus-5-5"))
-    assert claude.adapter.config.secret() == "sk-ant-legacy-anthropic-key"
+    assert claude.adapter.config.secret() == "sk-ant-single-anthropic-key"
     bare = AgentFactory(
         ToolRegistry(),
         OutputFormatRegistry([Report]),
         DynamicPolicy(allowed_models=["openai:gpt-5.5"]),
-        api_key="sk-ant-legacy-anthropic-key",
+        api_key="sk-ant-single-anthropic-key",
     ).create(_spec("openai:gpt-5.5"))
     assert bare.adapter.config.secret() is None  # the Anthropic key is not reused
     assert "sk-openai-key" not in repr(ProviderSettings(api_key="sk-openai-key"))
@@ -373,7 +373,7 @@ def test_recursion_limit_applies_to_every_provider() -> None:
     )
     assert orchestrator.ask("go") == "done"
     nested = ge.tool_results(ge.script.calls[1])[0]
-    assert nested[1] == "Error: Maximum delegation depth 1 reached"  # as in claude-agent 0.8.0
+    assert nested[1] == "Error: Maximum delegation depth 1 reached"
 
 
 # ---- RAG across providers -------------------------------------------------------------------

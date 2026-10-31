@@ -127,7 +127,7 @@ def prepare_history(
     are dropped under both policies with a :class:`HistoryConversionWarning`: no
     visible content is lost, and the target model could not use them. Provider
     parts (server tool calls and results) stay. Messages without a model (e.g. a
-    ``claude-agent`` history) are treated as coming from the current model.
+    plain Messages API history) are treated as coming from the current model.
 
     Message boundaries and roles are kept: messages are never merged, and a
     message is only removed when none of its parts can be replayed.
@@ -193,9 +193,9 @@ def dump_history(messages: Sequence[Message]) -> dict[str, Any]:
 
 
 def parse_history(
-    data: Any, legacy: Callable[[list[dict[str, Any]]], list[Message]], source: str
+    data: Any, plain: Callable[[list[dict[str, Any]]], list[Message]], source: str
 ) -> list[Message]:
-    """Messages from an Orkexa history document or a ``claude-agent`` history list.
+    """Messages from an Orkexa history document or a plain Messages API list.
 
     Raises:
         ValueError: ``data`` is neither (the error names ``source``).
@@ -203,7 +203,7 @@ def parse_history(
     if isinstance(data, list):
         if not all(isinstance(m, dict) and m.get("role") in ("user", "assistant", "system") for m in data):
             raise ValueError(f"{source}: not a conversation history")
-        return legacy(data)
+        return plain(data)
     if isinstance(data, dict) and data.get("format") == HISTORY_FORMAT:
         version = data.get("version")
         if version != HISTORY_VERSION:

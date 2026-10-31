@@ -64,7 +64,7 @@ orchestrator = Orchestrator(
 ```
 
 * Every created agent receives only the `ProviderSettings` of its own model's
-  provider; a key is never handed to another provider. The legacy `client=`/`api_key=`
+  provider; a key is never handed to another provider. The `client=`/`api_key=`
   arguments are used for Anthropic models only.
 * The policy has the last word: models (bare or qualified names), effort, token and
   round limits, allowed tools, delegation and depth limits (`RecursionLimitError`),

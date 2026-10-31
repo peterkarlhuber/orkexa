@@ -1,8 +1,8 @@
 """Helpers that build content blocks for multimodal prompts.
 
 ``Agent.ask()`` accepts a plain string or a list of content blocks. These helpers
-return Orkexa's provider-neutral input block dicts (the same layout ``claude-agent``
-used, which is also the Anthropic Messages API layout); every provider adapter
+return Orkexa's provider-neutral input block dicts (the Anthropic Messages API
+layout); every provider adapter
 translates them into its own format::
 
     from orkexa import Agent, document, image
@@ -152,7 +152,7 @@ def uploaded_file(
 
     File ids belong to one provider account and are never converted to another
     provider. Without ``provider`` the id is an Anthropic Files API id
-    (``client.files.upload``), as in ``claude-agent``.
+    (``client.files.upload``).
 
     Args:
         file_id: The ``id`` returned by the upload.

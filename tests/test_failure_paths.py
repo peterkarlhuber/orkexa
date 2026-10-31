@@ -122,7 +122,7 @@ def test_history_cannot_be_replaced_while_ask_runs(tmp_path: Path, change: str) 
     assert agent.messages == []
 
 
-def test_claude_agent_load_history_is_refused_during_a_turn(tmp_path: Path) -> None:
+def test_claude_facade_load_history_is_refused_during_a_turn(tmp_path: Path) -> None:
     agent = ClaudeAgent(client=object())
     path = tmp_path / "h.json"
     agent.save_history(path)

@@ -21,7 +21,8 @@ Quick start::
     agent = Agent(model="openai:gpt-5.5", tools=[add])   # or "anthropic:...", "gemini:..."
     print(agent.ask("What is 17 + 25?"))
 
-``ClaudeAgent`` / ``AsyncClaudeAgent`` keep the ``claude-agent`` 0.8.0 API.
+``ClaudeAgent`` / ``AsyncClaudeAgent`` are Anthropic-native agents with the Messages API
+history format and SDK objects.
 """
 
 from __future__ import annotations
@@ -52,7 +53,6 @@ from .core.types import (
 )
 from .errors import (
     AuthenticationError,
-    ClaudeAgentError,
     ConcurrentTurnError,
     ConfigurationError,
     EvaluationFailedError,
@@ -118,7 +118,6 @@ __all__ = [
     "Chunk",
     "Citation",
     "ClaudeAgent",
-    "ClaudeAgentError",
     "CompatibleOptions",
     "ConcurrentTurnError",
     "ConfigurationError",

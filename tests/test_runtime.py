@@ -396,11 +396,11 @@ def test_save_and_load_history(tmp_path: Path) -> None:
     other.load_history(path)
     assert other.messages == agent.messages
 
-    legacy = [
+    plain = [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": [{"type": "text", "text": "hello"}]},
     ]
-    path.write_text(json.dumps(legacy))
+    path.write_text(json.dumps(plain))
     other.load_history(path)
     assert other.messages[1].provider == "anthropic" and other.messages[1].text == "hello"
     path.write_text(json.dumps({"format": "orkexa.history", "version": 99, "messages": []}))

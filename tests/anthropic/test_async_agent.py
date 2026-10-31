@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 import pytest
 
-from claude_agent import AsyncClaudeAgent, Tool, ToolCall, ToolExecutionError
+from orkexa import AsyncClaudeAgent, Tool, ToolCall, ToolExecutionError
 
 from .conftest import AsyncFakeClient, ParsedResponse, make_message
 

@@ -8,8 +8,8 @@ from typing import Any
 from pydantic import BaseModel
 import pytest
 
-from claude_agent import ClaudeAgent, Tool
-from claude_agent.dynamic import (
+from orkexa import ClaudeAgent, Tool
+from orkexa.dynamic import (
     AgentArchitect,
     AgentFactory,
     AgentRegistry,
@@ -31,8 +31,8 @@ from claude_agent.dynamic import (
     ToolRegistry,
     ToolRequirement,
 )
-from claude_agent.dynamic.orchestrator import _depth
-from claude_agent.usage import UsageRecord
+from orkexa.dynamic.orchestrator import _depth
+from orkexa.usage import UsageRecord
 
 from .conftest import FakeClient, ParsedResponse, make_message
 from .dynamic_helpers import MARGIN, parsed, text, tool_result, tool_use

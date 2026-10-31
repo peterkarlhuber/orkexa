@@ -104,8 +104,8 @@ until you declare it (`capabilities={"tools": "supported"}`). The full matrix is
   provider, generated tools with static checks, sandboxes and approval.
 * **Typed errors** (`RateLimitError`, `RefusalError`, `IncompleteResponseError`, ...)
   with secrets redacted from messages.
-* **claude-agent compatible**: `ClaudeAgent`/`AsyncClaudeAgent` keep the 0.8.0 API, and
-  unchanged `import claude_agent` code runs with `orkexa-claude-compat`.
+* **Anthropic-native agents**: `ClaudeAgent`/`AsyncClaudeAgent` keep Messages API
+  histories, native SDK objects in hooks and SDK exceptions, on the same runtime.
 
 ## Documentation
 
@@ -114,7 +114,7 @@ until you declare it (`capabilities={"tools": "supported"}`). The full matrix is
 | Getting started | [Installation](docs/getting-started/installation.md) · [Quickstart](docs/getting-started/quickstart.md) · [Providers and capabilities](docs/getting-started/providers.md) |
 | Guides | [Tools and structured output](docs/guides/tools-and-structured-output.md) · [Streaming, hooks and errors](docs/guides/streaming-hooks-errors.md) · [History](docs/guides/history.md) · [Memory, files and RAG](docs/guides/memory-files-rag.md) · [Usage and budgets](docs/guides/usage-and-budgets.md) · [Multi-agent](docs/guides/multi-agent.md) |
 | Operations | [Security](docs/guides/security.md) · [Data protection and AI regulation](docs/compliance/index.md) · [Troubleshooting and FAQ](docs/troubleshooting.md) |
-| Migration | [From claude-agent 0.8.0](docs/guides/migration.md) · [Feature matrix](docs/feature-matrix.md) |
+| Capabilities | [Feature matrix](docs/feature-matrix.md) |
 | Internals | [Architecture and ADRs](docs/architecture/target-architecture.md) · [Changelog](CHANGELOG.md) |
 
 The documentation is a MkDocs site with an API reference generated from the
@@ -139,7 +139,6 @@ system built with it complies depends on that system. See
 
 ```bash
 pip install -e ".[dev]"
-pip install --no-deps -e compat/orkexa-claude-compat
 ruff check . && ruff format --check .
 mypy --strict src && mypy --strict examples
 pytest --cov=orkexa            # offline: no API keys, no network
@@ -152,10 +151,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 ## Project
 
 * **License:** [MIT](LICENSE).
-* **Origin:** Orkexa is the provider-independent successor of
-  [claude-agent](https://github.com/peterkarlhuber/claude-agent) 0.8.0 by the same
-  author ([NOTICE](NOTICE)); its API lives on as `ClaudeAgent` and in
-  [`orkexa-claude-compat`](compat/orkexa-claude-compat/README.md).
+* **Notices:** [NOTICE](NOTICE).
 * **Independence:** Orkexa is an independent open-source project. It is not affiliated
   with, endorsed by or sponsored by Anthropic, OpenAI or Google; their names identify
   the APIs Orkexa connects to.

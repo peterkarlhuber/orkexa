@@ -12,7 +12,7 @@ import os
 from pydantic import BaseModel
 import pytest
 
-from claude_agent import ClaudeAgent, Tool
+from orkexa import ClaudeAgent, Tool
 
 pytestmark = [
     pytest.mark.live,

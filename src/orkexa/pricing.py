@@ -1,10 +1,9 @@
 """Model prices used to estimate the USD cost of API requests.
 
-:data:`MODEL_PRICING` holds the Anthropic first-party prices inherited from
-``claude-agent`` (USD per million tokens). Orkexa ships **no** prices for other
-providers: prices change often and differ by account, region and tier. Register them
-with :func:`register_pricing` or pass ``pricing=`` to an agent; unpriced requests get
-``estimated_cost_usd=None``.
+:data:`MODEL_PRICING` holds Anthropic first-party prices (USD per million tokens).
+Orkexa ships **no** prices for other providers: prices change often and differ by
+account, region and tier. Register them with :func:`register_pricing` or pass
+``pricing=`` to an agent; unpriced requests get ``estimated_cost_usd=None``.
 
 Anthropic prices:
 Keep this table up to date with https://platform.claude.com/docs/en/about-claude/pricing

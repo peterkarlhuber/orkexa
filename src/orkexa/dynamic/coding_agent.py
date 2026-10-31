@@ -60,8 +60,8 @@ class CodingAgent:
     """Wraps an agent that returns :class:`ToolProposal` objects.
 
     ``model`` may name any provider (``"openai:gpt-5.5"``); ``credentials`` holds
-    the :class:`ProviderSettings` per provider. ``client``/``api_key`` are the
-    Anthropic credentials of ``claude-agent`` 0.8.0 and apply to Anthropic models only.
+    the :class:`ProviderSettings` per provider. ``client``/``api_key`` are
+    Anthropic credentials and apply to Anthropic models only.
 
     The Coding Agent only writes code; it never runs it. The underlying agent
     is available as ``coding_agent.agent``.

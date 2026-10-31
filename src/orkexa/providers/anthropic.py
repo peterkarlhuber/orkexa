@@ -1,11 +1,10 @@
 """Anthropic Messages API adapter (``pip install 'orkexa[anthropic]'``).
 
-Encodes requests exactly like ``claude-agent`` 0.8.0 (prompt caching, thinking,
-effort, server tools, the native memory tool, fallbacks, betas, structured output
-through ``messages.parse``), keeps every native block lossless through
-:mod:`orkexa.providers.anthropic_codec`, and supports token counting and Message
-Batches. The model checks of 0.8.0 (models that reject forced tool choice, disabled
-thinking, ...) are kept as capabilities and request checks.
+Encodes requests with prompt caching, thinking, effort, server tools, the native
+memory tool, fallbacks, betas and structured output through ``messages.parse``, keeps
+every native block lossless through :mod:`orkexa.providers.anthropic_codec`, and
+supports token counting and Message Batches. Model restrictions (models that reject
+forced tool choice, disabled thinking, ...) are capabilities and request checks.
 """
 
 from __future__ import annotations
@@ -103,10 +102,10 @@ def tool_schema(definition: ToolDefinition) -> dict[str, Any]:
 
 
 def check_options(model: str, options: AnthropicOptions, effort: str | None) -> None:
-    """The model/option combinations the Messages API rejects (``claude-agent`` 0.8.0 checks).
+    """The model/option combinations the Messages API rejects.
 
     Raises:
-        UnsupportedCapabilityError: (a ``ValueError``) with the 0.8.0 message.
+        UnsupportedCapabilityError: (a ``ValueError``) naming the rejected combination.
     """
     family = model_family(model)
     choice = options.tool_choice or {}

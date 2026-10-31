@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 import pytest
 
-from claude_agent import (
+from orkexa import (
     ClaudeAgent,
     Criterion,
     CriterionResult,
@@ -19,7 +19,7 @@ from claude_agent import (
     UsageTracker,
     refine,
 )
-from claude_agent.evaluation import _Verdict, tool_results_of_last_turn
+from orkexa.evaluation import _Verdict, tool_results_of_last_turn
 
 from .conftest import FakeClient, make_message
 from .dynamic_helpers import parsed, text, tool_use
