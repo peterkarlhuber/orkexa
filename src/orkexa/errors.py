@@ -24,6 +24,8 @@ __all__ = [
     "MemoryToolError",
     "MissingDependencyError",
     "OrkexaError",
+    "PriceNotFoundError",
+    "PricingError",
     "ProviderConnectionError",
     "ProviderError",
     "ProviderServerError",
@@ -50,6 +52,14 @@ class OrkexaError(Exception):
 
 class ConfigurationError(OrkexaError, ValueError):
     """An agent or provider is configured inconsistently (e.g. conflicting provider names)."""
+
+
+class PricingError(OrkexaError, ValueError):
+    """Invalid price data, an inconsistent price snapshot or an unreadable serialized snapshot."""
+
+
+class PriceNotFoundError(PricingError, LookupError):
+    """No price is known for a provider and model (raised only by ``require``-style lookups)."""
 
 
 class MissingDependencyError(OrkexaError, ImportError):
