@@ -22,4 +22,3 @@
 - [ ] `CHANGELOG.md` updated for user-visible changes
 - [ ] Docs updated if behavior changed
 - [ ] No API keys, personal data or other secrets in code, tests or output
-- [ ] The `claude-agent` 0.8.0 compatibility suite (`tests/legacy`) is unchanged

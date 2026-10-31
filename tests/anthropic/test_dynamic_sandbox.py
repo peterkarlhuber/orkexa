@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from claude_agent import ClaudeAgent, ToolDefinitionError, ToolExecutionError
-from claude_agent.dynamic import DockerSandbox, SandboxedTool, SandboxError, SubprocessSandbox
+from orkexa import ClaudeAgent, ToolDefinitionError, ToolExecutionError
+from orkexa.dynamic import DockerSandbox, SandboxedTool, SandboxError, SubprocessSandbox
 
 from .conftest import FakeClient
 from .dynamic_helpers import MARGIN_CODE, MARGIN_TESTS, text, tool_result, tool_use
@@ -68,8 +68,6 @@ def test_extra_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_working_directory_is_temporary(sandbox: SubprocessSandbox) -> None:
     code = f"import os\n\ndef cwd() -> str:\n    {_DOC}\n    return os.getcwd()\n"
     cwd = sandbox.call(code, "cwd", {})
-    # Orkexa deviation (documented in docs/feature-parity.md): the temporary
-    # directory prefix is "orkexa-sandbox-" (0.8.0: "claude-agent-sandbox-").
     assert "orkexa-sandbox-" in cwd
     assert not Path(cwd).exists()
 

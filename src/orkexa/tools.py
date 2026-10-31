@@ -225,7 +225,7 @@ class Tool:
         return f"<{type(self).__name__} {self.name!r}>"
 
     def schema(self) -> dict[str, Any]:
-        """Tool definition in the Anthropic Messages API format (as in ``claude-agent``)."""
+        """Tool definition in the Anthropic Messages API format."""
         if self.function is None:
             raise ToolDefinitionError("Uninitialized Tool decorator")
         return {

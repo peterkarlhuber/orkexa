@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from claude_agent import MODEL_PRICING, ModelPricing, UsageTracker, resolve_pricing
-from claude_agent.usage import record_api_usage, summarize_usage
+from orkexa import MODEL_PRICING, ModelPricing, UsageTracker, resolve_pricing
+from orkexa.usage import record_api_usage, summarize_usage
 
 
 def _response(model: str, **usage: Any) -> dict[str, Any]:

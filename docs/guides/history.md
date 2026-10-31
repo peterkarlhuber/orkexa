@@ -8,7 +8,7 @@ continues with the same provider exactly as the API produced it.
 ```python
 agent.save_history("chat.json")  # {"format": "orkexa.history", "version": 1, ...}
 other = Agent(model="openai:gpt-6.1-sol")
-other.load_history("chat.json")  # also reads claude-agent 0.8.0 files
+other.load_history("chat.json")  # also reads plain Messages API lists (ClaudeAgent files)
 ```
 
 ## Switching provider mid-conversation
@@ -33,6 +33,6 @@ them). Server-tool blocks of the provider stay as well.
 
 `Message.model` is the model id the agent requested (`"gpt-5.5"`); the version the API
 reported is `ModelResponse.model` and `UsageRecord.model`. Messages without a model
-(`claude-agent` 0.8.0 histories, which do not record one) count as coming from the
-current model, as in 0.8.0.
+(plain Messages API histories, which do not record one) count as coming from the
+current model.
 See `examples/07_history_migration.py`.

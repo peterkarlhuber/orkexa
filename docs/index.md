@@ -46,12 +46,8 @@ for model in ("anthropic:claude-sonnet-5-5", "openai:gpt-6.1-sol", "gemini:gemin
 | Know what works on which provider | [Providers and capabilities](getting-started/providers.md) |
 | Add tools, structured output, streaming, memory or RAG | [Guides](guides/tools-and-structured-output.md) |
 | Run agents in production | [Security](guides/security.md) · [Data protection and AI regulation](compliance/index.md) · [Troubleshooting](troubleshooting.md) |
-| Move from `claude-agent` 0.8.0 | [Migrating from claude-agent](guides/migration.md) · [Feature matrix](feature-matrix.md) |
+| Compare providers feature by feature | [Feature matrix](feature-matrix.md) |
 | Understand the design | [Architecture and ADRs](architecture/target-architecture.md) |
 | Contribute or release | [Development](development/index.md) |
 
-Orkexa grew out of [`claude-agent`](https://github.com/peterkarlhuber/claude-agent)
-0.8.0. Its API lives on unchanged as `ClaudeAgent`/`AsyncClaudeAgent`, and unchanged
-`import claude_agent` code runs through the separate distribution
-`orkexa-claude-compat`. Orkexa is an independent project, not affiliated with
-Anthropic, OpenAI or Google.
+Orkexa is an independent project, not affiliated with Anthropic, OpenAI or Google.

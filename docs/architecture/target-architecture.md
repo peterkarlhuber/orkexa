@@ -8,7 +8,7 @@
 ```text
 Application
     |
-Agent / AsyncAgent            ClaudeAgent / AsyncClaudeAgent (legacy facades)
+Agent / AsyncAgent            ClaudeAgent / AsyncClaudeAgent (Anthropic facades)
     |                                   |
     +----------- AgentCore (orkexa.core.runtime) ----------+
     |   turn state machine (sans-I/O generator)            |
@@ -42,8 +42,8 @@ Provider protocol (orkexa.providers.base) + capabilities (orkexa.core.capabiliti
   `RefusalDetails`, `StreamEvent` (`TextDelta`, `ReasoningDelta`, `ToolCallStarted`,
   `ToolCallDelta`, `ResponseCompleted`, `UsageReported`, `TurnCompleted`, `TurnFailed`),
   `Citation`.
-* Input content blocks keep the 0.8.0 dict format (`image()`, `document()`, …) and
-  are parsed into parts at the boundary.
+* Input content blocks use the Messages API dict format (`image()`, `document()`, …)
+  and are parsed into parts at the boundary.
 
 ### `orkexa.core.runtime.AgentCore` – the one runtime
 
@@ -114,8 +114,8 @@ providers without touching the runtime.
   default) or are dropped with a warning (`history_policy="convert"`). Tool calls,
   tool results, text and media convert losslessly.
 * `save_history()` writes `{"format": "orkexa.history", "version": 1, "messages": [...]}`;
-  `load_history()` also reads 0.8.0 files (plain Messages-API lists) through the
-  Anthropic codec. `ClaudeAgent` writes the 0.8.0 format. See
+  `load_history()` also reads plain Messages-API lists through the Anthropic codec.
+  `ClaudeAgent` writes the plain list. See
   [ADR 0002](decisions/0002-neutral-history.md).
 
 ### Tools and schemas
@@ -123,7 +123,7 @@ providers without touching the runtime.
 `@Tool` is unchanged. `Tool.definition()` yields the neutral definition; adapters
 convert it (`orkexa.core.schema`):
 
-* Anthropic: unchanged 0.8.0 schema.
+* Anthropic: the JSON schema as generated.
 * OpenAI strict function calling: optional properties become required + nullable;
   a `null` argument for such a property is removed before local validation, so the
   Python default applies; ambiguous cases (nullable field with non-`None` default)
@@ -154,12 +154,12 @@ a non-streamed call returns, so history and results are identical. Hooks:
 `on_text`, `on_thinking`, `on_event` (all normalized events), `on_request`,
 `on_response`, `before_tool`, `after_tool`. Sync or awaitable in `AsyncAgent`.
 `ClaudeAgent` passes native request kwargs and native responses to `on_request` /
-`on_response` (0.8.0 semantics).
+`on_response`.
 
 ### Usage, pricing, budgets
 
-`UsageRecord` keeps the 0.8.0 fields and adds `provider`, `turn_id`, `workflow`,
-`pricing_source`. Normalization (no double counting):
+`UsageRecord` holds token counts, cost and the labels `provider`, `turn_id`,
+`workflow`, `pricing_source`. Normalization (no double counting):
 
 | Provider | `input_tokens` | `cache_read_input_tokens` | `cache_creation_input_tokens` | `output_tokens` | `thinking_tokens` |
 | --- | --- | --- | --- | --- | --- |
@@ -168,7 +168,7 @@ a non-streamed call returns, so history and results are identical. Hooks:
 | Gemini | prompt − cached + tool-use prompt | `cached_content_token_count` | 0 | candidates + thoughts | `thoughts_token_count` |
 
 Costs use `Decimal`; unknown prices give `estimated_cost_usd=None` (never 0) with a
-`pricing_note`. Only Anthropic prices ship (inherited, sourced); other providers are
+`pricing_note`. Only Anthropic prices ship (sourced); other providers are
 priced through `pricing=` or `register_pricing()`. `BudgetTracker` checks before every
 request and after every recorded response; unpriced requests follow
 `on_unpriced="ignore" | "warn" | "reject"`.
@@ -193,8 +193,8 @@ bounds every tool call (async: cancelled; sync: abandoned thread, documented).
 
 ### Subsystems
 
-Memory, files, retrieval, evaluation and the dynamic package keep their modules and
-APIs (flat layout mirrors 0.8.0, [ADR 0005](decisions/0005-module-layout.md)) and use
+Memory, files, retrieval, evaluation and the dynamic package are flat modules
+([ADR 0005](decisions/0005-module-layout.md)) and use
 only the generic agent contract. Anthropic-only behaviors (native memory tool,
 Files API, `search_result` citations, Message Batches) are selected through
 capabilities, never through provider names in the runtime.
@@ -217,8 +217,6 @@ src/orkexa/
   tools.py, content.py, errors.py, usage.py, pricing.py
   memory.py, files.py, retrieval.py, evaluation.py
   dynamic/               dynamic tools and agents
-  compat.py              legacy-install diagnostics
-compat/orkexa-claude-compat/   separate distribution providing claude_agent re-exports
 ```
 
 ## Decisions
@@ -226,19 +224,17 @@ compat/orkexa-claude-compat/   separate distribution providing claude_agent re-e
 * [ADR 0001 – single sans-I/O runtime](decisions/0001-single-runtime.md)
 * [ADR 0002 – neutral history with lossless provider codecs](decisions/0002-neutral-history.md)
 * [ADR 0003 – capabilities: unknown is not supported](decisions/0003-capabilities.md)
-* [ADR 0004 – legacy import distribution](decisions/0004-legacy-import-distribution.md)
 * [ADR 0005 – flat module layout](decisions/0005-module-layout.md)
 * [ADR 0006 – provider SDKs, API families and versions](decisions/0006-provider-apis.md)
 * [ADR 0007 – credentials and endpoints](decisions/0007-credentials-and-endpoints.md)
 
-## Migration risks
+## Design risks
 
 | Risk | Mitigation |
 | --- | --- |
-| Lossy Anthropic ↔ neutral conversion changes request bytes | codec keeps unknown blocks/fields; the unchanged 0.8.0 suite compares request dicts exactly |
-| Behavior drift of `ClaudeAgent` | 0.8.0 tests run unmodified through the `claude_agent` shim in CI |
+| Lossy Anthropic ↔ neutral conversion changes request bytes | codec keeps unknown blocks/fields; `tests/anthropic` compares request dicts exactly |
+| Behavior drift of `ClaudeAgent` | `tests/anthropic` drives it through a fake Anthropic client in CI |
 | OpenAI strict-schema rules reject Orkexa tool schemas | explicit transformation with tests; ambiguous schemas fail at request build |
 | Gemini thought signatures lost between rounds | signatures stored in part meta and asserted in contract tests |
 | Compatible endpoints overstate features | capabilities default to `unknown`; presets are documented as typical, not guaranteed |
-| Shim and original `claude-agent` installed together | import-time guard + `python -m orkexa.compat` diagnostics, tested in fresh venvs |
 | Newer SDK majors (openai 3.x, google-genai 2.x, anthropic 2.x) change APIs | version ranges pinned to tested majors; adapters use only documented fields |

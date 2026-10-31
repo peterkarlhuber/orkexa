@@ -1,26 +1,10 @@
-"""Root test configuration.
-
-The unchanged ``claude-agent`` 0.8.0 suite in ``tests/legacy`` imports its helpers as
-``tests.conftest`` (its original location); they are re-exported here.
-"""
+"""Root test configuration."""
 
 from __future__ import annotations
 
 import re
 
 import pytest
-
-from .legacy.conftest import (  # noqa: F401
-    AsyncFakeClient,
-    AsyncFakeMessages,
-    AsyncFakeStream,
-    FakeClient,
-    FakeMessages,
-    FakeStream,
-    ParsedResponse,
-    make_beta_message,
-    make_message,
-)
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

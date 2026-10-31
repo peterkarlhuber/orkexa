@@ -3,7 +3,7 @@
 Every component (Coding Agent, Agent Architect, Orchestrator, AgentFactory) takes
 a model that may be provider-qualified (``"openai:gpt-5.5"``) and per-provider
 :class:`ProviderSettings`. Credentials are looked up by the provider of each
-model, so a key is never handed to another provider. The legacy ``client`` and
+model, so a key is never handed to another provider. The ``client`` and
 ``api_key`` arguments belong to Anthropic and are only used for Anthropic models.
 """
 
@@ -87,9 +87,9 @@ def build_agent(
     """An agent for ``model`` with the credentials of the model's provider.
 
     Anthropic models without custom settings become a :class:`~orkexa.ClaudeAgent`
-    (the same runtime; it keeps the ``claude-agent`` history format and hooks);
+    (the same runtime, with the Messages API history format and native hooks);
     all other models become a :class:`~orkexa.Agent`. ``client``/``api_key`` (the
-    legacy Anthropic arguments) are ignored for other providers. For a model
+    Anthropic arguments) are ignored for other providers. For a model
     whose provider reports reasoning as ``unsupported``, ``effort`` is dropped
     (and logged at INFO level): in the dynamic package it is a cost and quality
     hint chosen by a model (``AgentSpec.effort``), not a requirement. A plain

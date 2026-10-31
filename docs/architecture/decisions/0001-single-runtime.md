@@ -4,9 +4,9 @@ Status: accepted
 
 ## Context
 
-`claude-agent` 0.8.0 kept configuration and response handling in `_AgentBase` but
-duplicated the request/tool loop in `ClaudeAgent.ask` and `AsyncClaudeAgent.ask`.
-Orkexa must support four integration types with one loop and no per-provider loops.
+Synchronous and asynchronous agents easily end up with two copies of the request and
+tool loop. Orkexa must support four integration types with one loop and no
+per-provider loops.
 
 ## Decision
 

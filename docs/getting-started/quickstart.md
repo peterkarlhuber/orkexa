@@ -70,10 +70,10 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## The claude-agent API
+## Anthropic-native agents
 
-`ClaudeAgent` and `AsyncClaudeAgent` keep the exact `claude-agent` 0.8.0 constructor,
-defaults, `messages` format (Messages API dicts), native SDK objects in hooks and SDK
+`ClaudeAgent` and `AsyncClaudeAgent` take Anthropic-specific constructor arguments and
+keep `messages` as Messages API dicts, native SDK objects in hooks and SDK
 exceptions. They run on the same runtime as `Agent`.
 
 ```python

@@ -130,7 +130,7 @@ class BudgetTracker(UsageTracker):
     ``pricing=``/:func:`~orkexa.register_pricing`) have an *unknown* cost, which
     is not the same as zero. ``on_unpriced`` decides deterministically:
 
-    * ``"ignore"`` (the ``claude-agent`` 0.8.0 behavior): count them as zero.
+    * ``"ignore"``: count them as zero.
     * ``"warn"``: count them as zero and emit one :class:`UnpricedUsageWarning`
       per provider and model.
     * ``"reject"``: raise :class:`UnpricedModelError` *before* the request is

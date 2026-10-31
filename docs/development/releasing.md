@@ -10,9 +10,8 @@ These steps change settings of the GitHub repository and of PyPI accounts, so th
 done by the repository owner by hand:
 
 1. **PyPI projects and trusted publishers.** On [pypi.org](https://pypi.org), add a
-   *pending trusted publisher* for each distribution, `orkexa` and
-   `orkexa-claude-compat`, with owner `peterkarlhuber`, repository `orkexa`, workflow
-   `release.yml` and environment `pypi`. No API token is stored anywhere.
+   *pending trusted publisher* for the project `orkexa`, with owner `peterkarlhuber`,
+   repository `orkexa`, workflow `release.yml` and environment `pypi`. No API token is stored anywhere.
 2. **GitHub environment.** In the repository settings, create the environment `pypi`,
    and restrict it to tags matching `v*` with required reviewers, so that every upload
    needs an explicit approval.
@@ -30,13 +29,10 @@ done by the repository owner by hand:
 ## Each release
 
 1. Make sure CI is green on the default branch.
-2. Set the same version in `pyproject.toml` and in
-   `compat/orkexa-claude-compat/pyproject.toml`, including the shim's exact
-   `orkexa[anthropic]==X.Y.Z` dependency (`orkexa.__version__` comes from the installed
+2. Set the version in `pyproject.toml` (`orkexa.__version__` comes from the installed
    metadata), and move the changelog entries from "unreleased" to the version with the
    date.
-3. Build and check locally: `python -m build`, `python -m build compat/orkexa-claude-compat`,
-   `twine check --strict dist/* compat/orkexa-claude-compat/dist/*`,
+3. Build and check locally: `python -m build`, `twine check --strict dist/*`,
    `pytest -m packaging tests/packaging --noconftest`.
 4. The published description is `README.md` with the logo and relative links
    rewritten to absolute URLs on the default branch (`hatch-fancy-pypi-readme`, see
@@ -46,10 +42,10 @@ done by the repository owner by hand:
    `https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/assets/branding/orkexa-logo.png`
    and check the rendered description on TestPyPI or after `twine check --strict`.
 5. Create a tag `vX.Y.Z` and a GitHub release for it. Publishing the release starts
-   the workflow, which checks that the tag matches both versions and the shim's pin, builds and checks
-   both distributions, runs the packaging tests, creates build provenance
-   attestations, and, after the `pypi` environment is approved, uploads `orkexa` and
-   then `orkexa-claude-compat` through trusted publishing.
+   the workflow, which checks that the tag matches the version, builds and checks the
+   distribution, runs the packaging tests, creates build provenance attestations, and,
+   after the `pypi` environment is approved, uploads `orkexa` through trusted
+   publishing.
 6. Verify the release in a clean environment: `pip install "orkexa[all]==X.Y.Z"`.
 
 The development status classifier (`Development Status :: 3 - Alpha`) changes only

@@ -6,7 +6,6 @@ in the repository. The commands at a glance:
 
 ```bash
 pip install -e ".[dev]"                               # setup (all SDKs, test and lint tools)
-pip install --no-deps -e compat/orkexa-claude-compat  # the claude_agent import shim
 ruff check . && ruff format --check .                 # lint and format
 mypy --strict src && mypy --strict examples           # type check
 pytest                                                # offline tests, deterministic
@@ -22,8 +21,7 @@ pip install -e ".[docs]" && mkdocs serve              # docs at http://127.0.0.1
 | Path | Contents |
 | --- | --- |
 | `src/orkexa/` | The library: `core/` (runtime, types, capabilities), `providers/` (adapters), `dynamic/` (generated tools and agents), storage, usage, evaluation |
-| `compat/orkexa-claude-compat/` | The separate distribution that provides `import claude_agent` |
-| `tests/` | Offline tests; `contract/` checks every adapter against the real SDK signatures; `legacy/` is the unchanged `claude-agent` 0.8.0 suite; `packaging/` builds and installs the distributions |
+| `tests/` | Offline tests; `contract/` checks every adapter against the real SDK signatures; `anthropic/` drives the agents through a fake Anthropic client; `packaging/` builds and installs the distribution |
 | `examples/` | Runnable examples, each tested offline |
 | `docs/` | This documentation (MkDocs Material) |
 | `assets/branding/` | The official logo and its derivatives |

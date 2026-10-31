@@ -195,8 +195,8 @@ class Evaluator:
         options: Provider options of the judge.
         capabilities: Capability overrides of the judge.
 
-    An Anthropic judge is a :class:`~orkexa.ClaudeAgent` (``claude-agent``
-    compatible, Message Batches for :meth:`evaluate_many`); every other judge is an
+    An Anthropic judge is a :class:`~orkexa.ClaudeAgent` (Message Batches for
+    :meth:`evaluate_many`); every other judge is an
     :class:`~orkexa.Agent`.
     """
 

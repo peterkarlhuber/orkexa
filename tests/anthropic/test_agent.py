@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel
 import pytest
 
-from claude_agent import (
+from orkexa import (
     ClaudeAgent,
     IncompleteResponseError,
     MaxToolRoundsError,

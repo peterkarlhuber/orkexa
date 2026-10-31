@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from claude_agent import ClaudeAgent, Tool
-from claude_agent.dynamic import (
+from orkexa import ClaudeAgent, Tool
+from orkexa.dynamic import (
     ApprovalDeniedError,
     ApprovalRequest,
     AutoApprover,

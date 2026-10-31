@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 BRANDING = ROOT / "assets" / "branding"
 
-# The sdist leaves out assets, CI files and the compat distribution: these checks are
+# The sdist leaves out assets and CI files: these checks are
 # about the repository checkout only.
 pytestmark = pytest.mark.skipif(not (ROOT / ".github").is_dir(), reason="needs a repository checkout")
 
@@ -42,7 +42,6 @@ MARKDOWN = [
     "CHANGELOG.md",
     "examples/README.md",
     "assets/branding/README.md",
-    "compat/orkexa-claude-compat/README.md",
 ]
 LINK = re.compile(r"\]\(([^)\s]+)\)|<img src=\"([^\"]+)\"|href=\"([^\"]+)\"")
 

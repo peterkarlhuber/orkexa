@@ -435,7 +435,7 @@ class AgentCore(Generic[OutputT]):
     def load_history(self, path: str | os.PathLike[str]) -> None:
         """Replace the conversation with one from :meth:`save_history`.
 
-        Also reads ``claude-agent`` 0.8.0 history files (plain Messages API lists);
+        Also reads plain Messages API lists (the :class:`~orkexa.ClaudeAgent` format);
         their assistant messages are marked as produced by Anthropic, so continuing
         them with another provider follows ``history_policy``.
         """

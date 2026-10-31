@@ -11,7 +11,7 @@ Status: accepted
   hosts require an explicit `api_key`; otherwise the SDK would send the environment
   key to a third-party host.
 * `AgentFactory` and `Orchestrator` pass credentials only to agents of the matching
-  provider (`credentials={"openai": ProviderConfig(...)}`); the legacy single
+  provider (`credentials={"openai": ProviderConfig(...)}`); the single
   `client`/`api_key` applies to the default provider only.
 * Provider errors are re-raised as `ProviderError` with secrets redacted from the
   message; sandboxes start with an empty environment.

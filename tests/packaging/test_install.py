@@ -1,12 +1,5 @@
-"""Install ``orkexa``, ``orkexa-claude-compat`` and the original ``claude-agent`` into
-fresh virtual environments and check imports, the conflict guard and uninstallation.
-
-The original distribution is built from a copy of the reference checkout given by
-``CLAUDE_AGENT_SOURCE`` (default: ``../claude-agent`` next to this repository). Without
-it (e.g. in CI, where the reference repository is private) a stand-in distribution
-named ``claude-agent`` 0.8.0 that ships a ``claude_agent`` package is built instead:
-the conflict guard and the diagnostics only look at distribution metadata and files.
-"""
+"""Install the ``orkexa`` wheel into fresh virtual environments and check its imports
+and extras."""
 
 from __future__ import annotations
 
@@ -22,7 +15,6 @@ import pytest
 pytestmark = pytest.mark.packaging
 
 ROOT = Path(__file__).resolve().parents[2]
-REFERENCE = Path(os.environ.get("CLAUDE_AGENT_SOURCE", ROOT.parent / "claude-agent"))
 UV = shutil.which("uv")
 
 
@@ -71,35 +63,10 @@ class Venv:
         return _run(self.python, "-I", "-c", code, check=check, cwd=self.path)
 
 
-def _stand_in_original(path: Path) -> None:
-    """A minimal ``claude-agent`` 0.8.0 distribution with its own ``claude_agent`` package."""
-    package = path / "src" / "claude_agent"
-    package.mkdir(parents=True)
-    (package / "__init__.py").write_text(
-        '"""Stand-in for the original claude-agent."""\n__version__ = "0.8.0"\n'
-    )
-    (path / "pyproject.toml").write_text(
-        '[build-system]\nrequires = ["hatchling>=1.27"]\nbuild-backend = "hatchling.build"\n\n'
-        '[project]\nname = "claude-agent"\nversion = "0.8.0"\nrequires-python = ">=3.10"\n\n'
-        '[tool.hatch.build.targets.wheel]\npackages = ["src/claude_agent"]\n'
-    )
-
-
 @pytest.fixture(scope="module")
 def wheels(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Path]]:
     out = tmp_path_factory.mktemp("wheels")
-    built = {
-        "orkexa": _build(ROOT, out / "orkexa"),
-        "shim": _build(ROOT / "compat" / "orkexa-claude-compat", out / "shim"),
-    }
-    copy = tmp_path_factory.mktemp("reference") / "claude-agent"
-    if (REFERENCE / "pyproject.toml").exists():
-        shutil.copytree(
-            REFERENCE, copy, ignore=shutil.ignore_patterns(".git", ".venv", "dist", "__pycache__")
-        )
-    else:
-        _stand_in_original(copy)
-    built["original"] = _build(copy, out / "original")
+    built = {"orkexa": _build(ROOT, out / "orkexa")}
     for wheel in list(built.values()):
         shutil.copy(wheel, out)
     built["dir"] = out
@@ -118,7 +85,6 @@ def test_core_install_has_no_provider_sdk(wheels: dict[str, Path], tmp_path: Pat
         "print(orkexa.__version__)\n"
     ).stdout
     assert "orkexa[openai]" in out and "0.1.0" in out
-    assert venv.py("import claude_agent", check=False).returncode != 0
 
 
 def test_extras_install_every_sdk(wheels: dict[str, Path], tmp_path: Path) -> None:
@@ -130,47 +96,3 @@ def test_extras_install_every_sdk(wheels: dict[str, Path], tmp_path: Path) -> No
         "    assert Agent(model=model, api_key='k').client is not None\n"
         "assert Agent(model='m', provider='ollama').client is not None\n"
     )
-
-
-def test_shim_serves_unchanged_imports_and_uninstalls_cleanly(
-    wheels: dict[str, Path], tmp_path: Path
-) -> None:
-    venv = Venv(tmp_path / "shim", wheels["dir"])
-    venv.install(wheels["shim"])
-    venv.py(
-        "from claude_agent import ClaudeAgent, Tool, EphemeralMemory, SQLiteIndex\n"
-        "from claude_agent.dynamic import ToolBuilder, AutoApprover\n"
-        "from claude_agent.agent import ClaudeAgent as A2\n"
-        "import claude_agent.retrieval, orkexa.retrieval, orkexa\n"
-        "assert claude_agent.retrieval is orkexa.retrieval and A2 is ClaudeAgent is orkexa.ClaudeAgent\n"
-        "agent = ClaudeAgent(api_key='k')\n"
-        "assert agent.model == 'claude-haiku-5-5' and agent.messages == []\n"
-    )
-    report = _run(venv.python, "-m", "orkexa.compat")
-    assert "import claude_agent:  orkexa-claude-compat" in report.stdout
-    venv.uninstall("orkexa-claude-compat")
-    assert venv.py("import claude_agent", check=False).returncode != 0
-    venv.py("import orkexa; orkexa.ClaudeAgent(api_key='k')")
-
-
-@pytest.mark.parametrize("order", ["original_then_shim", "shim_then_original"])
-def test_conflict_with_the_original_distribution_is_detected(
-    wheels: dict[str, Path], tmp_path: Path, order: str
-) -> None:
-    venv = Venv(tmp_path / order, wheels["dir"])
-    first, second = ("original", "shim") if order == "original_then_shim" else ("shim", "original")
-    venv.install(wheels[first])
-    venv.install(wheels[second])
-    report = _run(venv.python, "-m", "orkexa.compat", check=False)
-    assert report.returncode == 1
-    assert "CONFLICT" in report.stdout
-    if order == "original_then_shim":
-        failed = venv.py("import claude_agent", check=False)
-        assert (
-            failed.returncode != 0 and "pip uninstall -y claude-agent orkexa-claude-compat" in failed.stderr
-        )
-    # the documented repair
-    venv.uninstall("claude-agent", "orkexa-claude-compat")
-    venv.install(wheels["shim"])
-    venv.py("from claude_agent import ClaudeAgent; ClaudeAgent(api_key='k')")
-    assert _run(venv.python, "-m", "orkexa.compat").returncode == 0

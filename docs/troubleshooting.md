@@ -47,9 +47,6 @@ if your server needs one.
 **Can I switch providers in the middle of a conversation?** Yes, with
 `history_policy="convert"`; see [History and provider switching](guides/history.md).
 
-**Do existing `claude-agent` 0.8.0 scripts still work?** Yes, with
-`orkexa-claude-compat`; see [Migrating from claude-agent](guides/migration.md).
-
 **How do I run the tests without API keys?** `pytest` runs offline by default; tests
 that call real APIs are marked `live` and skip themselves without keys.
 

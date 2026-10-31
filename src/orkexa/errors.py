@@ -1,7 +1,6 @@
 """Exception hierarchy of Orkexa.
 
-Every exception derives from :class:`OrkexaError` (``ClaudeAgentError`` is the same
-class, kept for code written for ``claude-agent``). The concrete classes additionally
+Every exception derives from :class:`OrkexaError`. The concrete classes additionally
 derive from the closest builtin exception (``TypeError``, ``ValueError``,
 ``RuntimeError``, ``ImportError``), so generic ``except`` clauses keep working.
 """
@@ -15,7 +14,6 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AuthenticationError",
-    "ClaudeAgentError",
     "ConcurrentTurnError",
     "ConfigurationError",
     "EvaluationFailedError",
@@ -45,10 +43,6 @@ __all__ = [
 
 class OrkexaError(Exception):
     """Base class of all errors raised by Orkexa."""
-
-
-ClaudeAgentError = OrkexaError
-"""The base class under its ``claude-agent`` name; ``except ClaudeAgentError`` catches every Orkexa error."""
 
 
 # ---- configuration -------------------------------------------------------------------

@@ -13,7 +13,7 @@
   traceback nor `logging.exception()` can print the SDK exception, its request or its
   headers. The error keeps the safe diagnostics `provider`, `status_code`,
   `request_id`, `retryable` and the redacted message (which names the SDK exception
-  type). `ClaudeAgent` keeps raising the Anthropic SDK exceptions, as in 0.8.0.
+  type). `ClaudeAgent` raises the Anthropic SDK exceptions unchanged.
 * **Stored data is owner-private** (see [below](#stored-data)).
 * **Endpoints**: a custom `base_url` for `anthropic`, `openai` or `gemini` requires an
   explicit `api_key=`; environment keys are only sent to the provider's own API.

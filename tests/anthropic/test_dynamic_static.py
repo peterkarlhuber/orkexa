@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from claude_agent.dynamic import check_tool_source, check_tool_tests
+from orkexa.dynamic import check_tool_source, check_tool_tests
 
 from .dynamic_helpers import MARGIN_CODE, MARGIN_TESTS
 

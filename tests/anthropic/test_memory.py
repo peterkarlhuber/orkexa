@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from claude_agent import (
+from orkexa import (
     AsyncClaudeAgent,
     ClaudeAgent,
     EphemeralMemory,

@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import BaseModel
 import pytest
 
-from claude_agent import (
+from orkexa import (
     ClaudeAgent,
     MaxToolRoundsError,
     RefusalError,
@@ -21,8 +21,8 @@ from claude_agent import (
     image,
     uploaded_file,
 )
-from claude_agent.content import to_content
-from claude_agent.evaluation import tool_results_of_last_turn
+from orkexa.content import to_content
+from orkexa.evaluation import tool_results_of_last_turn
 
 from .conftest import FakeClient, ParsedResponse, make_beta_message, make_message
 
@@ -454,7 +454,7 @@ def test_compaction_blocks_stay_in_history_and_are_priced() -> None:
 
 
 def test_batch_usage_is_half_price() -> None:
-    from claude_agent.usage import record_api_usage
+    from orkexa.usage import record_api_usage
 
     response = _text("ok", usage={"input_tokens": 1_000_000, "output_tokens": 0, "service_tier": "batch"})
     record = record_api_usage(response, agent_name="a", default_model="claude-opus-5-5")

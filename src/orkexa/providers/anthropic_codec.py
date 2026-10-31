@@ -1,7 +1,7 @@
 """Lossless conversion between Anthropic Messages API dicts and neutral messages.
 
 ``encode_message(decode_message(m)) == m`` for every message the Messages API or
-``claude-agent`` 0.8.0 produces: fields without a neutral counterpart
+:class:`~orkexa.ClaudeAgent` produces: fields without a neutral counterpart
 (``cache_control``, thinking ``signature``, raw ``citations``, ``caller``, ...) are
 kept in ``Part.meta["anthropic"]`` and block types without a neutral counterpart
 (server tool calls and results, compaction, MCP blocks, ...) become

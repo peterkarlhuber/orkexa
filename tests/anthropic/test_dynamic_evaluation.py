@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
-from claude_agent import Evaluator
-from claude_agent.dynamic import (
+from orkexa import Evaluator
+from orkexa.dynamic import (
     AGENT_REVIEW_CRITERIA,
     AgentArchitect,
     ApprovalDeniedError,
@@ -22,7 +22,7 @@ from claude_agent.dynamic import (
     ToolRegistry,
     ToolValidationError,
 )
-from claude_agent.dynamic.approval import Approver
+from orkexa.dynamic.approval import Approver
 
 from .conftest import FakeClient
 from .dynamic_helpers import MARGIN, MARGIN_CODE, MARGIN_TESTS, parsed

@@ -18,8 +18,8 @@ import pytest
 
 from orkexa.dynamic import DockerSandbox
 
+from .anthropic.dynamic_helpers import MARGIN
 from .contract.harness import AnthropicHarness, ChatHarness, GeminiHarness, OpenAIHarness, Script
-from .legacy.dynamic_helpers import MARGIN
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
@@ -70,7 +70,7 @@ def run(name: str) -> None:
 
 def test_every_example_is_covered() -> None:
     scripts = sorted(p.name for p in EXAMPLES.glob("[0-9][0-9]_*.py"))
-    assert len(scripts) == 12
+    assert len(scripts) == 11
     tested = {name.split("_")[2] for name in globals() if name.startswith("test_example_")}
     assert tested == {s[:2] for s in scripts}
 
@@ -285,21 +285,3 @@ def test_example_11_stops_without_an_isolated_sandbox(
     with pytest.raises(SystemExit, match="not a security boundary"):
         run("11_dynamic_tools_sandbox.py")
     assert offline.openai.script.calls == []
-
-
-def test_example_12(offline: Offline, capsys: pytest.CaptureFixture[str]) -> None:
-    """The unchanged claude-agent 0.8.0 example runs on Orkexa through the shim."""
-    a = offline.anthropic
-    offline.script(
-        anthropic=[
-            a.tool_calls([("w1", "get_weather", {"location": {"city": "Vienna", "country_code": "AT"}})]),
-            a.text("Light rain in Vienna."),
-            a.text('{"umbrella": true, "jacket": true, "reason": "rain"}'),
-        ]
-    )
-    run("12_unchanged_claude_agent_script.py")
-    out = capsys.readouterr().out
-    assert "Light rain in Vienna." in out
-    assert "'umbrella': True" in out
-    assert "chat:" in out and "advisor:" in out
-    assert a.tool_results(a.script.calls[1])[0][1] == "18 degrees celsius, light rain in Vienna (AT)"

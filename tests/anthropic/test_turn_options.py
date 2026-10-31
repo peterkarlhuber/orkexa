@@ -12,7 +12,7 @@ import anthropic
 import httpx2
 import pytest
 
-from claude_agent import (
+from orkexa import (
     MODEL_PRICING,
     AsyncClaudeAgent,
     ClaudeAgent,
@@ -21,7 +21,8 @@ from claude_agent import (
     ToolExecutionError,
     ToolInputError,
 )
-from tests.conftest import AsyncFakeClient, FakeClient, make_beta_message, make_message
+
+from .conftest import AsyncFakeClient, FakeClient, make_beta_message, make_message
 
 
 def _text(text: str, **kwargs: Any) -> Any:

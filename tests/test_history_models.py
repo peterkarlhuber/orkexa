@@ -78,14 +78,14 @@ def test_reasoning_is_replayed_within_a_turn_and_to_the_same_model() -> None:
 
 
 def test_messages_without_a_model_are_treated_as_the_current_model() -> None:
-    legacy = [
+    untagged = [
         Message(role="user", content="hi"),
         Message(role="assistant", content=[ReasoningPart(text="r"), TextPart(text="hello")], provider="fake"),
     ]
     with warnings.catch_warnings():
         warnings.simplefilter("error", HistoryConversionWarning)
-        prepared = prepare_history(legacy, "fake", "strict", "any-model")
-    assert prepared == legacy
+        prepared = prepare_history(untagged, "fake", "strict", "any-model")
+    assert prepared == untagged
 
 
 def test_reasoning_only_message_of_another_model_is_removed() -> None:

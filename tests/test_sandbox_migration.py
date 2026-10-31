@@ -1,4 +1,4 @@
-"""The sandbox paths moved from ``claude_agent`` to ``orkexa``; no provider secret enters it."""
+"""The sandbox mounts the ``orkexa`` package; no provider secret enters it."""
 
 from __future__ import annotations
 
@@ -36,9 +36,9 @@ def test_runner_loads_tools_without_the_package_init() -> None:
         "import sys\n\ndef modules() -> str:\n"
         f"    {_DOC}\n"
         "    return ','.join(sorted(m for m in sys.modules if m.split('.')[0] in "
-        "('orkexa', 'anthropic', 'openai', 'google', 'claude_agent')))\n"
+        "('orkexa', 'anthropic', 'openai', 'google')))\n"
     )
     loaded = SubprocessSandbox(acknowledge_unsafe=True).call(code, "modules", {}).split(",")
     assert "orkexa.tools" in loaded
-    assert not [m for m in loaded if m.startswith(("anthropic", "openai", "google", "claude_agent"))]
+    assert not [m for m in loaded if m.startswith(("anthropic", "openai", "google"))]
     assert "orkexa.agent" not in loaded
