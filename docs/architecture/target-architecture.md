@@ -204,6 +204,11 @@ only the generic agent contract. Anthropic-only behaviors (native memory tool,
 Files API, `search_result` citations, Message Batches) are selected through
 capabilities, never through provider names in the runtime.
 
+`orkexa.flow` follows the same split as the agent runtime: a sans-I/O kernel decides
+what runs next in a workflow and drivers execute it
+([ADR 0009](decisions/0009-flow-kernel.md)). It depends only on the data model and
+Pydantic, never on an agent or provider.
+
 ## Package layout
 
 ```text
@@ -222,6 +227,7 @@ src/orkexa/
   tools.py, content.py, errors.py, usage.py, pricing.py
   memory.py, files.py, retrieval.py, evaluation.py
   dynamic/               dynamic tools and agents
+  flow/                  flow kernel, reference driver, conformance cases
 ```
 
 ## Decisions
@@ -232,6 +238,8 @@ src/orkexa/
 * [ADR 0005 – flat module layout](decisions/0005-module-layout.md)
 * [ADR 0006 – provider SDKs, API families and versions](decisions/0006-provider-apis.md)
 * [ADR 0007 – credentials and endpoints](decisions/0007-credentials-and-endpoints.md)
+* [ADR 0008 – pricing engine](decisions/0008-pricing-engine.md)
+* [ADR 0009 – flow kernel](decisions/0009-flow-kernel.md)
 
 ## Design risks
 

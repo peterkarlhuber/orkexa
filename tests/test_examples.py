@@ -70,7 +70,7 @@ def run(name: str) -> None:
 
 def test_every_example_is_covered() -> None:
     scripts = sorted(p.name for p in EXAMPLES.glob("[0-9][0-9]_*.py"))
-    assert len(scripts) == 12
+    assert len(scripts) == 13
     tested = {name.split("_")[2] for name in globals() if name.startswith("test_example_")}
     assert tested == {s[:2] for s in scripts}
 
@@ -294,3 +294,12 @@ def test_example_12(capsys: pytest.CaptureFixture[str]) -> None:
     assert "priority tier: total=None missing=['tariff:service_tier=priority']" in out
     assert "pinned acme-2026-11: $1.25, current acme-2026-12: $1.00" in out
     assert "record: cost=$0.00002 version=acme-2026-12 quality=estimated source=acme-contract" in out
+
+
+def test_example_13(capsys: pytest.CaptureFixture[str]) -> None:
+    run("13_flow_quality_loop.py")  # offline by design: the agents use the fake provider
+    out = capsys.readouterr().out
+    assert "round 1: AGAIN: name the providers" in out
+    assert "suspended: waiting for ['approve//1']" in out
+    assert "succeeded: drafts ['draft/0/1', 'draft/1/1'], loop counters {'retry@': 1}" in out
+    assert "published: Orkexa runs agents on four providers with one API." in out

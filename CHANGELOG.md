@@ -4,6 +4,21 @@
 
 First release of Orkexa.
 
+### Added: flow kernel (`orkexa.flow`)
+
+* `orkexa.flow`, a deterministic, I/O-free workflow kernel (ADR 0009, guide
+  `docs/guides/flows.md`): `Flow`, `Node`, `Edge`, `Loop`, `Limits`, `validate()`
+  with stable `flow.*` issue codes, and the pure functions `start()`, `complete()`,
+  `advance()`, `cancel()`, `resume()` and `outcome()` over a JSON-serializable
+  `FlowState` (contract `1.0`; events `orkexa.flow-event/1`).
+* Invocations (`node/path/attempt`) instead of one result per node: branching ports,
+  `join="all"`/`"any"`, suspension and resumption, stops from results, loop edges with
+  a mandatory `max_iterations` (nested loops, `on_exhausted="fail"`/`"continue"`), and
+  limits for invocations, parallelism, iterations and wall time.
+* `run_flow()`/`run_flow_sync()`, an asyncio reference driver with one handler per node
+  type, and `orkexa.flow.conformance` with scripted cases for other drivers.
+* Example `13_flow_quality_loop.py` (offline).
+
 ### Added: pricing engine (PRICING-1)
 
 * `orkexa.pricing` is now a package with a provider-independent pricing engine
