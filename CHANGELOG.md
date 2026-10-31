@@ -4,6 +4,18 @@
 
 First release of Orkexa.
 
+### Added: orchestration protocol (Adaptive Orchestration M4, ADR 0010)
+
+* `orkexa.orchestration`: a model chooses which member of a fixed `Pool` works next.
+  Two decisions, `Delegate` and `Finish` (no "create": members are selected, never
+  generated); `validate()` checks each one against pool, `OrchestrationLimits`
+  (`max_decisions`, `max_per_member`, `max_answer_chars`) and history with stable
+  `orchestration.*` codes. `OrchestrationState` records every step (decision, verdict,
+  result or error) as JSON; `replay()` re-validates a record without model calls.
+* Reference drivers `run_orchestration()` and `arun_orchestration()` with `decide` and
+  `delegate` callables; refused decisions are explained to the model, member failures
+  are recorded, a `BudgetExceededError` ends the orchestration.
+
 ### Added: budget reservations (Adaptive Orchestration AO-12)
 
 * `BudgetTracker` reserves an upper bound of every request's cost before it is sent
