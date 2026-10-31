@@ -77,6 +77,5 @@ for concepts, the serialization format and examples.
 
 ## Errors
 
-::: orkexa.errors.PricingError
-
-::: orkexa.errors.PriceNotFoundError
+`PricingError` and `PriceNotFoundError` live in `orkexa.errors` (and are re-exported
+from `orkexa.pricing`); they are documented in the [errors reference](errors.md).
