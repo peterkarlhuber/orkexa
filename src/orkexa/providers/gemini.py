@@ -98,8 +98,23 @@ def _enum_name(value: Any) -> str | None:
     return str(getattr(value, "name", value))
 
 
-def gemini_usage(usage: Any) -> TokenUsage | None:
-    """Normalized usage: cached tokens are not plain input; output includes thoughts."""
+def _modality(usage: Any, name: str, modality: str) -> int:
+    total = 0
+    for entry in _value(usage, name) or []:
+        if _enum_name(_value(entry, "modality")) == modality:
+            count = _value(entry, "token_count")
+            total += count if isinstance(count, int) else 0
+    return total
+
+
+def gemini_usage(usage: Any, grounding: Any = None) -> TokenUsage | None:
+    """Normalized usage: cached tokens are not plain input; output includes thoughts.
+
+    Audio and generated-image tokens are reported as special token classes, and
+    Google Search grounding (``grounding``: the candidate's ``grounding_metadata``)
+    as the units ``google_search_query`` and ``google_search_grounded_prompt``, so
+    prices without rates for them do not produce seemingly complete costs.
+    """
     if usage is None:
         return None
 
@@ -109,11 +124,22 @@ def gemini_usage(usage: Any) -> TokenUsage | None:
 
     cached = number("cached_content_token_count")
     thoughts = number("thoughts_token_count")
+    cached_audio = _modality(usage, "cache_tokens_details", "AUDIO")
+    details = {
+        "audio_input": max(0, _modality(usage, "prompt_tokens_details", "AUDIO") - cached_audio),
+        "audio_cache_read": cached_audio,
+        "audio_output": _modality(usage, "candidates_tokens_details", "AUDIO"),
+        "image_output": _modality(usage, "candidates_tokens_details", "IMAGE"),
+    }
+    queries = _value(grounding, "web_search_queries") or []
+    units = {"google_search_query": len(queries), "google_search_grounded_prompt": 1 if queries else 0}
     return TokenUsage(
         input_tokens=max(0, number("prompt_token_count") - cached) + number("tool_use_prompt_token_count"),
         output_tokens=number("candidates_token_count") + thoughts,
         cache_read_input_tokens=cached,
         thinking_tokens=thoughts,
+        token_details=tuple((kind, count) for kind, count in details.items() if count),
+        units=tuple((unit, count) for unit, count in sorted(units.items()) if count),
     )
 
 
@@ -453,6 +479,7 @@ class GeminiProvider(Provider):
         request: ModelRequest,
         raw: Any,
         request_id: str | None,
+        grounding: Any = None,
     ) -> ModelResponse:
         parts, calls = self._parts(raw_parts)
         stop_reason: StopReason
@@ -482,7 +509,7 @@ class GeminiProvider(Provider):
             parsed=parsed,
             parse_error=error,
             stop_details=stop_details,
-            usage=gemini_usage(usage),
+            usage=gemini_usage(usage, grounding),
             request_id=request_id,
             raw=raw,
         )
@@ -498,6 +525,7 @@ class GeminiProvider(Provider):
             usage=_value(response, "usage_metadata"),
             block_reason=_enum_name(_value(feedback, "block_reason")) if not candidates else None,
             model=str(_value(response, "model_version") or request.model),
+            grounding=_value(candidate, "grounding_metadata"),
             request=request,
             raw=response,
             request_id=_value(response, "response_id"),
@@ -573,6 +601,7 @@ class _GeminiStream:
         self.id: str | None = None
         self.block: str | None = None
         self.calls = 0
+        self.grounding: Any = None
 
     def translate(self, chunk: Any) -> Iterator[StreamEvent]:
         self.usage = _value(chunk, "usage_metadata") or self.usage
@@ -585,6 +614,7 @@ class _GeminiStream:
             return
         candidate = candidates[0]
         self.finish = _enum_name(_value(candidate, "finish_reason")) or self.finish
+        self.grounding = _value(candidate, "grounding_metadata") or self.grounding
         for raw in _value(_value(candidate, "content"), "parts") or []:
             data = raw if isinstance(raw, dict) else raw.model_dump(mode="json", exclude_none=True)
             if data.get("function_call"):
@@ -626,6 +656,7 @@ class _GeminiStream:
             request=request,
             raw=None,
             request_id=self.id,
+            grounding=self.grounding,
         )
 
 

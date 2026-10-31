@@ -35,7 +35,7 @@ from ..core.types import (
     ToolDefinition,
 )
 from ..errors import ConfigurationError, UnsupportedCapabilityError
-from ..pricing import ModelPricing, resolve_pricing
+from ..pricing import PricingInput, resolve_pricing
 from ..usage import UsageRecord, record_api_usage
 from . import anthropic_codec as codec
 from .base import Provider, ProviderConfig, require_module
@@ -372,7 +372,7 @@ class AnthropicProvider(Provider):
         response: ModelResponse,
         *,
         agent: str,
-        pricing: ModelPricing | None,
+        pricing: PricingInput,
         turn_id: str | None,
         model: str,
         batch: bool = False,

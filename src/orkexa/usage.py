@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from .pricing import ModelPricing, resolve_pricing
+from .pricing import CostBreakdown, MeteredUsage, PriceResolver, PricingInput, pricing_basis
 
 if TYPE_CHECKING:
     from .core.types import TokenUsage
+    from .pricing import PriceLookup
 
 __all__ = [
     "UsageRecord",
@@ -24,9 +26,6 @@ __all__ = [
     "summarize_usage",
     "workflow",
 ]
-
-_WEB_SEARCH_USD_PER_REQUEST = Decimal("0.01")  # $10 per 1,000 searches
-_ONE_MILLION = Decimal("1000000")
 
 
 @dataclass(frozen=True)
@@ -42,8 +41,20 @@ class UsageRecord:
     provider name), ``turn_id`` (one id per ``ask()`` of the agent that sent the
     request), ``workflow`` (the label of the enclosing :func:`workflow`, e.g. one
     :meth:`~orkexa.dynamic.Orchestrator.ask` including every delegated agent) and
-    ``pricing_source`` (``"builtin"``, ``"registered"``, ``"custom"`` or ``None``
-    when unpriced).
+    ``pricing_source`` (the price's source: ``"builtin"``, ``"registered"``, ``"custom"``
+    for an agent's ``pricing=``, a catalog name from your own snapshot, or ``None``
+    when no price was found).
+
+    The pricing fields describe the price basis: ``requested_model`` (the id the agent
+    was configured with; ``model`` is the id the API reported), ``pricing_version``
+    (version of the :class:`~orkexa.pricing.PriceSnapshot` used),
+    ``pricing_quality`` (the lowest :data:`~orkexa.pricing.PriceQuality` involved),
+    ``pricing_conditions`` (the tariff options applied, e.g. ``service_tier=batch``),
+    ``known_cost_usd`` (sum of the components that could be priced; equals
+    ``estimated_cost_usd`` when the cost is complete), ``missing_cost_components``
+    (what could not be priced) and ``cost`` (the itemized
+    :class:`~orkexa.pricing.CostBreakdown`). Records created before these fields
+    existed simply have their defaults.
     """
 
     agent: str
@@ -64,6 +75,13 @@ class UsageRecord:
     turn_id: str | None = None
     workflow: str | None = None
     pricing_source: str | None = None
+    requested_model: str | None = None
+    pricing_version: str | None = None
+    pricing_quality: str | None = None
+    pricing_conditions: tuple[tuple[str, str], ...] = ()
+    known_cost_usd: Decimal | None = None
+    missing_cost_components: tuple[str, ...] = ()
+    cost: CostBreakdown | None = None
 
     @property
     def total_input_tokens(self) -> int:
@@ -73,10 +91,61 @@ class UsageRecord:
     def total_tokens(self) -> int:
         return self.total_input_tokens + self.output_tokens
 
+    @property
+    def cost_complete(self) -> bool:
+        """Whether ``estimated_cost_usd`` is a complete cost (not ``None``)."""
+        return self.estimated_cost_usd is not None
+
+    @property
+    def known_cost(self) -> Decimal:
+        """The known part of the cost in USD (``0`` when nothing is known)."""
+        if self.estimated_cost_usd is not None:
+            return self.estimated_cost_usd
+        return self.known_cost_usd if self.known_cost_usd is not None else Decimal("0")
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-compatible form (amounts as decimal strings) for external ledgers."""
+        data: dict[str, Any] = {}
+        for item in fields(self):
+            value = getattr(self, item.name)
+            if isinstance(value, Decimal):
+                value = str(value)
+            elif isinstance(value, CostBreakdown):
+                value = value.to_dict()
+            elif item.name == "pricing_conditions":
+                value = dict(value)
+            elif isinstance(value, tuple):
+                value = list(value)
+            data[item.name] = value
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> UsageRecord:
+        """Inverse of :meth:`to_dict`; keys of newer Orkexa versions are rejected, missing ones default."""
+        known = {item.name for item in fields(cls)}
+        unknown = set(data) - known
+        if unknown:
+            raise ValueError(f"Unknown UsageRecord fields: {sorted(unknown)}")
+        values = dict(data)
+        for name in ("estimated_cost_usd", "known_cost_usd"):
+            if values.get(name) is not None:
+                values[name] = Decimal(str(values[name]))
+        if values.get("cost") is not None:
+            values["cost"] = CostBreakdown.from_dict(values["cost"])
+        values["pricing_conditions"] = tuple(sorted(dict(values.get("pricing_conditions") or {}).items()))
+        values["missing_cost_components"] = tuple(values.get("missing_cost_components") or ())
+        return cls(**values)
+
 
 @dataclass(frozen=True)
 class UsageSummary:
-    """Aggregated token counters; cost is None if any request has unknown pricing."""
+    """Aggregated token counters and costs.
+
+    ``estimated_cost_usd`` is the complete total, or ``None`` if any request has an
+    unknown or incomplete cost (``unpriced_requests`` counts them). ``known_cost_usd``
+    is the sum of everything that could be priced: a lower bound when the total is
+    unknown. ``missing_cost_components`` lists what could not be priced.
+    """
 
     requests: int
     input_tokens: int
@@ -90,6 +159,8 @@ class UsageSummary:
     web_fetch_requests: int
     estimated_cost_usd: Decimal | None
     unpriced_requests: int
+    known_cost_usd: Decimal = Decimal("0")
+    missing_cost_components: tuple[str, ...] = ()
 
     @property
     def total_input_tokens(self) -> int:
@@ -98,6 +169,11 @@ class UsageSummary:
     @property
     def total_tokens(self) -> int:
         return self.total_input_tokens + self.output_tokens
+
+    @property
+    def cost_complete(self) -> bool:
+        """Whether every request's cost is known, so ``estimated_cost_usd`` is the total."""
+        return self.estimated_cost_usd is not None
 
 
 _SUMMED_FIELDS = (
@@ -120,10 +196,16 @@ def summarize_usage(records: Iterable[UsageRecord]) -> UsageSummary:
     costs = [record.estimated_cost_usd for record in records]
     unpriced = sum(cost is None for cost in costs)
     total_cost = None if unpriced else sum((c for c in costs if c is not None), Decimal("0"))
+    missing: dict[str, None] = {}
+    for record in records:
+        if record.estimated_cost_usd is None:
+            missing.update(dict.fromkeys(record.missing_cost_components or ("price",)))
     return UsageSummary(
         requests=len(records),
         estimated_cost_usd=total_cost,
         unpriced_requests=unpriced,
+        known_cost_usd=sum((record.known_cost for record in records), Decimal("0")),
+        missing_cost_components=tuple(missing),
         **totals,
     )
 
@@ -158,16 +240,33 @@ def current_workflow() -> str | None:
 
 
 class UsageTracker:
-    """Shared ledger for several agents, including agents delegated as tools."""
+    """Shared ledger for several agents, including agents delegated as tools.
 
-    def __init__(self) -> None:
+    Args:
+        price_resolver: Prices every request of the agents that use this tracker and
+            set no resolver of their own (``pricing=``). ``None``: the process-wide
+            :func:`~orkexa.pricing.default_resolver`.
+    """
+
+    def __init__(self, *, price_resolver: PriceResolver | None = None) -> None:
+        if price_resolver is not None and not isinstance(price_resolver, PriceResolver):
+            raise TypeError("price_resolver must be a PriceResolver")
         self._records: list[UsageRecord] = []
+        self.price_resolver = price_resolver
 
     def add(self, record: UsageRecord) -> None:
         self._records.append(record)
 
     def before_request(self, *, agent: str, provider: str, model: str, priced: bool) -> None:
         """Called before every model request; budget trackers raise here to stop early."""
+
+    def check_request(self, *, agent: str, provider: str, model: str, lookup: PriceLookup) -> None:
+        """Called before every model request with the price lookup of the pinned basis.
+
+        The default delegates to :meth:`before_request` (``priced=lookup.found``), so
+        trackers that override only :meth:`before_request` keep working.
+        """
+        self.before_request(agent=agent, provider=provider, model=model, priced=lookup.found)
 
     def check(self) -> None:
         """Raise if a limit is exceeded; a plain tracker has none (see ``BudgetTracker``)."""
@@ -226,17 +325,6 @@ def _int_field(obj: Any, name: str) -> int:
     return int(value) if value is not None else 0
 
 
-def _token_cost(prices: ModelPricing, counts: dict[str, int]) -> Decimal:
-    # Thinking tokens are INCLUDED in output_tokens; do not charge twice.
-    return (
-        counts["input_tokens"] * prices.input
-        + counts["output_tokens"] * prices.output
-        + counts["cache_read_input_tokens"] * prices.cache_read
-        + counts["cache_creation_5m_input_tokens"] * prices.cache_write_5m
-        + counts["cache_creation_1h_input_tokens"] * prices.cache_write_1h
-    ) / _ONE_MILLION
-
-
 def _token_counts(usage: Any) -> dict[str, int]:
     creation = _get_field(usage, "cache_creation")
     return {
@@ -269,8 +357,81 @@ def _count_fields(counts: dict[str, int]) -> _Counts:
     )
 
 
-def _total_input(counts: dict[str, int]) -> int:
-    return counts["input_tokens"] + counts["cache_read_input_tokens"] + counts["cache_creation_input_tokens"]
+def _metered(
+    counts: dict[str, int],
+    *,
+    conditions: Mapping[str, str],
+    units: Mapping[str, int] | None = None,
+    token_details: Mapping[str, int] | None = None,
+) -> MeteredUsage:
+    split = counts["cache_creation_5m_input_tokens"] + counts["cache_creation_1h_input_tokens"]
+    return MeteredUsage(
+        input_tokens=counts["input_tokens"],
+        output_tokens=counts["output_tokens"],
+        cache_read_input_tokens=counts["cache_read_input_tokens"],
+        cache_write_input_tokens=max(counts["cache_creation_input_tokens"], split),
+        cache_write_5m_input_tokens=counts["cache_creation_5m_input_tokens"],
+        cache_write_1h_input_tokens=counts["cache_creation_1h_input_tokens"],
+        token_details=token_details or {},
+        units=units or {},
+        conditions=conditions,
+    )
+
+
+_QUALITY_RANK = {"verified": 3, "contract": 3, "unverified": 1, "estimated": 0}
+
+
+def _note(cost: CostBreakdown, unpriced_models: list[str], unpriced_label: str) -> str | None:
+    if cost.complete and cost.currency == "USD":
+        return None
+    notes: list[str] = []
+    other: list[str] = []
+    for item in cost.missing:
+        if item == "price":
+            if unpriced_models:
+                notes.append(unpriced_label)
+        elif item == "cache_write_ttl":
+            notes.append("Cache write TTL breakdown incomplete; cannot price this request reliably")
+        elif item.startswith("tariff:"):
+            notes.append(f"Nonstandard tier/speed/data residency requires adjusted pricing ({item[7:]})")
+        else:
+            other.append(item)
+    if other:
+        notes.append(f"Cost incomplete; unknown: {', '.join(other)}")
+    if cost.currency != "USD":
+        notes.append(f"Priced in {cost.currency}; no USD amount is computed")
+    return "; ".join(dict.fromkeys(notes)) or None
+
+
+def _priced_record(
+    cost: CostBreakdown,
+    *,
+    basis_version: str | None,
+    note: str | None,
+    **values: Any,
+) -> UsageRecord:
+    usd = cost.currency == "USD"
+    references = cost.references
+    source = None
+    if references:
+        source = "custom" if any(r.matched_by == "override" for r in references) else references[0].source
+    quality = min((r.quality for r in references), key=lambda q: _QUALITY_RANK.get(q, 0), default=None)
+    conditions: dict[str, str] = {}
+    for reference in references:
+        conditions.update(dict(reference.conditions))
+    missing = cost.missing if usd else (*cost.missing, "currency")
+    return UsageRecord(
+        estimated_cost_usd=cost.total if usd else None,
+        pricing_note=note,
+        pricing_source=source,
+        pricing_version=basis_version,
+        pricing_quality=quality,
+        pricing_conditions=tuple(sorted(conditions.items())),
+        known_cost_usd=cost.known_total if usd else None,
+        missing_cost_components=tuple(dict.fromkeys(missing)),
+        cost=cost,
+        **values,
+    )
 
 
 def record_api_usage(
@@ -278,25 +439,39 @@ def record_api_usage(
     *,
     agent_name: str,
     default_model: str,
-    custom_pricing: ModelPricing | None = None,
+    custom_pricing: PricingInput = None,
     batch: bool = False,
     provider: str | None = "anthropic",
     turn_id: str | None = None,
+    at: datetime | None = None,
 ) -> UsageRecord | None:
     """Build a :class:`UsageRecord` from an Anthropic ``response.usage``.
 
     Uses the token counts the API actually reported; never reconstructs them
     from text. Returns ``None`` if the response carries no usage block.
 
+    ``custom_pricing`` is anything an agent accepts as ``pricing=`` (a
+    :class:`~orkexa.ModelPricing`, :class:`~orkexa.pricing.ModelPrice`,
+    :class:`~orkexa.pricing.PriceResolver`, :class:`~orkexa.pricing.PriceSnapshot` or a
+    pinned :class:`~orkexa.pricing.PricingBasis`); ``None`` uses the default resolver.
+    ``at`` is the time prices must be valid at (default: now).
+
     When ``usage.iterations`` contains more than plain sampling iterations
     (server-side compaction, a refusal fallback, an advisor), tokens and cost
     are summed over the iterations, each priced at its own model, because
     compaction tokens are not part of the top-level counters. Batch requests
-    (``service_tier == "batch"`` or ``batch=True``) are priced at 50 %.
+    (``service_tier == "batch"`` or ``batch=True``) use the price's batch tariff
+    (50 % for the built-in prices); ``speed`` and ``inference_geo`` select the
+    fast-mode and data-residency tariffs. Server-tool fees (web search) are priced
+    with the response's model; code execution without web search or web fetch is
+    billed per container hour, which usage does not report, so it makes the cost
+    incomplete.
     """
     usage = _get_field(response, "usage")
     if usage is None:
         return None
+    provider_name = provider or "anthropic"
+    basis = pricing_basis(custom_pricing)
 
     model = _get_field(response, "model", default_model) or default_model
     iterations = list(_get_field(usage, "iterations") or [])
@@ -312,54 +487,46 @@ def record_api_usage(
     server_tools = _get_field(usage, "server_tool_use")
     searches = _int_field(server_tools, "web_search_requests")
     fetches = _int_field(server_tools, "web_fetch_requests")
+    code_runs = _int_field(server_tools, "code_execution_requests")
 
-    note: str | None = None
-    cost: Decimal | None = None
-    priced = [
-        (entry, custom_pricing or resolve_pricing(entry_model, _total_input(entry)), entry_model)
+    conditions: dict[str, str] = {}
+    service_tier = "batch" if batch else _get_field(usage, "service_tier")
+    for dimension, value in (
+        ("service_tier", service_tier),
+        ("speed", _get_field(usage, "speed")),
+        ("inference_geo", _get_field(usage, "inference_geo")),
+    ):
+        if isinstance(value, str) and value:
+            conditions[dimension] = value
+    units = {"web_search_request": searches, "web_fetch_request": fetches}
+    if code_runs and not (searches or fetches):
+        units["code_execution_request"] = code_runs
+
+    parts = [
+        basis.calculate(provider_name, entry_model, _metered(entry, conditions=conditions), at=at)
         for entry, entry_model in entries
     ]
-    unknown = sorted({entry_model for _, prices, entry_model in priced if prices is None})
-    service_tier = "batch" if batch else _get_field(usage, "service_tier")
-    speed = _get_field(usage, "speed")
-    inference_geo = _get_field(usage, "inference_geo")
-    breakdown_ok = all(
-        entry["cache_creation_5m_input_tokens"] + entry["cache_creation_1h_input_tokens"]
-        == entry["cache_creation_input_tokens"]
-        for entry, _, _ in priced
-    )
-    if unknown:
-        note = f"No known pricing for model {', '.join(map(repr, unknown))}"
-    elif not breakdown_ok:
-        note = "Cache write TTL breakdown incomplete; cannot price this request reliably"
-    elif (
-        service_tier not in (None, "standard", "batch")
-        or speed not in (None, "standard")
-        or inference_geo not in (None, "global")
-    ):
-        note = "Nonstandard tier/speed/data residency requires adjusted pricing"
-    else:
-        token_cost = sum(
-            (_token_cost(prices, entry) for entry, prices, _ in priced if prices is not None), Decimal("0")
-        )
-        if service_tier == "batch":
-            token_cost /= 2
-        # Web search costs $10 / 1,000 searches; web fetch has no extra fee.
-        cost = token_cost + searches * _WEB_SEARCH_USD_PER_REQUEST
+    unpriced = sorted({m for (_, m), part in zip(entries, parts, strict=True) if "price" in part.missing})
+    if any(units.values()):
+        fee_usage = MeteredUsage(units=units, conditions=conditions)
+        parts.append(basis.calculate(provider_name, model, fee_usage, at=at))
+    cost = CostBreakdown.combine(parts)
+    note = _note(cost, unpriced, f"No known pricing for model {', '.join(map(repr, unpriced))}")
 
     request_id = getattr(response, "_request_id", None)
-    return UsageRecord(
+    return _priced_record(
+        cost,
+        basis_version=basis.version,
+        note=note,
         agent=agent_name,
         model=model,
         thinking_tokens=thinking,
         web_search_requests=searches,
         web_fetch_requests=fetches,
-        estimated_cost_usd=cost,
-        pricing_note=note,
         request_id=request_id if isinstance(request_id, str) else None,
         provider=provider,
         turn_id=turn_id,
-        pricing_source=None if cost is None else ("custom" if custom_pricing else "builtin"),
+        requested_model=default_model,
         **_count_fields(counts),
     )
 
@@ -370,20 +537,24 @@ def record_token_usage(
     agent_name: str,
     model: str,
     provider: str,
-    custom_pricing: ModelPricing | None = None,
+    custom_pricing: PricingInput = None,
     request_id: str | None = None,
     turn_id: str | None = None,
     batch: bool = False,
     requested_model: str | None = None,
+    at: datetime | None = None,
 ) -> UsageRecord:
     """Build a :class:`UsageRecord` from normalized counts (every provider but Anthropic).
 
-    Prices come from ``custom_pricing`` or :func:`orkexa.pricing.register_pricing`;
-    Orkexa ships no prices for other providers, so without them the cost is ``None``.
-    Registered prices are looked up for ``requested_model`` (the id the agent was
-    configured with) first and then for ``model`` (the id the API reported, which
-    may be a dated snapshot), the same order the budget pre-check uses.
-    Cache writes are priced at the 5-minute cache-write rate.
+    Prices come from ``custom_pricing`` (anything an agent accepts as ``pricing=``)
+    or the default resolver (:func:`orkexa.pricing.register_pricing`); Orkexa ships
+    no prices for other providers, so without them the cost is ``None``.
+    The price is resolved for ``model`` (the id the API reported) first and then for
+    ``requested_model`` (the id the agent was configured with, e.g. a deployment
+    name). Cache writes without a lifetime are priced at the 5-minute cache-write
+    rate. The reported ``service_tier`` (``"batch"`` with ``batch=True``) must be a
+    tariff of the price; reported server-tool units and special token classes
+    (audio) need a fee or rate, otherwise the cost is incomplete.
     """
     counts = {
         "input_tokens": usage.input_tokens,
@@ -394,34 +565,42 @@ def record_token_usage(
         or (usage.cache_creation_input_tokens - usage.cache_creation_1h_input_tokens),
         "cache_creation_1h_input_tokens": usage.cache_creation_1h_input_tokens,
     }
-    total = _total_input(counts)
-    prices = custom_pricing
-    if prices is None and requested_model is not None:
-        prices = resolve_pricing(requested_model, total, provider=provider)
-    if prices is None:
-        prices = resolve_pricing(model, total, provider=provider)
-    cost: Decimal | None = None
-    note: str | None = None
-    if prices is None:
-        note = (
-            f"No known pricing for {provider}:{model}; set pricing= or "
-            "orkexa.pricing.register_pricing() to estimate costs"
-        )
-    else:
-        cost = _token_cost(prices, counts)
-        if batch:
-            cost /= 2
-    return UsageRecord(
+    basis = pricing_basis(custom_pricing)
+    conditions: dict[str, str] = {}
+    tier = "batch" if batch else getattr(usage, "service_tier", None)
+    if isinstance(tier, str) and tier:
+        conditions["service_tier"] = tier
+    units = dict(getattr(usage, "units", ()) or ())
+    if usage.web_search_requests:
+        units["web_search_request"] = units.get("web_search_request", 0) + usage.web_search_requests
+    if usage.web_fetch_requests:
+        units["web_fetch_request"] = units.get("web_fetch_request", 0) + usage.web_fetch_requests
+    metered = _metered(
+        counts,
+        conditions=conditions,
+        units=units,
+        token_details=dict(getattr(usage, "token_details", ()) or ()),
+    )
+    cost = basis.calculate(provider, model, metered, requested_model=requested_model, at=at)
+    unpriced = [model] if "price" in cost.missing else []
+    note = _note(
+        cost,
+        unpriced,
+        f"No known pricing for {provider}:{model}; set pricing= or "
+        "orkexa.pricing.register_pricing() to estimate costs",
+    )
+    return _priced_record(
+        cost,
+        basis_version=basis.version,
+        note=note,
         agent=agent_name,
         model=model,
         thinking_tokens=usage.thinking_tokens,
         web_search_requests=usage.web_search_requests,
         web_fetch_requests=usage.web_fetch_requests,
-        estimated_cost_usd=cost,
-        pricing_note=note,
         request_id=request_id,
         provider=provider,
         turn_id=turn_id,
-        pricing_source=None if prices is None else ("custom" if custom_pricing else "registered"),
+        requested_model=requested_model,
         **_count_fields(counts),
     )

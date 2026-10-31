@@ -77,7 +77,11 @@ class Agent(AgentCore[OutputT]):
         max_retries: Client retries.
         name: Agent name for usage records (default: the model id).
         usage_tracker: A shared :class:`~orkexa.UsageTracker` (or a budget tracker).
-        pricing: Custom :class:`~orkexa.ModelPricing` for cost estimates.
+        pricing: Prices for cost calculation: a :class:`~orkexa.pricing.ModelPrice` or
+            legacy :class:`~orkexa.ModelPricing` (an override for this agent), a
+            :class:`~orkexa.pricing.PriceResolver` or a
+            :class:`~orkexa.pricing.PriceSnapshot`. Default: the tracker's
+            ``price_resolver``, else :func:`~orkexa.pricing.default_resolver`.
         capabilities: Explicit capability overrides, e.g. ``{"tools": "supported"}``.
         history_policy: ``"strict"`` (default): continuing a conversation of another
             provider raises if reasoning or native parts would be lost; ``"convert"``

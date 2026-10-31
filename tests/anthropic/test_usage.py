@@ -66,8 +66,11 @@ def test_cost_includes_cache_and_web_search() -> None:
     [
         ("mystery", {}, "No known pricing"),
         ("claude-opus-5-5", {"cache_creation_input_tokens": 10}, "TTL breakdown incomplete"),
-        ("claude-opus-5-5", {"speed": "fast"}, "Nonstandard"),
-        ("claude-opus-5-5", {"inference_geo": "us"}, "Nonstandard"),
+        # Fast mode and US data residency are priced where the price list has them
+        # (see test_pricing.py); elsewhere they stay unknown.
+        ("claude-sonnet-5-5", {"speed": "fast"}, "Nonstandard"),
+        ("claude-haiku-4-5", {"inference_geo": "us"}, "Nonstandard"),
+        ("claude-opus-5-5", {"service_tier": "priority"}, "Nonstandard"),
     ],
 )
 def test_unpriceable_requests(model: str, usage: dict[str, Any], note: str) -> None:
