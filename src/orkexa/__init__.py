@@ -101,7 +101,7 @@ from .providers import (
 )
 from .retrieval import Chunk, Citation, Hit, Index, SQLiteIndex, citations, retrieval_sources, split_text
 from .tools import Tool
-from .usage import UsageRecord, UsageSummary, UsageTracker
+from .usage import Reservation, UsageRecord, UsageSummary, UsageTracker
 
 try:
     __version__ = version("orkexa")
@@ -163,6 +163,7 @@ __all__ = [
     "Refinement",
     "RefusalError",
     "RefusalMode",
+    "Reservation",
     "ResponseCompleted",
     "SQLiteFileStore",
     "SQLiteIndex",

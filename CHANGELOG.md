@@ -4,6 +4,23 @@
 
 First release of Orkexa.
 
+### Added: budget reservations (Adaptive Orchestration AO-12)
+
+* `BudgetTracker` reserves an upper bound of every request's cost before it is sent
+  and releases it once the usage is recorded (`try_reserve()`, `release()`,
+  `reserved_usd`, `Reservation`). A request that does not fit next to the requests in
+  flight waits for them (`WaitForBudget` effect; async agents never block the event
+  loop). **Behavior change:** agents sharing a tracker no longer overshoot it by one
+  request each when they run concurrently.
+* `orkexa.core.cost_bound.request_cost_bound()`: input size and `max_tokens` at the
+  highest rates of a price (tiers, tariffs, cache classes); `None` (never 0) for
+  requests without a bound, counted in `unbounded_requests`.
+* `on_oversized="exclusive"` (default: an oversized request runs alone) or `"reject"`
+  (refused before it is sent); `oversized_requests`; `hard_maximum`.
+* Child scopes: `BudgetTracker(limit, parent=..., prefix=...)` passes every record,
+  check and reservation on to the parent, so neither limit can be bypassed.
+* Native batches are still admitted as one request without a reservation.
+
 ### Added: flow kernel (`orkexa.flow`)
 
 * `orkexa.flow`, a deterministic, I/O-free workflow kernel (ADR 0009, guide

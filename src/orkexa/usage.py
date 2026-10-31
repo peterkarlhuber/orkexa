@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, fields
 from datetime import datetime
 from decimal import Decimal
+import threading
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from .pricing import CostBreakdown, MeteredUsage, PriceResolver, PricingInput, pricing_basis
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from .pricing import PriceLookup
 
 __all__ = [
+    "Reservation",
     "UsageRecord",
     "UsageSummary",
     "UsageTracker",
@@ -26,6 +28,10 @@ __all__ = [
     "summarize_usage",
     "workflow",
 ]
+
+
+_RELEASED = threading.Condition()
+"""Notified whenever a budget reservation is released (waiters re-check their trackers)."""
 
 
 @dataclass(frozen=True)
@@ -239,6 +245,26 @@ def current_workflow() -> str | None:
     return _WORKFLOW.get()
 
 
+@dataclass(eq=False)
+class Reservation:
+    """Money held back for one model request until its usage is recorded.
+
+    :meth:`UsageTracker.try_reserve` returns it before the request; the agent releases
+    it with :meth:`UsageTracker.release` once the request's usage is recorded (or the
+    request failed). ``amount`` is ``None`` when the request's cost has no upper bound.
+    """
+
+    tracker: UsageTracker
+    amount: Decimal | None
+    agent: str
+    parent: Reservation | None = None
+    released: bool = False
+
+    @property
+    def bounded(self) -> bool:
+        return self.amount is not None
+
+
 class UsageTracker:
     """Shared ledger for several agents, including agents delegated as tools.
 
@@ -270,6 +296,25 @@ class UsageTracker:
 
     def check(self) -> None:
         """Raise if a limit is exceeded; a plain tracker has none (see ``BudgetTracker``)."""
+
+    def try_reserve(
+        self, *, agent: str, provider: str, model: str, amount: Decimal | None
+    ) -> Reservation | None:
+        """Hold back ``amount`` USD for one request; ``None`` means: wait and try again.
+
+        A plain tracker has no limit and admits every request at once. Budget trackers
+        raise when the request cannot fit even after the requests in flight finished.
+        """
+        return Reservation(self, amount, agent)
+
+    def release(self, reservation: Reservation) -> None:
+        """Give back what :meth:`try_reserve` held; releasing twice does nothing."""
+        reservation.released = True
+
+    def wait_for_release(self, timeout: float) -> None:
+        """Block until any reservation is released, or ``timeout`` seconds passed."""
+        with _RELEASED:
+            _RELEASED.wait(timeout)
 
     @property
     def records(self) -> tuple[UsageRecord, ...]:

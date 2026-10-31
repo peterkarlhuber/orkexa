@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
-import threading
 
 import pytest
 
@@ -65,36 +64,6 @@ def test_shared_budget_stops_every_agent() -> None:
     with pytest.raises(BudgetExceededError):
         second.ask("go")
     assert fake.requests == []
-
-
-def test_concurrent_agents_overshoot_a_shared_budget_by_one_request_each() -> None:
-    """The documented soft limit: requests admitted together are all billed."""
-    budget = BudgetTracker(COST)
-    barrier = threading.Barrier(3, timeout=5)
-
-    def reply(request: object) -> object:
-        barrier.wait()  # all three requests are in flight before any cost is known
-        return text("x")
-
-    agents = [_agent(budget, [reply], name=f"a{i}")[0] for i in range(3)]
-    errors: list[BaseException] = []
-
-    def run(agent: Agent[str]) -> None:
-        try:
-            agent.ask("go")
-        except BudgetExceededError as exc:
-            errors.append(exc)
-
-    threads = [threading.Thread(target=run, args=(agent,)) for agent in agents]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert len(budget.records) == 3
-    assert budget.spent_usd == 3 * COST
-    assert len(errors) >= 1  # whoever records past the limit learns about it
-    with pytest.raises(BudgetExceededError):
-        agents[0].ask("again")
 
 
 def test_plain_usage_tracker_check_is_a_no_op() -> None:
