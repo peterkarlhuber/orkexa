@@ -111,8 +111,11 @@ Keep stores in a directory with suitable ACLs.
 * Existing SQLite databases, histories and registry directories keep their mode until
   they are rewritten (histories and records) or changed by hand (databases,
   directories).
-* Budgets are soft limits: the last admitted request, one request per concurrently
-  running agent, and every item of an admitted native batch can exceed the limit (see
+* Budgets reserve the most expensive outcome of every request in flight, so concurrent
+  agents cannot overshoot a shared limit together. A single oversized request (with
+  the default `on_oversized="exclusive"`), requests without a cost bound (no price,
+  native tools, images, binary documents) and every item of an admitted native batch
+  can still exceed it; `hard_maximum` tells whether that happened (see
   [Usage and budgets](usage-and-budgets.md)).
 * `DockerSandbox` isolation has not been audited; container escapes are out of scope
   of Orkexa.

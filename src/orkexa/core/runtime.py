@@ -48,10 +48,10 @@ from ..errors import (
 )
 from ..files import FileStore
 from ..memory import MEMORY_TOOL_NAME, MemoryBackend
-from ..pricing import PricingBasis, PricingInput, pricing_basis
+from ..pricing import ModelPrice, PricingBasis, PricingInput, pricing_basis
 from ..retrieval import Index
 from ..tools import Tool, ToolOutput
-from ..usage import UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
+from ..usage import Reservation, UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
 from .capabilities import ModelCapabilities, Support
 from .conversion import (
     HistoryPolicy,
@@ -62,6 +62,7 @@ from .conversion import (
     to_json,
     to_parts,
 )
+from .cost_bound import request_cost_bound
 from .types import (
     DocumentPart,
     Effort,
@@ -84,7 +85,16 @@ from .types import (
 if TYPE_CHECKING:
     from ..providers.base import Provider
 
-__all__ = ["AgentCore", "CallModel", "Emit", "OutputT", "RefusalMode", "RunTools", "ToolCall"]
+__all__ = [
+    "AgentCore",
+    "CallModel",
+    "Emit",
+    "OutputT",
+    "RefusalMode",
+    "RunTools",
+    "ToolCall",
+    "WaitForBudget",
+]
 
 OutputT = TypeVar("OutputT", default=str)
 RefusalMode = Literal["raise", "return"]
@@ -125,7 +135,14 @@ class Emit:
     event: StreamEvent
 
 
-Effect = CallModel | RunTools | Emit
+@dataclass(frozen=True)
+class WaitForBudget:
+    """Effect: wait until ``tracker`` (or one of its parents) released a reservation."""
+
+    tracker: UsageTracker
+
+
+Effect = CallModel | RunTools | Emit | WaitForBudget
 
 
 @dataclass(frozen=True)
@@ -357,17 +374,38 @@ class AgentCore(Generic[OutputT]):
         """Pin the prices for one request: ``pricing=``, else the tracker's resolver, else the default."""
         return pricing_basis(self.pricing, resolver=self.usage_tracker.price_resolver)
 
-    def _check_price(self, model: str, basis: PricingBasis) -> None:
+    def _check_price(self, model: str, basis: PricingBasis) -> ModelPrice | None:
+        """The pre-checks of the tracker; returns the price the request will be billed with."""
         lookup = basis.lookup(self.adapter.name, model)
         if lookup.price is None and _prices_itself(self.adapter, model):
             # A custom provider that overrides has_pricing() prices its own usage.
             self.usage_tracker.before_request(
                 agent=self.name, provider=self.adapter.name, model=model, priced=True
             )
-            return
+            return None
         self.usage_tracker.check_request(
             agent=self.name, provider=self.adapter.name, model=model, lookup=lookup
         )
+        return lookup.price
+
+    def _admit(self, request: ModelRequest, basis: PricingBasis) -> Generator[Effect, Any, Reservation]:
+        """Pre-check ``request`` and reserve the most it can cost; waits while the budget is held.
+
+        The tracker answers ``None`` while requests in flight hold the money this one
+        needs; the driver then waits for a release (:class:`WaitForBudget`) and the
+        request is checked again.
+        """
+        while True:
+            price = self._check_price(request.model, basis)
+            reservation = self.usage_tracker.try_reserve(
+                agent=self.name,
+                provider=self.adapter.name,
+                model=request.model,
+                amount=request_cost_bound(request, price),
+            )
+            if reservation is not None:
+                return reservation
+            yield WaitForBudget(self.usage_tracker)
 
     def _add_usage_record(self, record: UsageRecord, *, turn: bool = True) -> None:
         label = current_workflow()
@@ -703,10 +741,15 @@ class AgentCore(Generic[OutputT]):
                 # One pinned price basis per request: the pre-check and the bill use the
                 # same snapshot even if prices are updated while the request runs.
                 basis = self._pricing_basis()
-                self._check_price(request.model, basis)
-                self._request_basis = basis
-                response: ModelResponse = yield CallModel(request)
-                record = self._record(response)
+                reservation = yield from self._admit(request, basis)
+                try:
+                    self._request_basis = basis
+                    response: ModelResponse = yield CallModel(request)
+                    record = self._record(response)
+                finally:
+                    # Released only after the usage is recorded: the cost is always held
+                    # back either as a reservation or as spent money.
+                    self.usage_tracker.release(reservation)
                 if record is not None:
                     yield Emit(UsageReported(record))
                 step = self._process_response(response, history, round_number)

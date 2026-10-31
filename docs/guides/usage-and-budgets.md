@@ -60,11 +60,30 @@ budget = BudgetTracker("5.00", on_unpriced="reject")
   with `on_price_issue="warn" | "reject"` rejects or reports stale, low-quality or
   incomplete price bases before and after requests (see the
   [pricing guide](pricing.md#budgets-and-price-policies)).
-* The limit is a **soft limit**, not a hard billing limit: a request's cost is known
-  only after it ran, so the last admitted request can overshoot it, and agents that
-  share a tracker and run concurrently can each overshoot it by one request. Keep a
-  margin, run budget-critical agents sequentially, and use the provider's spend
-  limits for hard caps.
+* **Reservations.** Before every request the tracker holds back the most the request
+  can cost (`orkexa.core.cost_bound.request_cost_bound`: the UTF-8 size of everything
+  sent plus a framing allowance as input tokens, `max_tokens` as output tokens, both at
+  the highest rate of the price, its long-context tiers and tariff options). After the
+  usage is recorded, the reservation is released. A request starts only while
+  `spent + reserved + bound <= limit`; otherwise it **waits** for requests in flight
+  (async agents wait without blocking the event loop). So agents that share a tracker
+  and run concurrently can no longer overshoot it together. `reserved_usd` shows what
+  is held back.
+* A request whose bound is larger than the rest of the budget even when nothing is in
+  flight is *oversized*. `on_oversized="exclusive"` (default) runs it alone, so it can
+  overshoot the limit by itself as a single sequential request always could;
+  `on_oversized="reject"` refuses it before it is sent (`BudgetExceededError`, "can
+  cost up to ..."), which makes the limit a hard maximum for requests with a bound.
+* Some requests have **no bound**: no price, a price in another currency than USD,
+  provider-native tools (server tools with fees, MCP toolsets), images, binary
+  documents and files. They are admitted while the budget is not used up, are never
+  reserved as 0 and are counted in `unbounded_requests`.
+* `hard_maximum` is `True` only when the limit capped every admitted request: no
+  unbounded, oversized or unpriced request, here or in a parent.
+* `BudgetTracker(limit, parent=other, prefix="team")` is a child scope: every record
+  and reservation also counts in `other` (records as `"team/<agent>"`), so neither
+  scope can spend past the other's limit.
+* The limit is still not a billing limit; use the provider's spend limits for that.
 * A native batch (`Evaluator.evaluate_many(batch=True)`) is admitted as a whole like
   one request: it is not submitted when the budget is used up or, with
   `on_unpriced="reject"`, when the model has no price. Its cost is only known when it

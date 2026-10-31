@@ -8,7 +8,7 @@ import inspect
 from typing import Any
 
 from .content import Prompt
-from .core.runtime import AgentCore, CallModel, Effect, Emit, OutputT, RunTools, ToolCall
+from .core.runtime import AgentCore, CallModel, Effect, Emit, OutputT, RunTools, ToolCall, WaitForBudget
 from .core.types import (
     Effort,
     ModelRequest,
@@ -19,6 +19,9 @@ from .core.types import (
     ToolResultPart,
 )
 from .tools import ToolOutput
+
+_BUDGET_POLL = 0.05
+"""Seconds between budget checks of a waiting async request."""
 
 __all__ = ["AsyncAgent"]
 
@@ -98,6 +101,10 @@ class AsyncAgent(AgentCore[OutputT]):
             return await self._run_tools(effect.calls, effect.request)
         if isinstance(effect, Emit):
             await self._dispatch(effect.event)
+            return None
+        if isinstance(effect, WaitForBudget):
+            # Never block the event loop: the request holding the budget may run on it.
+            await asyncio.sleep(_BUDGET_POLL)
             return None
         raise TypeError(f"Unknown effect {effect!r}")
 

@@ -9,7 +9,17 @@ from contextvars import copy_context
 from typing import Any
 
 from .content import Prompt
-from .core.runtime import AgentCore, CallModel, Effect, Emit, OutputT, RefusalMode, RunTools, ToolCall
+from .core.runtime import (
+    AgentCore,
+    CallModel,
+    Effect,
+    Emit,
+    OutputT,
+    RefusalMode,
+    RunTools,
+    ToolCall,
+    WaitForBudget,
+)
 from .core.types import (
     Effort,
     ModelRequest,
@@ -20,6 +30,9 @@ from .core.types import (
     ToolResultPart,
 )
 from .tools import ToolOutput
+
+_BUDGET_WAIT = 0.25
+"""Seconds a request waits for a budget release before it checks again."""
 
 __all__ = ["Agent", "RefusalMode", "ToolCall"]
 
@@ -153,6 +166,9 @@ class Agent(AgentCore[OutputT]):
             return self._run_tools(effect.calls, effect.request)
         if isinstance(effect, Emit):
             self._event_hooks(effect.event)
+            return None
+        if isinstance(effect, WaitForBudget):
+            effect.tracker.wait_for_release(_BUDGET_WAIT)
             return None
         raise TypeError(f"Unknown effect {effect!r}")
 
