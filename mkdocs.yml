@@ -80,6 +80,7 @@ nav:
       - Usage, pricing and budgets: guides/usage-and-budgets.md
       - Pricing engine: guides/pricing.md
       - Multi-agent and dynamic agents: guides/multi-agent.md
+      - Flows, loops and approvals: guides/flows.md
       - Security: guides/security.md
   - Data protection and AI regulation:
       - compliance/index.md
@@ -98,6 +99,7 @@ nav:
       - Memory, files, retrieval: reference/storage.md
       - Evaluation: reference/evaluation.md
       - Dynamic agents: reference/dynamic.md
+      - Flows: reference/flow.md
       - Usage: reference/usage.md
       - Pricing: reference/pricing.md
       - Errors: reference/errors.md
@@ -110,6 +112,7 @@ nav:
       - ADR 0006 provider APIs: architecture/decisions/0006-provider-apis.md
       - ADR 0007 credentials and endpoints: architecture/decisions/0007-credentials-and-endpoints.md
       - ADR 0008 pricing engine: architecture/decisions/0008-pricing-engine.md
+      - ADR 0009 flow kernel: architecture/decisions/0009-flow-kernel.md
   - Development:
       - development/index.md
       - Releasing: development/releasing.md
