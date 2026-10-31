@@ -647,3 +647,13 @@ def test_price_policy_flags_stale_and_unaccepted_prices() -> None:
         PricePolicy(accepted_quality={"perfect"})
     with pytest.raises(PricingError):
         PricePolicy(max_age=timedelta(0))
+
+
+def test_the_documented_snapshot_format_loads() -> None:
+    from pathlib import Path
+
+    guide = (Path(__file__).resolve().parents[1] / "docs" / "guides" / "pricing.md").read_text()
+    block = guide.split("### Serialization format", 1)[1].split("```json", 1)[1].split("```", 1)[0]
+    snapshot = PriceSnapshot.from_json(block)
+    price = snapshot.lookup("openai", "gpt-5-prod", at=NOW).require()
+    assert price.fee("web_search_call") is not None and price.long_context[0].above_input_tokens == 272_000

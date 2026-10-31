@@ -70,7 +70,7 @@ def run(name: str) -> None:
 
 def test_every_example_is_covered() -> None:
     scripts = sorted(p.name for p in EXAMPLES.glob("[0-9][0-9]_*.py"))
-    assert len(scripts) == 11
+    assert len(scripts) == 12
     tested = {name.split("_")[2] for name in globals() if name.startswith("test_example_")}
     assert tested == {s[:2] for s in scripts}
 
@@ -285,3 +285,12 @@ def test_example_11_stops_without_an_isolated_sandbox(
     with pytest.raises(SystemExit, match="not a security boundary"):
         run("11_dynamic_tools_sandbox.py")
     assert offline.openai.script.calls == []
+
+
+def test_example_12(capsys: pytest.CaptureFixture[str]) -> None:
+    run("12_pricing_snapshots.py")  # offline by design: no client is patched
+    out = capsys.readouterr().out
+    assert "total $0.160000 from snapshot acme-2026-11 (acme-contract, contract)" in out
+    assert "priority tier: total=None missing=['tariff:service_tier=priority']" in out
+    assert "pinned acme-2026-11: $1.25, current acme-2026-12: $1.00" in out
+    assert "record: cost=$0.00002 version=acme-2026-12 quality=estimated source=acme-contract" in out

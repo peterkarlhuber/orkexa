@@ -15,19 +15,33 @@ fails later. A `UsageRecord` carries `provider`, `model`, `agent`, `turn_id`,
 
 ## Prices
 
-Orkexa ships Anthropic prices. For any other provider the cost is `None` (unknown,
-not zero) until you register prices:
+Costs come from the [pricing engine](pricing.md). Orkexa ships Anthropic prices; for
+any other provider the cost is `None` (unknown, not zero) until you supply prices:
 
 ```python
 from orkexa import ModelPricing, register_pricing
+from orkexa.pricing import PriceResolver, PriceSnapshot
 
 register_pricing("openai", "gpt-5", ModelPricing.of("1.25", "10", "1.25", "1.25", "0.125"))
 agent = Agent(model="gemini:gemini-2.5-flash", pricing=ModelPricing.of("0.3", "2.5", "0.3", "0.3", "0.03"))
+
+# Your own versioned catalog, isolated from the process-wide registry:
+resolver = PriceResolver(PriceSnapshot.from_json(catalog_json))
+agent = Agent(model="openai:gpt-5", pricing=resolver)
+tracker = UsageTracker(price_resolver=resolver)  # for every agent sharing it
 ```
 
 `UsageRecord.pricing_source` says where a price came from: `"builtin"` (Orkexa's
-Anthropic table), `"registered"`, `"custom"` (`pricing=`) or `None` (unknown). Registered prices are looked up for the
-configured model id first, then for the id the API reported.
+Anthropic table), `"registered"`, `"custom"` (`pricing=`), your catalog's `source`, or
+`None` (unknown). `pricing_version` names the snapshot, `pricing_quality` its quality,
+`pricing_conditions` the tariff applied (batch, service tier, fast mode, data
+residency) and `cost` the itemized breakdown. The id the API reported is resolved
+first, then the configured one.
+
+A cost that could only be partly priced (an unpriced server tool, audio tokens
+without an audio rate, an unknown service tier) is `None` as well; `known_cost_usd`
+and `missing_cost_components` show the known part and what is missing.
+`UsageSummary.known_cost_usd` and `cost_complete` do the same for aggregates.
 
 ## Budgets
 
@@ -40,12 +54,17 @@ budget = BudgetTracker("5.00", on_unpriced="reject")
 * Before every request the tracker refuses to start when the budget is used up
   (`spent_usd >= limit_usd`; a budget of 0 sends no request at all).
 * After every response it records the usage and raises `BudgetExceededError` when the
-  limit is exceeded. Server-tool fees are added only where the provider reports them
-  (Anthropic web search/fetch).
-* The limit is a **soft limit**: a request's cost is known only after it ran, so the
-  last admitted request can overshoot it, and agents that share a tracker and run
-  concurrently can each overshoot it by one request. Keep a margin, or run
-  budget-critical agents sequentially.
+  limit is exceeded. `spent_usd` counts complete costs and the known part of
+  incomplete ones.
+* `price_resolver=` gives the tracker its own catalog; `price_policy=PricePolicy(...)`
+  with `on_price_issue="warn" | "reject"` rejects or reports stale, low-quality or
+  incomplete price bases before and after requests (see the
+  [pricing guide](pricing.md#budgets-and-price-policies)).
+* The limit is a **soft limit**, not a hard billing limit: a request's cost is known
+  only after it ran, so the last admitted request can overshoot it, and agents that
+  share a tracker and run concurrently can each overshoot it by one request. Keep a
+  margin, run budget-critical agents sequentially, and use the provider's spend
+  limits for hard caps.
 * A native batch (`Evaluator.evaluate_many(batch=True)`) is admitted as a whole like
   one request: it is not submitted when the budget is used up or, with
   `on_unpriced="reject"`, when the model has no price. Its cost is only known when it
@@ -59,7 +78,8 @@ budget = BudgetTracker("5.00", on_unpriced="reject")
 * `on_unpriced` decides what happens to models without a price: `"ignore"` (count as
   0; the default without a limit), `"warn"` (default with a
   limit; one `UnpricedUsageWarning` per model), `"reject"` (`UnpricedModelError`
-  before the request is sent).
+  before the request is sent, and after a request whose cost turned out unknown or
+  incomplete; the request is recorded first).
 
 One tracker can be shared by agents of every provider (`usage_by_provider()`,
 `usage_by_agent()`, `usage_by_model()`, `usage_by_turn()`, `usage_by_workflow()`).

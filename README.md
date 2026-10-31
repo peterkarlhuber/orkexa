@@ -112,7 +112,7 @@ until you declare it (`capabilities={"tools": "supported"}`). The full matrix is
 | | |
 |---|---|
 | Getting started | [Installation](docs/getting-started/installation.md) · [Quickstart](docs/getting-started/quickstart.md) · [Providers and capabilities](docs/getting-started/providers.md) |
-| Guides | [Tools and structured output](docs/guides/tools-and-structured-output.md) · [Streaming, hooks and errors](docs/guides/streaming-hooks-errors.md) · [History](docs/guides/history.md) · [Memory, files and RAG](docs/guides/memory-files-rag.md) · [Usage and budgets](docs/guides/usage-and-budgets.md) · [Multi-agent](docs/guides/multi-agent.md) |
+| Guides | [Tools and structured output](docs/guides/tools-and-structured-output.md) · [Streaming, hooks and errors](docs/guides/streaming-hooks-errors.md) · [History](docs/guides/history.md) · [Memory, files and RAG](docs/guides/memory-files-rag.md) · [Usage and budgets](docs/guides/usage-and-budgets.md) · [Pricing engine](docs/guides/pricing.md) · [Multi-agent](docs/guides/multi-agent.md) |
 | Operations | [Security](docs/guides/security.md) · [Data protection and AI regulation](docs/compliance/index.md) · [Troubleshooting and FAQ](docs/troubleshooting.md) |
 | Capabilities | [Feature matrix](docs/feature-matrix.md) |
 | Internals | [Architecture and ADRs](docs/architecture/target-architecture.md) · [Changelog](CHANGELOG.md) |

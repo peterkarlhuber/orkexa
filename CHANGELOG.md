@@ -4,6 +4,53 @@
 
 First release of Orkexa.
 
+### Added: pricing engine (PRICING-1)
+
+* `orkexa.pricing` is now a package with a provider-independent pricing engine
+  (guide: `docs/guides/pricing.md`): `ModelPrice` (Decimal rates per million tokens,
+  explicit currency, explicit aliases, opt-in dated ids, long-context tiers, tariffs
+  for service tier/batch/speed/data residency/regions, per-unit fees, special token
+  rates, source, version, validity period, check date and quality), immutable,
+  versioned and JSON-serializable `PriceSnapshot` (format `orkexa.price-snapshot/1`,
+  content hash), isolated thread-safe `PriceResolver` with snapshot history, pinned
+  `PricingBasis`, `MeteredUsage`, `calculate_cost()` with an itemized `CostBreakdown`
+  and `PriceReference`s, `PricePolicy`, `round_cost()`, `PricingError` and
+  `PriceNotFoundError`.
+* Agents accept `pricing=` as `ModelPrice`, `PriceResolver` or `PriceSnapshot` (and
+  `ModelPricing` as before); `UsageTracker(price_resolver=...)` prices every agent that
+  shares it. Each request is priced with one pinned snapshot.
+* `UsageRecord`: `requested_model`, `pricing_version`, `pricing_quality`,
+  `pricing_conditions`, `known_cost_usd`, `missing_cost_components`, `cost`,
+  `cost_complete`, `known_cost`, `to_dict()`/`from_dict()`. `UsageSummary`:
+  `known_cost_usd`, `missing_cost_components`, `cost_complete`.
+* `BudgetTracker(price_resolver=..., price_policy=..., on_price_issue=...)`,
+  `UsageTracker.check_request()`, `UnreliablePriceError`, `UnreliablePriceWarning`.
+* Provider adapters report what prices depend on: the OpenAI/Chat Completions service
+  tier, fee-bearing OpenAI hosted-tool calls, audio tokens, Gemini audio/image tokens
+  and Google Search grounding, Anthropic code execution.
+* The built-in Anthropic catalog (checked 2026-10-31) adds Claude Opus 4.5,
+  Sonnet 4.5, Mythos 5 and Mythos 5.1, fast mode (2x), US data residency (1.1x) and
+  batch as tariffs. Example `12_pricing_snapshots.py` (offline).
+
+### Changed: pricing corrections
+
+* Claude Sonnet 5.5 cache reads cost $0.10 per million tokens (0.05x input, per the
+  official price list), not $0.20.
+* Anthropic fast mode and US-only data residency are priced instead of unknown.
+* A reported non-standard OpenAI/compatible `service_tier` (`flex`, `priority`, ...)
+  makes the cost unknown unless the price has that tariff (it was priced as standard).
+* Unpriced server-tool fees, audio/image tokens and Anthropic code execution without
+  web tools make a cost incomplete (`estimated_cost_usd=None`, known part in
+  `known_cost_usd`) instead of being left out silently.
+* The reported model id is resolved before the configured one; `pricing_source` is set
+  whenever a price was used.
+* `BudgetTracker.spent_usd` includes the known part of incomplete costs;
+  `on_unpriced="reject"` also raises after a request whose cost turned out unknown
+  (it is recorded first).
+* `Provider.usage_record(pricing=...)` receives a pinned `PricingBasis`; custom
+  providers pass it on to `record_token_usage(custom_pricing=...)` unchanged.
+  Migration notes: `docs/guides/pricing.md`, section "Backward compatibility and migration".
+
 ### Added
 
 * Shared agent runtime (`Agent`, `AsyncAgent`) as a sans-I/O state machine with
