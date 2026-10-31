@@ -167,11 +167,16 @@ a non-streamed call returns, so history and results are identical. Hooks:
 | OpenAI Responses / Chat | input − cached − cache-write | `cached_tokens` | `cache_write_tokens` | as reported (includes reasoning) | `reasoning_tokens` |
 | Gemini | prompt − cached + tool-use prompt | `cached_content_token_count` | 0 | candidates + thoughts | `thoughts_token_count` |
 
-Costs use `Decimal`; unknown prices give `estimated_cost_usd=None` (never 0) with a
-`pricing_note`. Only Anthropic prices ship (sourced); other providers are
-priced through `pricing=` or `register_pricing()`. `BudgetTracker` checks before every
-request and after every recorded response; unpriced requests follow
-`on_unpriced="ignore" | "warn" | "reject"`.
+Costs come from the pricing engine (`orkexa.pricing`, ADR 0008): immutable,
+versioned `PriceSnapshot`s of `ModelPrice`s, isolated `PriceResolver`s and one pinned
+`PricingBasis` per request. Costs use `Decimal`; unknown or incomplete costs give
+`estimated_cost_usd=None` (never 0) with a `pricing_note`, the known part in
+`known_cost_usd` and the price basis (`pricing_version`, `pricing_quality`,
+`pricing_conditions`, itemized `cost`). Only Anthropic prices ship (sourced); other
+providers are priced through `pricing=`, a tracker's `price_resolver` or
+`register_pricing()`. `BudgetTracker` checks before every request and after every
+recorded response; unpriced requests follow `on_unpriced="ignore" | "warn" | "reject"`,
+price-policy violations `on_price_issue`.
 
 ### Errors and secrets
 

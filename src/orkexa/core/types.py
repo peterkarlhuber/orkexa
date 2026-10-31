@@ -318,6 +318,13 @@ class TokenUsage:
     thinking_tokens: int = 0
     web_search_requests: int = 0
     web_fetch_requests: int = 0
+    service_tier: str | None = None
+    """The service tier the provider reports it used (``"default"``, ``"flex"``, ...)."""
+    token_details: tuple[tuple[str, int], ...] = ()
+    """Token classes billed at special rates although counted above, e.g.
+    ``(("audio_input", 120),)``; see :attr:`orkexa.pricing.TokenRates.special`."""
+    units: tuple[tuple[str, int], ...] = ()
+    """Billable non-token quantities, e.g. ``(("web_search_call", 2),)``."""
 
 
 @dataclass

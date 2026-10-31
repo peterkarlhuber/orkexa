@@ -314,21 +314,49 @@ def _number(obj: Any, name: str) -> int:
     return int(value) if isinstance(value, int) else 0
 
 
-def responses_usage(usage: Any) -> TokenUsage | None:
-    """Normalized usage: cached and cache-write tokens are not counted as plain input."""
+#: Output items of hosted tools that OpenAI bills per call on top of tokens.
+FEE_BEARING_CALLS = ("code_interpreter_call", "file_search_call", "image_generation_call", "web_search_call")
+
+
+def responses_usage(usage: Any, response: Any = None, requested_tier: str | None = None) -> TokenUsage | None:
+    """Normalized usage: cached and cache-write tokens are not counted as plain input.
+
+    With ``response``, the service tier OpenAI reports (else ``requested_tier``) and
+    the number of fee-bearing hosted-tool calls are recorded for pricing.
+    """
     if usage is None:
         return None
-    details = getattr(usage, "input_tokens_details", None)
+    details = _field(usage, "input_tokens_details")
+    output_details = _field(usage, "output_tokens_details")
     cached = _number(details, "cached_tokens")
     written = _number(details, "cache_write_tokens")
+    tier = _field(response, "service_tier") or requested_tier
+    calls: dict[str, int] = {}
+    for item in _field(response, "output") or []:
+        kind = _field(item, "type")
+        if kind in FEE_BEARING_CALLS:
+            calls[kind] = calls.get(kind, 0) + 1
+    token_details = {
+        "audio_input": _number(details, "audio_tokens"),
+        "audio_output": _number(output_details, "audio_tokens"),
+    }
     return TokenUsage(
         input_tokens=max(0, _number(usage, "input_tokens") - cached - written),
         output_tokens=_number(usage, "output_tokens"),
         cache_read_input_tokens=cached,
         cache_creation_input_tokens=written,
         cache_creation_5m_input_tokens=written,
-        thinking_tokens=_number(getattr(usage, "output_tokens_details", None), "reasoning_tokens"),
+        thinking_tokens=_number(output_details, "reasoning_tokens"),
+        service_tier=tier if isinstance(tier, str) and tier else None,
+        token_details=tuple((kind, count) for kind, count in token_details.items() if count),
+        units=tuple(sorted(calls.items())),
     )
+
+
+def _field(obj: Any, name: str) -> Any:
+    if obj is None:
+        return None
+    return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
 
 
 class OpenAIProvider(Provider):
@@ -536,7 +564,9 @@ class OpenAIProvider(Provider):
             parsed=parsed,
             parse_error=error,
             stop_details=stop_details,
-            usage=responses_usage(getattr(response, "usage", None)),
+            usage=responses_usage(
+                getattr(response, "usage", None), response, self._options(request).service_tier
+            ),
             request_id=request_id if isinstance(request_id, str) else getattr(response, "id", None),
             raw=response,
         )

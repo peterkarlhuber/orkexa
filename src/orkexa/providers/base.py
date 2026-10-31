@@ -32,7 +32,7 @@ from ..errors import (
     RateLimitError,
     UnsupportedCapabilityError,
 )
-from ..pricing import ModelPricing, resolve_pricing
+from ..pricing import PricingInput, resolve_pricing
 from ..usage import UsageRecord, record_token_usage
 
 __all__ = ["Provider", "ProviderConfig", "redact", "require_module"]
@@ -269,7 +269,7 @@ class Provider(ABC):
         response: ModelResponse,
         *,
         agent: str,
-        pricing: ModelPricing | None,
+        pricing: PricingInput,
         turn_id: str | None,
         model: str,
         batch: bool = False,

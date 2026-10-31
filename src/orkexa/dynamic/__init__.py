@@ -60,12 +60,14 @@ from .errors import (
     ToolValidationError,
     UnpricedModelError,
     UnpricedUsageWarning,
+    UnreliablePriceError,
+    UnreliablePriceWarning,
     UnsafeOptInWarning,
 )
 from .factory import AgentFactory
 from .orchestrator import Orchestrator
 from .output_registry import OutputFormatRegistry
-from .policy import RESERVED_TOOL_NAMES, BudgetTracker, DynamicPolicy, UnpricedPolicy
+from .policy import RESERVED_TOOL_NAMES, BudgetTracker, DynamicPolicy, PriceIssuePolicy, UnpricedPolicy
 from .review import AGENT_REVIEW_CRITERIA, TOOL_REVIEW_CRITERIA, review_agent, review_tool
 from .sandbox import DockerSandbox, Sandbox, SandboxTestResult, SubprocessSandbox, ValidationResult
 from .sandboxed_tool import SandboxedTool
@@ -99,6 +101,7 @@ __all__ = [
     "Orchestrator",
     "OutputFormatRegistry",
     "PolicyViolationError",
+    "PriceIssuePolicy",
     "ProviderSettings",
     "RecursionLimitError",
     "RegistryError",
@@ -117,6 +120,8 @@ __all__ = [
     "UnpricedModelError",
     "UnpricedPolicy",
     "UnpricedUsageWarning",
+    "UnreliablePriceError",
+    "UnreliablePriceWarning",
     "UnsafeOptInWarning",
     "ValidationResult",
     "check_tool_source",

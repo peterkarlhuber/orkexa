@@ -37,6 +37,7 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
 |---|--------|------|---------------|--------------|
 | 10 | `10_mixed_provider_delegation.py` | Live (two or three keys) | A Claude agent delegating to OpenAI and Gemini agents, a judge of another provider, a shared usage tracker | The delegated answer, whether the judge passed it, tokens per provider |
 | 11 | `11_dynamic_tools_sandbox.py` | Live (one key), interactive | A coding agent writes a tool; static check, sandbox tests and **your** approval before registration | The proposed tool, an approval prompt (`approve? [y/N]`), then the answer using the new tool |
+| 12 | `12_pricing_snapshots.py` | Offline | An external price catalog as a versioned JSON snapshot, an isolated resolver, itemized costs, a pinned price basis during a catalog update, price references in usage records | The cost components, the snapshot each amount came from, an unknown tariff staying unknown |
 
 ## Prerequisites and limitations
 

@@ -23,7 +23,7 @@ from .core.runtime import AgentCore, OutputT, RefusalMode, ToolCall
 from .core.types import Effort, Message, ToolChoice
 from .files import FileStore
 from .memory import MemoryBackend
-from .pricing import ModelPricing
+from .pricing import PricingInput
 from .providers import anthropic_codec as codec
 from .providers.options import AnthropicOptions
 from .retrieval import Index
@@ -89,7 +89,7 @@ class _ClaudeFacade(AgentCore[OutputT]):
         api_key: str | None = None,
         name: str | None = None,
         usage_tracker: UsageTracker | None = None,
-        pricing: ModelPricing | None = None,
+        pricing: PricingInput = None,
     ) -> None:
         AnthropicOptions(
             thinking=thinking,

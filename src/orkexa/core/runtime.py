@@ -48,7 +48,7 @@ from ..errors import (
 )
 from ..files import FileStore
 from ..memory import MEMORY_TOOL_NAME, MemoryBackend
-from ..pricing import ModelPricing
+from ..pricing import PricingBasis, PricingInput, pricing_basis
 from ..retrieval import Index
 from ..tools import Tool, ToolOutput
 from ..usage import UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
@@ -135,6 +135,14 @@ class _Step:
     result: Any = None
 
 
+def _prices_itself(adapter: Any, model: str) -> bool:
+    """Whether a third-party provider claims a price through its own ``has_pricing()``."""
+    method = getattr(type(adapter), "has_pricing", None)
+    if method is None or getattr(method, "__module__", "").startswith("orkexa."):
+        return False
+    return bool(adapter.has_pricing(model))
+
+
 class AgentCore(Generic[OutputT]):
     """Configuration, conversation, tools, usage and the turn state machine (no I/O)."""
 
@@ -184,7 +192,7 @@ class AgentCore(Generic[OutputT]):
         max_retries: int | None = None,
         name: str | None = None,
         usage_tracker: UsageTracker | None = None,
-        pricing: ModelPricing | None = None,
+        pricing: PricingInput = None,
         capabilities: Mapping[str, Support] | None = None,
         history_policy: HistoryPolicy = "strict",
         _adapter: Provider | None = None,
@@ -235,7 +243,11 @@ class AgentCore(Generic[OutputT]):
         self.usage_tracker = usage_tracker if usage_tracker is not None else UsageTracker()
         self._usage_records: list[UsageRecord] = []
         self._last_turn_records: list[UsageRecord] = []
+        if isinstance(pricing, PricingBasis):
+            raise TypeError("pass a ModelPricing, ModelPrice, PriceResolver or PriceSnapshot as pricing=")
+        pricing_basis(pricing)  # validate the type early
         self.pricing = pricing
+        self._request_basis: PricingBasis | None = None
         self.system_prompt = system_prompt
         self._init_messages(messages)
         self.output_format = output_format
@@ -340,6 +352,22 @@ class AgentCore(Generic[OutputT]):
         """Clear local counters; the shared usage_tracker ledger remains intact."""
         self._usage_records.clear()
         self._last_turn_records.clear()
+
+    def _pricing_basis(self) -> PricingBasis:
+        """Pin the prices for one request: ``pricing=``, else the tracker's resolver, else the default."""
+        return pricing_basis(self.pricing, resolver=self.usage_tracker.price_resolver)
+
+    def _check_price(self, model: str, basis: PricingBasis) -> None:
+        lookup = basis.lookup(self.adapter.name, model)
+        if lookup.price is None and _prices_itself(self.adapter, model):
+            # A custom provider that overrides has_pricing() prices its own usage.
+            self.usage_tracker.before_request(
+                agent=self.name, provider=self.adapter.name, model=model, priced=True
+            )
+            return
+        self.usage_tracker.check_request(
+            agent=self.name, provider=self.adapter.name, model=model, lookup=lookup
+        )
 
     def _add_usage_record(self, record: UsageRecord, *, turn: bool = True) -> None:
         label = current_workflow()
@@ -578,12 +606,8 @@ class AgentCore(Generic[OutputT]):
         for request in requests.values():
             request.stream = False
         model = self._model_id()
-        self.usage_tracker.before_request(
-            agent=self.name,
-            provider=self.adapter.name,
-            model=model,
-            priced=self.pricing is not None or self.adapter.has_pricing(model),
-        )
+        basis = self._pricing_basis()
+        self._check_price(model, basis)
         submit_failure: Exception | None = None
         try:
             batch_id, results = self.adapter.run_batch(requests, poll_interval=poll_interval, timeout=timeout)
@@ -597,7 +621,7 @@ class AgentCore(Generic[OutputT]):
         for result in results.values():
             if isinstance(result, ModelResponse):
                 record = self.adapter.usage_record(
-                    result, agent=self.name, pricing=self.pricing, turn_id=None, model=model, batch=True
+                    result, agent=self.name, pricing=basis, turn_id=None, model=model, batch=True
                 )
                 if record is not None:
                     try:
@@ -676,12 +700,11 @@ class AgentCore(Generic[OutputT]):
             history = self._start_turn(prompt, system=system, effort=effort, max_tokens=max_tokens)
             for round_number in range(self.max_tool_rounds + 1):
                 request = self._build_request(history)
-                self.usage_tracker.before_request(
-                    agent=self.name,
-                    provider=self.adapter.name,
-                    model=request.model,
-                    priced=self.pricing is not None or self.adapter.has_pricing(request.model),
-                )
+                # One pinned price basis per request: the pre-check and the bill use the
+                # same snapshot even if prices are updated while the request runs.
+                basis = self._pricing_basis()
+                self._check_price(request.model, basis)
+                self._request_basis = basis
                 response: ModelResponse = yield CallModel(request)
                 record = self._record(response)
                 if record is not None:
@@ -714,10 +737,11 @@ class AgentCore(Generic[OutputT]):
     def _record(self, response: ModelResponse) -> UsageRecord | None:
         """Record usage first: API costs never disappear from the ledger, even if the turn fails."""
         self.last_response = response.raw if self._native_hooks else response
+        basis, self._request_basis = self._request_basis or self._pricing_basis(), None
         record = self.adapter.usage_record(
             response,
             agent=self.name,
-            pricing=self.pricing,
+            pricing=basis,
             turn_id=self._turn_id,
             model=self._model_id(),
         )

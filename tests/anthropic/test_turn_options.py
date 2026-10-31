@@ -87,9 +87,11 @@ def test_async_text_refusal_raises() -> None:
 # ---- pricing -------------------------------------------------------------------------
 
 
-def test_sonnet_55_cache_reads_cost_a_tenth_of_input() -> None:
+def test_sonnet_55_cache_reads_cost_a_twentieth_of_input() -> None:
+    # The official price list (checked 2026-10-31) prices Claude Sonnet 5.5 and
+    # Claude Opus 5.5 cache hits at 0.05x the base input price.
     prices = MODEL_PRICING["claude-sonnet-5-5"]
-    assert prices.cache_read == Decimal("0.20") == prices.input / 10
+    assert prices.cache_read == Decimal("0.10") == prices.input / 20
 
 
 # ---- thinking display and the on_thinking hook ---------------------------------------

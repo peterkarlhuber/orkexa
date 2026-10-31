@@ -19,6 +19,8 @@ __all__ = [
     "ToolValidationError",
     "UnpricedModelError",
     "UnpricedUsageWarning",
+    "UnreliablePriceError",
+    "UnreliablePriceWarning",
     "UnsafeOptInWarning",
 ]
 
@@ -39,8 +41,17 @@ class UnpricedModelError(BudgetExceededError):
     """A request was refused because its model has no known price (``on_unpriced="reject"``)."""
 
 
+class UnreliablePriceError(UnpricedModelError):
+    """A price basis failed the tracker's :class:`~orkexa.pricing.PricePolicy`
+    (``on_price_issue="reject"``): stale, of an unaccepted quality, or incomplete."""
+
+
 class UnpricedUsageWarning(UserWarning):
     """Usage of a model without a known price; its cost is unknown, not zero."""
+
+
+class UnreliablePriceWarning(UserWarning):
+    """A price basis failed the tracker's :class:`~orkexa.pricing.PricePolicy`."""
 
 
 class UnsafeOptInWarning(UserWarning):

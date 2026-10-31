@@ -93,15 +93,24 @@ def _int(obj: Any, name: str) -> int:
     return int(value) if isinstance(value, int) else 0
 
 
-def chat_usage(usage: Any) -> TokenUsage | None:
+def chat_usage(usage: Any, service_tier: Any = None) -> TokenUsage | None:
+    """Normalized usage; audio tokens are reported as special token classes for pricing."""
     if usage is None:
         return None
-    cached = _int(_get(usage, "prompt_tokens_details"), "cached_tokens")
+    prompt_details = _get(usage, "prompt_tokens_details")
+    completion_details = _get(usage, "completion_tokens_details")
+    cached = _int(prompt_details, "cached_tokens")
+    details = {
+        "audio_input": _int(prompt_details, "audio_tokens"),
+        "audio_output": _int(completion_details, "audio_tokens"),
+    }
     return TokenUsage(
         input_tokens=max(0, _int(usage, "prompt_tokens") - cached),
         output_tokens=_int(usage, "completion_tokens"),
         cache_read_input_tokens=cached,
-        thinking_tokens=_int(_get(usage, "completion_tokens_details"), "reasoning_tokens"),
+        thinking_tokens=_int(completion_details, "reasoning_tokens"),
+        service_tier=service_tier if isinstance(service_tier, str) and service_tier else None,
+        token_details=tuple((kind, count) for kind, count in details.items() if count),
     )
 
 
@@ -325,6 +334,7 @@ class ChatCompletionsProvider(Provider):
         request: ModelRequest,
         raw: Any,
         request_id: str | None,
+        service_tier: str | None = None,
     ) -> ModelResponse:
         parts: list[Part] = []
         if reasoning:
@@ -361,7 +371,7 @@ class ChatCompletionsProvider(Provider):
             parsed=parsed,
             parse_error=error,
             stop_details=stop_details,
-            usage=chat_usage(usage),
+            usage=chat_usage(usage, service_tier or _get(raw, "service_tier")),
             request_id=request_id,
             raw=raw,
         )
@@ -449,10 +459,12 @@ class _ChatStream:
         self.usage: Any = None
         self.model: str | None = None
         self.id: str | None = None
+        self.service_tier: str | None = None
 
     def translate(self, chunk: Any) -> Iterator[StreamEvent]:
         self.model = _get(chunk, "model") or self.model
         self.id = _get(chunk, "id") or self.id
+        self.service_tier = _get(chunk, "service_tier") or self.service_tier
         if _get(chunk, "usage") is not None:
             self.usage = _get(chunk, "usage")
         for choice in _get(chunk, "choices") or []:
@@ -509,4 +521,5 @@ class _ChatStream:
             request=request,
             raw=None,
             request_id=self.id,
+            service_tier=self.service_tier,
         )

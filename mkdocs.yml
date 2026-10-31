@@ -78,6 +78,7 @@ nav:
       - History and provider switching: guides/history.md
       - Memory, files and RAG: guides/memory-files-rag.md
       - Usage, pricing and budgets: guides/usage-and-budgets.md
+      - Pricing engine: guides/pricing.md
       - Multi-agent and dynamic agents: guides/multi-agent.md
       - Security: guides/security.md
   - Data protection and AI regulation:
@@ -97,7 +98,8 @@ nav:
       - Memory, files, retrieval: reference/storage.md
       - Evaluation: reference/evaluation.md
       - Dynamic agents: reference/dynamic.md
-      - Usage and pricing: reference/usage.md
+      - Usage: reference/usage.md
+      - Pricing: reference/pricing.md
       - Errors: reference/errors.md
   - Architecture:
       - Target architecture: architecture/target-architecture.md
@@ -107,6 +109,7 @@ nav:
       - ADR 0005 module layout: architecture/decisions/0005-module-layout.md
       - ADR 0006 provider APIs: architecture/decisions/0006-provider-apis.md
       - ADR 0007 credentials and endpoints: architecture/decisions/0007-credentials-and-endpoints.md
+      - ADR 0008 pricing engine: architecture/decisions/0008-pricing-engine.md
   - Development:
       - development/index.md
       - Releasing: development/releasing.md
