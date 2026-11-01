@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextvars import copy_context
 from typing import Any
 
 from .content import Prompt
+from .core.checkpoint import TurnCheckpoint
 from .core.runtime import (
     AgentCore,
     CallModel,
@@ -19,6 +20,7 @@ from .core.runtime import (
     RunTools,
     ToolCall,
     WaitForBudget,
+    _Waiting,
 )
 from .core.types import (
     Effort,
@@ -29,6 +31,7 @@ from .core.types import (
     ToolCallPart,
     ToolResultPart,
 )
+from .errors import ToolCallSuspended
 from .tools import ToolOutput
 
 _BUDGET_WAIT = 0.25
@@ -125,6 +128,23 @@ class Agent(AgentCore[OutputT]):
         self._enter_turn()
         try:
             return self._drive(self._turn(prompt, system=system, effort=effort, max_tokens=max_tokens))
+        finally:
+            self._exit_turn()
+
+    def resume(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> OutputT:
+        """Continue a turn that stopped at a waiting tool call (:class:`~orkexa.TurnSuspended`).
+
+        The waiting calls go through ``before_tool`` again (``ToolCall.resumed`` is
+        ``True``); calls that already ran are not run again; the model gets all results
+        of that round and the turn continues like :meth:`ask`. The checkpoint must come
+        from this agent with the same prompt, tools and limits
+        (:class:`~orkexa.CheckpointError` otherwise). The completed turn's conversation
+        (from the checkpoint) becomes the agent's conversation. A call that waits again
+        raises :class:`~orkexa.TurnSuspended` with a new checkpoint.
+        """
+        self._enter_turn()
+        try:
+            return self._drive(self._resume_turn(checkpoint))
         finally:
             self._exit_turn()
 
@@ -226,7 +246,9 @@ class Agent(AgentCore[OutputT]):
                 close()
         return self._final_response(final)
 
-    def _run_tools(self, calls: tuple[ToolCallPart, ...], request: ModelRequest) -> list[ToolResultPart]:
+    def _run_tools(
+        self, calls: tuple[ToolCallPart, ...], request: ModelRequest
+    ) -> list[ToolResultPart | _Waiting]:
         workers = min(self.max_parallel_tools, len(calls))
         if workers <= 1:
             return [self._run_tool(call, request) for call in calls]
@@ -237,9 +259,12 @@ class Agent(AgentCore[OutputT]):
             # map() keeps the order and re-raises the first failed call's error.
             return list(pool.map(lambda ctx, call: ctx.run(self._run_tool, call, request), contexts, calls))
 
-    def _run_tool(self, part: ToolCallPart, request: ModelRequest) -> ToolResultPart:
+    def _run_tool(self, part: ToolCallPart, request: ModelRequest) -> ToolResultPart | _Waiting:
         call = self._tool_call(part)
-        denial = self._denial(self.before_tool(call)) if self.before_tool is not None else None
+        try:
+            denial = self._denial(self.before_tool(call)) if self.before_tool is not None else None
+        except ToolCallSuspended as exc:
+            return self._waiting(call, exc)
         content: ToolOutput
         if denial is not None:
             content, is_error = denial, True

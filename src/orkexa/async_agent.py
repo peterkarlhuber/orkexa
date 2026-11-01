@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 import inspect
 from typing import Any
 
 from .content import Prompt
-from .core.runtime import AgentCore, CallModel, Effect, Emit, OutputT, RunTools, ToolCall, WaitForBudget
+from .core.checkpoint import TurnCheckpoint
+from .core.runtime import (
+    AgentCore,
+    CallModel,
+    Effect,
+    Emit,
+    OutputT,
+    RunTools,
+    ToolCall,
+    WaitForBudget,
+    _Waiting,
+)
 from .core.types import (
     Effort,
     ModelRequest,
@@ -18,6 +29,7 @@ from .core.types import (
     ToolCallPart,
     ToolResultPart,
 )
+from .errors import ToolCallSuspended
 from .tools import ToolOutput
 
 _BUDGET_POLL = 0.05
@@ -60,6 +72,14 @@ class AsyncAgent(AgentCore[OutputT]):
         self._enter_turn()
         try:
             return await self._drive(self._turn(prompt, system=system, effort=effort, max_tokens=max_tokens))
+        finally:
+            self._exit_turn()
+
+    async def resume(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> OutputT:
+        """Continue a suspended turn; see :meth:`Agent.resume <orkexa.Agent.resume>`."""
+        self._enter_turn()
+        try:
+            return await self._drive(self._resume_turn(checkpoint))
         finally:
             self._exit_turn()
 
@@ -168,18 +188,21 @@ class AsyncAgent(AgentCore[OutputT]):
 
     async def _run_tools(
         self, calls: tuple[ToolCallPart, ...], request: ModelRequest
-    ) -> list[ToolResultPart]:
+    ) -> list[ToolResultPart | _Waiting]:
         slots = asyncio.Semaphore(self.max_parallel_tools)
         return list(await asyncio.gather(*(self._run_tool(call, request, slots) for call in calls)))
 
     async def _run_tool(
         self, part: ToolCallPart, request: ModelRequest, slots: asyncio.Semaphore
-    ) -> ToolResultPart:
+    ) -> ToolResultPart | _Waiting:
         call = self._tool_call(part)
         async with slots:
             denial = None
             if self.before_tool is not None:
-                denial = self._denial(await _resolve(self.before_tool(call)))
+                try:
+                    denial = self._denial(await _resolve(self.before_tool(call)))
+                except ToolCallSuspended as exc:
+                    return self._waiting(call, exc)
             content: ToolOutput
             if denial is not None:
                 content, is_error = denial, True

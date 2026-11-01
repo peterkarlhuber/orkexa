@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AuthenticationError",
+    "CheckpointError",
     "ConcurrentTurnError",
     "ConfigurationError",
     "EvaluationFailedError",
@@ -32,11 +33,13 @@ __all__ = [
     "RateLimitError",
     "RefusalError",
     "StructuredOutputError",
+    "ToolCallSuspended",
     "ToolDefinitionError",
     "ToolExecutionError",
     "ToolInputError",
     "ToolResultError",
     "ToolSchemaError",
+    "TurnSuspended",
     "UnexpectedResponseError",
     "UnknownCapabilityError",
     "UnsupportedCapabilityError",
@@ -168,6 +171,38 @@ class ConcurrentTurnError(OrkexaError, RuntimeError):
 
     One agent holds one conversation; use one agent per concurrent session.
     """
+
+
+class ToolCallSuspended(OrkexaError, RuntimeError):
+    """Raised by a ``before_tool`` hook: this call waits for a decision outside the turn.
+
+    The turn stops before the call runs and :class:`TurnSuspended` carries a checkpoint;
+    ``resume(checkpoint)`` continues the turn later without calling the model again.
+    ``ref`` is the application's reference of what the call waits for (e.g. an approval id).
+    """
+
+    def __init__(self, reason: str = "", ref: str | None = None) -> None:
+        super().__init__(reason or "waiting for a decision")
+        self.reason = reason
+        self.ref = ref
+
+
+class TurnSuspended(OrkexaError, RuntimeError):
+    """``ask()`` or ``resume()`` stopped because a tool call waits (:class:`ToolCallSuspended`).
+
+    ``checkpoint`` (a :class:`~orkexa.core.checkpoint.TurnCheckpoint`) holds everything
+    to continue: the conversation of the turn, the requested calls, the results of the
+    calls that already ran and the waiting ones. The committed conversation is unchanged.
+    """
+
+    def __init__(self, checkpoint: Any) -> None:
+        waiting = ", ".join(item.name for item in checkpoint.waiting)
+        super().__init__(f"the turn waits for: {waiting}")
+        self.checkpoint = checkpoint
+
+
+class CheckpointError(OrkexaError, ValueError):
+    """A turn checkpoint cannot be resumed by this agent (format, agent, model, tools or prompt differ)."""
 
 
 class EvaluationFailedError(OrkexaError, RuntimeError):

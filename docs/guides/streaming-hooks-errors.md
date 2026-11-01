@@ -28,6 +28,33 @@ reaches `agent.usage` and the usage tracker (and counts against a budget). The
 history is committed just before `TurnCompleted` is emitted, so an exception from
 that last event leaves the completed turn in the history.
 
+### Pausing a turn at a tool call
+
+A `before_tool` hook can also raise `ToolCallSuspended(reason, ref=...)` when a call
+needs a decision that is not available yet, for example a person's approval. The call
+does not run. Once every other call of that round has finished, `ask()` raises
+`TurnSuspended`. Its `checkpoint` (a `TurnCheckpoint`, plain JSON) holds the turn's
+conversation, the results of the calls that already ran and the waiting calls; the
+agent's committed conversation is unchanged.
+
+```python
+try:
+    answer = agent.ask("Pay the invoice")
+except TurnSuspended as paused:
+    store(paused.checkpoint.model_dump(mode="json"))
+
+# later, possibly in another process, with an agent configured the same way:
+answer = agent.resume(load())
+```
+
+`resume()` passes only the waiting calls through `before_tool` again, with
+`ToolCall.resumed=True`: the hook now decides (allow or deny) and must not ask again.
+The model is called next with all results of the round, so it is never asked twice for
+the same calls, and usage keeps the turn's `turn_id`. A checkpoint is bound to the
+agent's name, model, system prompt, tool definitions, output format and tool round
+limit; anything else raises `CheckpointError`. Where the checkpoint is stored, how long
+it is valid and who may decide is the application's responsibility.
+
 ## Errors
 
 | Situation | Exception |
