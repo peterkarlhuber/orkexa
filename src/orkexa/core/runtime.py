@@ -19,7 +19,8 @@ from __future__ import annotations
 from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
+import hashlib
 import json
 import os
 import threading
@@ -32,6 +33,7 @@ from typing_extensions import TypeVar
 from .._storage import write_private_text
 from ..content import Prompt, describe_content, to_content
 from ..errors import (
+    CheckpointError,
     ConcurrentTurnError,
     ConfigurationError,
     IncompleteResponseError,
@@ -40,10 +42,12 @@ from ..errors import (
     ProviderError,
     RefusalError,
     StructuredOutputError,
+    ToolCallSuspended,
     ToolDefinitionError,
     ToolExecutionError,
     ToolInputError,
     ToolResultError,
+    TurnSuspended,
     UnexpectedResponseError,
 )
 from ..files import FileStore
@@ -53,6 +57,7 @@ from ..retrieval import Index
 from ..tools import Tool, ToolOutput
 from ..usage import Reservation, UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
 from .capabilities import ModelCapabilities, Support
+from .checkpoint import CHECKPOINT_FORMAT, CHECKPOINT_VERSION, TurnCheckpoint, WaitingCall
 from .conversion import (
     HistoryPolicy,
     dump_history,
@@ -111,6 +116,19 @@ class ToolCall:
     name: str
     input: dict[str, Any]
     agent: str
+    #: ``True`` when the call waited before (:class:`~orkexa.errors.ToolCallSuspended`) and the turn
+    #: is resumed: the hook decides with the decision it waited for, it must not ask again.
+    resumed: bool = False
+
+
+@dataclass(frozen=True)
+class _Waiting:
+    """A tool call whose ``before_tool`` hook raised :class:`~orkexa.errors.ToolCallSuspended`."""
+
+    call_id: str
+    name: str
+    reason: str
+    ref: str | None
 
 
 @dataclass(frozen=True)
@@ -293,6 +311,7 @@ class AgentCore(Generic[OutputT]):
         self._turn_effort: Effort | None = None
         self._turn_max_tokens: int | None = None
         self._turn_id: str | None = None
+        self._resuming: set[str] = set()
         self._turn_lock = threading.Lock()
         for tool in tools or []:
             self.add_tool(tool)
@@ -736,32 +755,145 @@ class AgentCore(Generic[OutputT]):
         """One ``ask()``: the complete request/tool loop as a generator of effects."""
         try:
             history = self._start_turn(prompt, system=system, effort=effort, max_tokens=max_tokens)
-            for round_number in range(self.max_tool_rounds + 1):
-                request = self._build_request(history)
-                # One pinned price basis per request: the pre-check and the bill use the
-                # same snapshot even if prices are updated while the request runs.
-                basis = self._pricing_basis()
-                reservation = yield from self._admit(request, basis)
-                try:
-                    self._request_basis = basis
-                    response: ModelResponse = yield CallModel(request)
-                    record = self._record(response)
-                finally:
-                    # Released only after the usage is recorded: the cost is always held
-                    # back either as a reservation or as spent money.
-                    self.usage_tracker.release(reservation)
-                if record is not None:
-                    yield Emit(UsageReported(record))
-                step = self._process_response(response, history, round_number)
-                if step.kind == "done":
-                    self._commit(history)
-                    yield Emit(TurnCompleted(step.result))
-                    return cast(OutputT, step.result)
-                if step.kind == "tools":
-                    results: list[ToolResultPart] = yield RunTools(step.tool_calls, request)
-                    # All results of one assistant turn go back in a single user message.
-                    history.append(Message(role="user", content=list(results)))
-            raise UnexpectedResponseError("Tool loop ended unexpectedly")
+            result: OutputT = yield from self._rounds(history, 0)
+            return result
+        except TurnSuspended:
+            raise
+        except Exception as exc:
+            if self.on_event is not None:
+                yield Emit(TurnFailed(exc))
+            raise
+
+    def _rounds(self, history: list[Message], start: int) -> Generator[Effect, Any, OutputT]:
+        """Request/tool rounds from round ``start`` until the turn is done."""
+        for round_number in range(start, self.max_tool_rounds + 1):
+            request = self._build_request(history)
+            # One pinned price basis per request: the pre-check and the bill use the
+            # same snapshot even if prices are updated while the request runs.
+            basis = self._pricing_basis()
+            reservation = yield from self._admit(request, basis)
+            try:
+                self._request_basis = basis
+                response: ModelResponse = yield CallModel(request)
+                record = self._record(response)
+            finally:
+                # Released only after the usage is recorded: the cost is always held
+                # back either as a reservation or as spent money.
+                self.usage_tracker.release(reservation)
+            if record is not None:
+                yield Emit(UsageReported(record))
+            step = self._process_response(response, history, round_number)
+            if step.kind == "done":
+                self._commit(history)
+                yield Emit(TurnCompleted(step.result))
+                return cast(OutputT, step.result)
+            if step.kind == "tools":
+                results: list[ToolResultPart | _Waiting] = yield RunTools(step.tool_calls, request)
+                self._add_results(history, step.tool_calls, results, round_number)
+        raise UnexpectedResponseError("Tool loop ended unexpectedly")
+
+    def _add_results(
+        self,
+        history: list[Message],
+        calls: tuple[ToolCallPart, ...],
+        results: Sequence[ToolResultPart | _Waiting],
+        round_number: int,
+    ) -> None:
+        """Append one round's results, or raise :class:`TurnSuspended` when a call waits."""
+        waiting = [item for item in results if isinstance(item, _Waiting)]
+        if waiting:
+            raise TurnSuspended(
+                TurnCheckpoint(
+                    agent=self.name,
+                    model=self._model_id(),
+                    fingerprint=self._checkpoint_fingerprint(),
+                    turn_id=self._turn_id,
+                    round=round_number,
+                    history=[message.model_dump(mode="json", exclude_none=True) for message in history],
+                    calls=list(calls),
+                    results=[item for item in results if isinstance(item, ToolResultPart)],
+                    waiting=[
+                        WaitingCall(call_id=item.call_id, name=item.name, reason=item.reason, ref=item.ref)
+                        for item in waiting
+                    ],
+                    effort=self._turn_effort,
+                    max_tokens=self._turn_max_tokens,
+                )
+            )
+        # All results of one assistant turn go back in a single user message.
+        history.append(Message(role="user", content=[cast(ToolResultPart, item) for item in results]))
+
+    def _checkpoint_fingerprint(self) -> str:
+        """What a suspended turn depends on besides its conversation (see :mod:`orkexa.core.checkpoint`)."""
+        payload = {
+            "agent": self.name,
+            "provider": self.provider,
+            "model": self._model_id(),
+            "system_prompt": self.system_prompt,
+            "tools": [asdict(tool.definition()) for tool in self.tools.values()],
+            "server_tools": self.server_tools,
+            "memory": self.memory is not None,
+            "output_format": None if self.output_format is None else self.output_format.__qualname__,
+            "max_tool_rounds": self.max_tool_rounds,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
+    def _restore(
+        self, checkpoint: TurnCheckpoint | Mapping[str, Any]
+    ) -> tuple[TurnCheckpoint, list[Message]]:
+        """Check that this agent may continue ``checkpoint`` and set the turn's state from it."""
+        if not isinstance(checkpoint, TurnCheckpoint):
+            if not isinstance(checkpoint, Mapping) or checkpoint.get("format") != CHECKPOINT_FORMAT:
+                raise CheckpointError("not a turn checkpoint")
+            if checkpoint.get("version") != CHECKPOINT_VERSION:
+                raise CheckpointError(f"checkpoint version {checkpoint.get('version')!r} cannot be resumed")
+            checkpoint = TurnCheckpoint.model_validate(dict(checkpoint))
+        if checkpoint.version != CHECKPOINT_VERSION:
+            raise CheckpointError(f"checkpoint version {checkpoint.version!r} cannot be resumed")
+        if checkpoint.agent != self.name or checkpoint.model != self._model_id():
+            raise CheckpointError("the checkpoint belongs to another agent or model")
+        if checkpoint.fingerprint != self._checkpoint_fingerprint():
+            raise CheckpointError("the agent changed since the turn was suspended (prompt, tools or limits)")
+        ids = [call.id for call in checkpoint.calls]
+        done = [result.call_id for result in checkpoint.results]
+        waits = [item.call_id for item in checkpoint.waiting]
+        if len(set(ids)) != len(ids) or sorted(done + waits) != sorted(ids):
+            raise CheckpointError("the checkpoint's results and waiting calls do not match its calls")
+        if checkpoint.round > self.max_tool_rounds:
+            raise CheckpointError("the checkpoint's tool round exceeds max_tool_rounds")
+        history = [Message.model_validate(message) for message in checkpoint.history]
+        if not history or history[-1].role != "assistant":
+            raise CheckpointError("the checkpoint's conversation does not end with the tool calls")
+        self._last_turn_records = []
+        self._turn_effort = checkpoint.effort
+        self._turn_max_tokens = checkpoint.max_tokens
+        self._turn_id = checkpoint.turn_id
+        return checkpoint, history
+
+    def _resume_turn(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> Generator[Effect, Any, OutputT]:
+        """Continue a suspended turn: run the waiting calls, then the remaining rounds."""
+        try:
+            restored, history = self._restore(checkpoint)
+            waiting = {item.call_id for item in restored.waiting}
+            again = tuple(call for call in restored.calls if call.id in waiting)
+            request = self._build_request(history)
+            self._resuming = waiting
+            try:
+                fresh: list[ToolResultPart | _Waiting] = yield RunTools(again, request)
+            finally:
+                self._resuming = set()
+            by_id: dict[str, ToolResultPart | _Waiting] = {
+                result.call_id: result for result in restored.results
+            }
+            by_id |= {item.call_id: item for item in fresh}
+            self._add_results(
+                history, tuple(restored.calls), [by_id[call.id] for call in restored.calls], restored.round
+            )
+            result: OutputT = yield from self._rounds(history, restored.round + 1)
+            return result
+        except TurnSuspended:
+            raise
         except Exception as exc:
             if self.on_event is not None:
                 yield Emit(TurnFailed(exc))
@@ -887,7 +1019,17 @@ class AgentCore(Generic[OutputT]):
     # ---- tool calls -----------------------------------------------------------------------
 
     def _tool_call(self, part: ToolCallPart) -> ToolCall:
-        return ToolCall(id=part.id, name=part.name, input=deepcopy(part.arguments), agent=self.name)
+        return ToolCall(
+            id=part.id,
+            name=part.name,
+            input=deepcopy(part.arguments),
+            agent=self.name,
+            resumed=part.id in self._resuming,
+        )
+
+    @staticmethod
+    def _waiting(call: ToolCall, exc: ToolCallSuspended) -> _Waiting:
+        return _Waiting(call_id=call.id, name=call.name, reason=exc.reason, ref=exc.ref)
 
     @staticmethod
     def _denial(reason: Any) -> str | None:

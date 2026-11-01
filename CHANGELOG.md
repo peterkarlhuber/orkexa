@@ -4,6 +4,16 @@
 
 First release of Orkexa.
 
+### Added: turn checkpoints (Adaptive Orchestration M6b)
+
+* A `before_tool` hook may raise `ToolCallSuspended(reason, ref)`: the call does not
+  run, the turn ends with `TurnSuspended` and its JSON `TurnCheckpoint` (conversation,
+  results of calls that ran, waiting calls). `Agent.resume(checkpoint)` /
+  `AsyncAgent.resume()` continue the turn: only the waiting calls pass `before_tool`
+  again (`ToolCall.resumed=True`), calls that ran are not repeated, and the model is
+  not called again before all results of the round are in. Checkpoints are bound to
+  the agent's name, model, prompt, tools and limits (`CheckpointError`).
+
 ### Added: dynamic teams and paused delegations (Adaptive Orchestration M6b, ADR 0011)
 
 * Orchestration protocol version 2 (version 1 records still read and replay):

@@ -34,6 +34,7 @@ from .async_agent import AsyncAgent
 from .claude import AsyncClaudeAgent, ClaudeAgent, Fallbacks, ThinkingDisplay, ThinkingMode
 from .content import ContentBlock, Prompt, ToolContent, document, image, uploaded_file
 from .core.capabilities import ModelCapabilities, Support
+from .core.checkpoint import TurnCheckpoint, WaitingCall
 from .core.conversion import HistoryConversionWarning
 from .core.types import (
     Effort,
@@ -53,6 +54,7 @@ from .core.types import (
 )
 from .errors import (
     AuthenticationError,
+    CheckpointError,
     ConcurrentTurnError,
     ConfigurationError,
     EvaluationFailedError,
@@ -69,11 +71,13 @@ from .errors import (
     RateLimitError,
     RefusalError,
     StructuredOutputError,
+    ToolCallSuspended,
     ToolDefinitionError,
     ToolExecutionError,
     ToolInputError,
     ToolResultError,
     ToolSchemaError,
+    TurnSuspended,
     UnexpectedResponseError,
     UnknownCapabilityError,
     UnsupportedCapabilityError,
@@ -115,6 +119,7 @@ __all__ = [
     "AsyncAgent",
     "AsyncClaudeAgent",
     "AuthenticationError",
+    "CheckpointError",
     "Chunk",
     "Citation",
     "ClaudeAgent",
@@ -179,6 +184,7 @@ __all__ = [
     "ToolCall",
     "ToolCallDelta",
     "ToolCallStarted",
+    "ToolCallSuspended",
     "ToolChoice",
     "ToolContent",
     "ToolDefinitionError",
@@ -186,8 +192,10 @@ __all__ = [
     "ToolInputError",
     "ToolResultError",
     "ToolSchemaError",
+    "TurnCheckpoint",
     "TurnCompleted",
     "TurnFailed",
+    "TurnSuspended",
     "UnexpectedResponseError",
     "UnknownCapabilityError",
     "UnsupportedCapabilityError",
@@ -195,6 +203,7 @@ __all__ = [
     "UsageReported",
     "UsageSummary",
     "UsageTracker",
+    "WaitingCall",
     "__version__",
     "citations",
     "document",
