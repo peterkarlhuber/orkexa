@@ -1,6 +1,7 @@
-# Conservative update policy: grouped weekly pull requests for Python dependencies,
-# monthly ones for GitHub Actions. Major versions of the provider SDKs change the
-# supported ranges in pyproject.toml and are reviewed by hand, so they are ignored here.
+# Conservative update policy: grouped weekly pull requests for Python dependencies and for GitHub
+# Actions (the workflows pin every action by commit SHA; Dependabot keeps those pins current).
+# Major versions of the provider SDKs change the supported ranges in pyproject.toml and are
+# reviewed by hand, so they are ignored here.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -24,7 +25,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
     open-pull-requests-limit: 5
     groups:
       github-actions:
