@@ -176,7 +176,8 @@ pytest -m packaging tests/packaging --noconftest   # builds and installs into fr
 mkdocs build --strict          # needs .[docs]
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow. Open work is tracked in
+[docs/TODO.md](docs/TODO.md).
 
 ## Project
 
