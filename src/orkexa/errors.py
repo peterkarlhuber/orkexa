@@ -17,6 +17,7 @@ __all__ = [
     "CheckpointError",
     "ConcurrentTurnError",
     "ConfigurationError",
+    "DataResidencyError",
     "EvaluationFailedError",
     "HistoryConversionError",
     "IncompleteResponseError",
@@ -55,6 +56,15 @@ class OrkexaError(Exception):
 
 class ConfigurationError(OrkexaError, ValueError):
     """An agent or provider is configured inconsistently (e.g. conflicting provider names)."""
+
+
+class DataResidencyError(ConfigurationError):
+    """A request could break the configured data residency, or residency cannot be verified.
+
+    Raised before anything is sent to the model, e.g. by the Bedrock provider when
+    ``BedrockOptions(data_residency="eu_only")`` is set and the region, inference
+    profile or endpoint is not on the allowlist or cannot be checked.
+    """
 
 
 class PricingError(OrkexaError, ValueError):

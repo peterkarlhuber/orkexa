@@ -18,7 +18,10 @@
 * **Endpoints**: a custom `base_url` for `anthropic`, `openai` or `gemini` requires an
   explicit `api_key=`; environment keys are only sent to the provider's own API.
   `OPENAI_BASE_URL` is ignored. `compatible`/`ollama`/`vllm` never read
-  `OPENAI_API_KEY`. Treat a configurable `base_url` as security-relevant: it receives
+  `OPENAI_API_KEY`. `bedrock` uses only AWS credentials (it rejects `api_key=`),
+  ignores `AWS_ENDPOINT_URL*` from the environment and the AWS config file, and
+  accepts only an `https` `base_url` (signed requests carry the access key id and
+  session token). Treat a configurable `base_url` as security-relevant: it receives
   the full conversation.
 * **Tools** run only in Orkexa, after `before_tool`; SDK automatic function calling is
   disabled. Tool inputs are validated; tool rounds, parallelism and timeouts are limited.
@@ -99,6 +102,203 @@ Keep stores in a directory with suitable ACLs.
 | `exc.__cause__` of a `ProviderError` to inspect the SDK exception | `None` | use `provider`, `status_code`, `request_id`, `retryable` and the message; for SDK details, log them in your own code before they reach Orkexa (e.g. an `httpx` event hook) and keep credentials out |
 | other users or groups reading histories, registries or new databases | `0600` / `0700` | grant access explicitly (`chmod`, group ownership) or share through an application |
 | generated code that reaches modules through attributes of allowed modules | rejected by the static check | import only allowed modules directly |
+
+## Amazon Bedrock data residency
+
+`BedrockOptions(data_residency="eu_only")` makes the `bedrock` provider check, before
+the first paid request, where the request would be processed. It is a configuration
+check that fails closed: whatever cannot be verified raises `DataResidencyError`
+(a `ConfigurationError`) and nothing is sent to the model.
+
+```python
+from orkexa import Agent, BedrockOptions
+
+agent = Agent(
+    provider="bedrock",
+    model="eu.anthropic.claude-sonnet-5-5",
+    options=BedrockOptions(region_name="eu-central-1", data_residency="eu_only"),
+)
+```
+
+### What is verified
+
+* **Region and endpoint.** The `bedrock-runtime` client's region must be on the
+  allowlist. Only AWS endpoints of that region are accepted: the default regional
+  endpoint or an interface VPC endpoint
+  (`*.bedrock-runtime.<region>.vpce.amazonaws.com`) passed as `base_url`, over `https`.
+* **Model id.** A foundation model id or ARN, provisioned throughput, custom model
+  deployments and imported models run in their region. For a cross-Region or
+  application inference profile, Orkexa calls `GetInferenceProfile` in the source
+  region and requires the profile to be `ACTIVE` and **every** destination region
+  (the region of each `models[].modelArn`) to be on the allowlist; AWS recommends
+  exactly this instead of trusting the `eu.` prefix
+  ([supported Regions and models for inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html)).
+  The prefix is never trusted on its own.
+* **Global profiles** (`global.anthropic...`) route to all commercial AWS regions and
+  are always rejected, before any AWS call.
+* **ARNs of another region** than the client's are rejected. Prompt resources, prompt
+  routers and SageMaker endpoints cannot be verified and are rejected.
+* **Guardrails.** A configured guardrail is read with `GetGuardrail`; a guardrail in
+  another region or with a cross-Region guardrail profile is rejected.
+* **Media.** `s3://` and URL sources of images and documents are rejected; send the
+  content as bytes.
+
+A verified model or guardrail is cached for 300 seconds per region and id
+(`RESIDENCY_CACHE_SECONDS`), then checked again. AWS documents that the destination
+regions of a geographic profile never change, while those of global profiles can
+grow over time.
+
+With an injected `client=`, pass the control-plane client for these checks as
+`BedrockOptions(control_client=boto3.client("bedrock", region_name=...))`.
+
+### The allowlist
+
+`eu_only` allows the AWS commercial regions in EU member states
+(`orkexa.providers.bedrock.EU_REGIONS`): `eu-central-1` (Frankfurt), `eu-north-1`
+(Stockholm), `eu-south-1` (Milan), `eu-south-2` (Spain), `eu-west-1` (Ireland) and
+`eu-west-3` (Paris).
+
+* **London (`eu-west-2`) and Zurich (`eu-central-2`) are in Europe but not in the
+  EU** and are not allowed. EU inference profiles can list them as destinations for
+  some models and source regions, and such a profile is then rejected.
+* The AWS European Sovereign Cloud is a separate partition and is not covered.
+* `allowed_regions=("eu-central-1", "eu-west-1")` narrows the list (with `eu_only`
+  it may only contain EU regions). Without `data_residency`, `allowed_regions`
+  enforces an allowlist for any geography.
+
+### Required IAM permissions
+
+With `eu_only` and a geographic inference profile, the caller needs:
+
+* `bedrock:InvokeModel` (Converse) and `bedrock:InvokeModelWithResponseStream`
+  (ConverseStream) on the inference profile **and** on the foundation model in the
+  source region and in **all** destination regions of the profile
+  ([geographic cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/geographic-cross-region-inference.html),
+  [prerequisites for inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-prereq.html));
+* `bedrock:GetInferenceProfile` on the profile (for the residency check);
+* `bedrock:GetGuardrail` on the guardrail, if you configure one.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeEuProfile",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:eu-central-1:111122223333:inference-profile/eu.anthropic.claude-sonnet-5-5",
+        "arn:aws:bedrock:eu-*::foundation-model/anthropic.claude-sonnet-5-5"
+      ]
+    },
+    {
+      "Sid": "VerifyResidency",
+      "Effect": "Allow",
+      "Action": ["bedrock:GetInferenceProfile"],
+      "Resource": "arn:aws:bedrock:eu-central-1:111122223333:inference-profile/eu.anthropic.claude-sonnet-5-5"
+    }
+  ]
+}
+```
+
+A missing `GetInferenceProfile` permission makes the check fail with
+`DataResidencyError`; it is never skipped.
+
+### Enforcing residency on the AWS side
+
+Orkexa's check protects one application's configuration. The enforcement for an AWS
+account or organization is IAM and service control policies (SCPs). The following SCP
+is an **example to adapt and test**, not a ready-made policy: it denies Bedrock
+requests outside the six EU regions and requests through global inference profiles.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyBedrockOutsideEU",
+      "Effect": "Deny",
+      "Action": "bedrock:*",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": [
+            "eu-central-1", "eu-north-1", "eu-south-1",
+            "eu-south-2", "eu-west-1", "eu-west-3"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyGlobalInferenceProfiles",
+      "Effect": "Deny",
+      "Action": "bedrock:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "unspecified" },
+        "ArnLike": { "bedrock:InferenceProfileArn": "arn:aws:bedrock:*:*:inference-profile/global.*" }
+      }
+    }
+  ]
+}
+```
+
+* A global profile is authorized against a region-less foundation model ARN, for
+  which `aws:RequestedRegion` is `unspecified`. The first statement does not list
+  `unspecified` and therefore already denies it; the second statement is the deny
+  statement AWS documents for disabling global cross-Region inference
+  ([global cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html)).
+* A geographic profile is authorized against the foundation model in every candidate
+  destination region, so the first statement also denies EU profiles that can route
+  to London or Zurich. Allow those regions only if your requirements permit them.
+* Cross-Region inference can route requests to regions that are not enabled in your
+  account ([cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html));
+  only policies like the one above restrict them.
+* SCPs do not apply to the management account. Check the policy against your other
+  services before you attach it, and keep it in place even when every application
+  uses `eu_only`.
+* CloudTrail in the source region records every cross-Region request;
+  `additionalEventData.inferenceRegion` shows where it was processed. Use it to audit
+  the actual processing regions.
+
+### Model invocation logging
+
+[Model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html)
+is **disabled by default**. When an account enables it, Bedrock stores the **full
+request and response data** of Converse and ConverseStream calls, including prompts,
+tool results, documents and images, with metadata, in CloudWatch Logs and/or S3 of
+the same account and region. Orkexa does not check whether it is enabled and cannot
+redact what Bedrock logs. Operators must disable it or secure it like any other store
+of personal data: encryption, access control, retention periods, deletion.
+`BedrockOptions(request_metadata=...)` is written to these logs; keep personal data
+out of it.
+
+### Abuse detection and retention
+
+Amazon Bedrock may use automated abuse detection and, in certain limited
+circumstances, store or review model inputs and outputs
+([abuse detection](https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html)).
+AWS documents exceptions with retention for some models, for example:
+
+* Claude Fable 5 and Claude Fable 5.1: all traffic is kept for up to 30 days, and
+  flagged traffic may be reviewed by AWS staff;
+* OpenAI models other than the gpt-oss family: traffic flagged by classifiers is kept
+  for up to 30 days.
+
+With cross-Region inference, retained inputs and outputs are stored in the
+destination regions. AWS also documents per-region
+[data retention settings](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html)
+for some APIs; check which apply to your models and to the Converse API. These terms
+change; read the current AWS pages before choosing a model for personal data.
+
+### What Orkexa cannot guarantee
+
+Orkexa verifies the configuration it sends requests with. It **cannot guarantee or
+certify** where AWS processes or stores data, and `eu_only` does not make a system
+GDPR compliant. The enforcement point is your AWS organization (SCPs, IAM,
+invocation-logging settings, your agreements with AWS); the legal assessment is
+yours. See [Data flows and retention](../compliance/data-flows.md) and
+[GDPR](../compliance/gdpr.md).
 
 ## Remaining risks
 

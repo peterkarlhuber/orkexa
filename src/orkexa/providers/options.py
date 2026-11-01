@@ -9,6 +9,7 @@ native request as a last step; fields the runtime manages itself are rejected.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -48,8 +49,39 @@ _OPENAI_RESERVED = frozenset(
     }
 )
 
+#: Fields of Bedrock's ``additionalModelRequestFields`` that the runtime manages itself or
+#: that change what the request may do (tool definitions, output format, beta features).
+_BEDROCK_RESERVED_FIELDS = frozenset(
+    {
+        "anthropic_version",
+        "anthropic_beta",
+        "messages",
+        "system",
+        "tools",
+        "tool_choice",
+        "max_tokens",
+        "max_completion_tokens",
+        "stream",
+        "output_config",
+        "output_format",
+        "response_format",
+        "model",
+        "modelId",
+        "inferenceConfig",
+        "toolConfig",
+        "outputConfig",
+        "guardrailConfig",
+        "promptVariables",
+    }
+)
+_BEDROCK_RESIDENCY = ("eu_only",)
+_BEDROCK_TIERS = ("default", "priority", "flex")
+_BEDROCK_LATENCY = ("standard", "optimized")
+_GUARDRAIL_KEYS = frozenset({"guardrailIdentifier", "guardrailVersion", "trace"})
+
 __all__ = [
     "AnthropicOptions",
+    "BedrockOptions",
     "CompatibleOptions",
     "GeminiOptions",
     "OpenAIOptions",
@@ -185,4 +217,121 @@ class CompatibleOptions:
     provider = "compatible"
 
 
-ProviderOptions = AnthropicOptions | OpenAIOptions | GeminiOptions | CompatibleOptions
+def check_bedrock_fields(fields: Mapping[str, Any]) -> None:
+    """Reject Bedrock ``additionalModelRequestFields`` the runtime manages or that widen a request."""
+    reserved = _BEDROCK_RESERVED_FIELDS & set(fields or {})
+    if reserved:
+        raise ConfigurationError(
+            "These fields are managed by the agent or change what the request may do and "
+            f"cannot be set via additional_model_request_fields: {sorted(reserved)}"
+        )
+
+
+@dataclass(frozen=True)
+class BedrockOptions:
+    """Amazon Bedrock (``bedrock-runtime`` Converse API) options (immutable).
+
+    The options are frozen because they decide the region, credentials and data
+    residency of the clients; use :func:`dataclasses.replace` to derive changed options.
+
+    AWS credentials never appear here: they come from the boto3 credential chain
+    (environment, shared config/profile, SSO, container and instance roles) of
+    ``session`` or of a new ``boto3.Session(profile_name=..., region_name=...)``.
+
+    Attributes:
+        region_name: AWS region of the ``bedrock-runtime`` client (default: the
+            session's region, e.g. ``AWS_DEFAULT_REGION``).
+        profile_name: Named profile of the shared AWS config to build the session from.
+        session: A preconfigured ``boto3.Session`` (then ``profile_name`` must be ``None``).
+        data_residency: ``"eu_only"`` restricts inference to the EU regions in
+            ``allowed_regions`` and verifies every model/inference profile before the
+            first paid request (see :mod:`orkexa.providers.bedrock`).
+        allowed_regions: Explicit allowlist of regions where inference may run. With
+            ``data_residency="eu_only"`` it defaults to the EU regions
+            (:data:`orkexa.providers.bedrock.EU_REGIONS`) and may only narrow them;
+            without it, setting it enforces the allowlist for any geography.
+        control_client: A ``boto3.client("bedrock")`` for residency checks
+            (``GetInferenceProfile``/``GetGuardrail``); default: built from the same
+            session and region as the runtime client. Needed with an injected ``client=``.
+        temperature, top_p, stop_sequences: Converse ``inferenceConfig`` values.
+        guardrail: Converse ``guardrailConfig``: ``{"guardrailIdentifier": ...,
+            "guardrailVersion": ..., "trace": "enabled"|"disabled"}``.
+        service_tier: ``"default"``, ``"priority"`` or ``"flex"`` (Converse ``serviceTier``).
+        performance_latency: ``"standard"`` or ``"optimized"`` (Converse ``performanceConfig``).
+        prompt_caching: Add cache points after the system prompt, the tool definitions
+            and the last message (requires the ``caching`` capability).
+        cache_ttl: ``"5m"`` or ``"1h"`` for those cache points.
+        additional_model_request_fields: Model-specific fields (e.g. ``{"top_k": 50}``);
+            fields the runtime manages are rejected.
+        request_metadata: Converse ``requestMetadata`` (key/value tags for invocation logs).
+    """
+
+    region_name: str | None = None
+    profile_name: str | None = None
+    session: Any = field(default=None, repr=False, compare=False)
+    data_residency: Literal["eu_only"] | None = None
+    allowed_regions: tuple[str, ...] | None = None
+    control_client: Any = field(default=None, repr=False, compare=False)
+    temperature: float | None = None
+    top_p: float | None = None
+    stop_sequences: tuple[str, ...] = ()
+    guardrail: dict[str, str] | None = None
+    service_tier: Literal["default", "priority", "flex"] | None = None
+    performance_latency: Literal["standard", "optimized"] | None = None
+    prompt_caching: bool = False
+    cache_ttl: Literal["5m", "1h"] = "5m"
+    additional_model_request_fields: dict[str, Any] = field(default_factory=dict)
+    request_metadata: dict[str, str] = field(default_factory=dict)
+
+    provider = "bedrock"
+
+    def __post_init__(self) -> None:
+        if self.session is not None and self.profile_name is not None:
+            raise ConfigurationError("Pass either session= or profile_name=, not both")
+        if self.data_residency is not None and self.data_residency not in _BEDROCK_RESIDENCY:
+            raise ConfigurationError(f"data_residency must be one of {_BEDROCK_RESIDENCY} or None")
+        if self.allowed_regions is not None:
+            regions = tuple(self.allowed_regions)
+            if isinstance(self.allowed_regions, str) or not regions:
+                raise ConfigurationError("allowed_regions must be a non-empty tuple of region names")
+            if not all(isinstance(r, str) and r == r.strip().lower() and r for r in regions):
+                raise ConfigurationError(f"allowed_regions must hold lowercase region names, got {regions!r}")
+            object.__setattr__(self, "allowed_regions", regions)
+        if self.data_residency == "eu_only" and self.allowed_regions is not None:
+            from .bedrock_residency import EU_REGIONS
+
+            outside = sorted(set(self.allowed_regions) - EU_REGIONS)
+            if outside:
+                raise ConfigurationError(
+                    f"data_residency='eu_only' allows only EU regions ({', '.join(sorted(EU_REGIONS))}); "
+                    f"not allowed: {', '.join(outside)}"
+                )
+        if self.service_tier is not None and self.service_tier not in _BEDROCK_TIERS:
+            raise ConfigurationError(f"service_tier must be one of {_BEDROCK_TIERS}")
+        if self.performance_latency is not None and self.performance_latency not in _BEDROCK_LATENCY:
+            raise ConfigurationError(f"performance_latency must be one of {_BEDROCK_LATENCY}")
+        if self.cache_ttl not in ("5m", "1h"):
+            raise ConfigurationError("cache_ttl must be '5m' or '1h'")
+        if isinstance(self.stop_sequences, str):
+            raise ConfigurationError("stop_sequences must be a tuple of strings")
+        object.__setattr__(self, "stop_sequences", tuple(self.stop_sequences))
+        if self.guardrail is not None:
+            unknown = set(self.guardrail) - _GUARDRAIL_KEYS
+            if unknown or not self.guardrail.get("guardrailIdentifier"):
+                raise ConfigurationError(
+                    "guardrail needs 'guardrailIdentifier' (and 'guardrailVersion'); "
+                    f"allowed keys: {sorted(_GUARDRAIL_KEYS)}"
+                )
+        # Private copies, so later changes to the caller's dicts cannot bypass these checks.
+        object.__setattr__(
+            self, "additional_model_request_fields", dict(self.additional_model_request_fields)
+        )
+        object.__setattr__(self, "request_metadata", dict(self.request_metadata))
+        if self.guardrail is not None:
+            object.__setattr__(self, "guardrail", dict(self.guardrail))
+        check_bedrock_fields(self.additional_model_request_fields)
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in self.request_metadata.items()):
+            raise ConfigurationError("request_metadata must map strings to strings")
+
+
+ProviderOptions = AnthropicOptions | OpenAIOptions | GeminiOptions | CompatibleOptions | BedrockOptions

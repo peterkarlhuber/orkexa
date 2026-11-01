@@ -79,12 +79,17 @@ def test_core_install_has_no_provider_sdk(wheels: dict[str, Path], tmp_path: Pat
     out = venv.py(
         "import sys, orkexa\n"
         "from orkexa import Agent, MissingDependencyError\n"
-        "assert not [m for m in sys.modules if m.split('.')[0] in ('anthropic', 'openai', 'google')]\n"
+        "assert not [m for m in sys.modules if m.split('.')[0] in "
+        "('anthropic', 'openai', 'google', 'boto3', 'botocore')]\n"
         "agent = Agent(model='openai:gpt-5.5', api_key='k')\n"
         "try:\n    agent.client\nexcept MissingDependencyError as e:\n    print('missing', e)\n"
+        "from orkexa import BedrockOptions\n"
+        "bedrock = Agent(model='bedrock:anthropic.claude-sonnet-4-5-20250929-v1:0',"
+        " options=BedrockOptions(region_name='eu-central-1'))\n"
+        "try:\n    bedrock.client\nexcept MissingDependencyError as e:\n    print('missing', e)\n"
         "print(orkexa.__version__)\n"
     ).stdout
-    assert "orkexa[openai]" in out and "0.1.0" in out
+    assert "orkexa[openai]" in out and "orkexa[bedrock]" in out and "0.1.0" in out
 
 
 def test_extras_install_every_sdk(wheels: dict[str, Path], tmp_path: Path) -> None:
@@ -95,4 +100,8 @@ def test_extras_install_every_sdk(wheels: dict[str, Path], tmp_path: Path) -> No
         "for model in ('anthropic:claude-opus-5-5', 'openai:gpt-5.5', 'gemini:gemini-3-pro'):\n"
         "    assert Agent(model=model, api_key='k').client is not None\n"
         "assert Agent(model='m', provider='ollama').client is not None\n"
+        "from orkexa import BedrockOptions\n"
+        "client = Agent(model='bedrock:eu.anthropic.claude-sonnet-5-5',"
+        " options=BedrockOptions(region_name='eu-central-1')).client\n"
+        "assert client.meta.region_name == 'eu-central-1'\n"
     )

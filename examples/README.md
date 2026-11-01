@@ -40,6 +40,12 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
 | 12 | `12_pricing_snapshots.py` | Offline | An external price catalog as a versioned JSON snapshot, an isolated resolver, itemized costs, a pinned price basis during a catalog update, price references in usage records | The cost components, the snapshot each amount came from, an unknown tariff staying unknown |
 | 13 | `13_flow_quality_loop.py` | Offline | A flow: writer and reviewer agents in a quality loop with a mandatory limit, a human approval that suspends the flow, the state stored as JSON and continued | Each review round, the suspended approval, the drafts per iteration and the published text |
 
+## Provider-specific
+
+| Script | Mode | What it shows | What you see |
+|--------|------|---------------|--------------|
+| `bedrock_agent.py` | Live (AWS account) | Claude on Amazon Bedrock with an AWS profile or role, an EU inference profile and `data_residency="eu_only"`; a chat, a tool call and an optional image | The answers, then usage records with an unknown cost (no Bedrock price registered) |
+
 ## Prerequisites and limitations
 
 * **Keys:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` (or
@@ -55,6 +61,12 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
   (`chat_completions` or `responses`), `ORKEXA_COMPATIBLE_API_KEY` if the server needs
   one. `OPENAI_API_KEY` is never sent to such a server. Whether tool calling works
   depends on the model and the server.
+* **`bedrock_agent.py`** needs `pip install -e ".[bedrock]"`, AWS credentials
+  (`AWS_PROFILE`, SSO, a role or `AWS_BEARER_TOKEN_BEDROCK`), access to the model in
+  `eu-central-1`, and `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`
+  and `bedrock:GetInferenceProfile` permissions. `ORKEXA_BEDROCK_MODEL` (default
+  `eu.anthropic.claude-sonnet-5-5`) selects the model id, profile id or ARN;
+  `ORKEXA_BEDROCK_IMAGE` names an optional image. It never reads `ANTHROPIC_API_KEY`.
 * **Example 11** uses `DockerSandbox` when the `orkexa-sandbox` image exists
   (`docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`). Without Docker it
   stops before any model call, unless you set `ORKEXA_ALLOW_SUBPROCESS_SANDBOX=1`; then

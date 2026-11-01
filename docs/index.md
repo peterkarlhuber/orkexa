@@ -5,8 +5,8 @@
 # Orkexa
 
 Orkexa is a Python library for tool-using AI agents and multi-agent systems with
-**one** runtime for Anthropic Claude, OpenAI (Responses API), Google Gemini and
-OpenAI-compatible endpoints (Ollama, vLLM, gateways). Providers are adapters; tools,
+**one** runtime for Anthropic Claude, OpenAI (Responses API), Google Gemini, Amazon
+Bedrock (Converse API) and OpenAI-compatible endpoints (Ollama, vLLM, gateways). Providers are adapters; tools,
 history, structured output, streaming, memory, RAG, evaluation, dynamic agents and
 cost tracking are shared. Where a provider cannot do what you asked for, Orkexa raises
 an error instead of silently doing something else.

@@ -140,7 +140,10 @@ def test_usage_normalization(harness: Harness) -> None:
     agent.ask("hi")
     (record,) = tracker.records
     assert record.provider == agent.adapter.name
-    for field, value in EXPECTED_USAGE.items():
+    expected = dict(EXPECTED_USAGE)
+    if not harness.reports_thinking_tokens:
+        expected["thinking_tokens"] = 0  # included in output_tokens, not reported separately
+    for field, value in expected.items():
         assert getattr(record, field) == value, field
 
 
@@ -203,7 +206,10 @@ def _tool_round(harness: Harness, call: dict[str, Any]) -> dict[str, Any]:
             if message["role"] in ("tool",) or (
                 message["role"] == "user"
                 and isinstance(message["content"], list)
-                and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in message["content"])
+                and any(
+                    isinstance(b, dict) and (b.get("type") == "tool_result" or "toolResult" in b)
+                    for b in message["content"]
+                )
             ):
                 end = index
                 while end + 1 < len(messages) and messages[end + 1]["role"] == "tool":

@@ -57,6 +57,7 @@ from .errors import (
     CheckpointError,
     ConcurrentTurnError,
     ConfigurationError,
+    DataResidencyError,
     EvaluationFailedError,
     HistoryConversionError,
     IncompleteResponseError,
@@ -96,6 +97,7 @@ from .memory import EphemeralMemory, FileMemory, MemoryBackend, SQLiteMemory
 from .pricing import MODEL_PRICING, ModelPricing, register_pricing, resolve_pricing
 from .providers import (
     AnthropicOptions,
+    BedrockOptions,
     CompatibleOptions,
     GeminiOptions,
     OpenAIOptions,
@@ -119,6 +121,7 @@ __all__ = [
     "AsyncAgent",
     "AsyncClaudeAgent",
     "AuthenticationError",
+    "BedrockOptions",
     "CheckpointError",
     "Chunk",
     "Citation",
@@ -129,6 +132,7 @@ __all__ = [
     "ContentBlock",
     "Criterion",
     "CriterionResult",
+    "DataResidencyError",
     "Effort",
     "EphemeralMemory",
     "Evaluation",

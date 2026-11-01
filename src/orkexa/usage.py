@@ -588,6 +588,7 @@ def record_token_usage(
     batch: bool = False,
     requested_model: str | None = None,
     at: datetime | None = None,
+    conditions: Mapping[str, str] | None = None,
 ) -> UsageRecord:
     """Build a :class:`UsageRecord` from normalized counts (every provider but Anthropic).
 
@@ -600,6 +601,9 @@ def record_token_usage(
     rate. The reported ``service_tier`` (``"batch"`` with ``batch=True``) must be a
     tariff of the price; reported server-tool units and special token classes
     (audio) need a fee or rate, otherwise the cost is incomplete.
+    ``conditions`` are further tariff conditions the provider reports (e.g.
+    ``{"aws_region": "eu-central-1"}`` for Bedrock); like ``service_tier``, a value
+    the price has no tariff option for makes the cost unknown.
     """
     counts = {
         "input_tokens": usage.input_tokens,
@@ -611,10 +615,11 @@ def record_token_usage(
         "cache_creation_1h_input_tokens": usage.cache_creation_1h_input_tokens,
     }
     basis = pricing_basis(custom_pricing)
-    conditions: dict[str, str] = {}
+    reported: dict[str, str] = {}
     tier = "batch" if batch else getattr(usage, "service_tier", None)
     if isinstance(tier, str) and tier:
-        conditions["service_tier"] = tier
+        reported["service_tier"] = tier
+    reported.update(conditions or {})
     units = dict(getattr(usage, "units", ()) or ())
     if usage.web_search_requests:
         units["web_search_request"] = units.get("web_search_request", 0) + usage.web_search_requests
@@ -622,7 +627,7 @@ def record_token_usage(
         units["web_fetch_request"] = units.get("web_fetch_request", 0) + usage.web_fetch_requests
     metered = _metered(
         counts,
-        conditions=conditions,
+        conditions=reported,
         units=units,
         token_details=dict(getattr(usage, "token_details", ()) or ()),
     )

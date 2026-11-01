@@ -55,7 +55,7 @@ jobs:
           python-version: "3.10"
       - run: pip install -e ".[dev]"
       # The lower bounds of pyproject.toml (pydantic 2.9 is the minimum of google-genai 2.0).
-      - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "pydantic==2.9.0" "typing-extensions==4.14.0"
+      - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "boto3==1.43.80" "botocore==1.43.80" "pydantic==2.9.0" "typing-extensions==4.14.0"
       - run: pytest
 
   packaging:

@@ -4,6 +4,31 @@
 
 First release of Orkexa.
 
+### Added: Amazon Bedrock provider
+
+* Provider `"bedrock"` (`pip install "orkexa[bedrock]"`, also part of `orkexa[all]`):
+  the Bedrock Converse and ConverseStream API through `boto3`, with `BedrockOptions`
+  (region, profile or session, inference parameters, guardrail, service tier, latency,
+  prompt caching, model-specific fields, request metadata). Model ids may be
+  foundation model ids, cross-Region inference profile ids or Bedrock ARNs.
+* Credentials come only from boto3's credential chain (roles, SSO, profiles,
+  `AWS_BEARER_TOKEN_BEDROCK`) or an injected session or client; `api_key=` is
+  rejected, `AWS_ENDPOINT_URL*` settings are ignored and a custom `base_url` must use
+  `https`. `AsyncAgent` runs Bedrock calls in worker threads.
+* `BedrockOptions(data_residency="eu_only")` and `allowed_regions=` verify the region,
+  endpoint, every destination region of an inference profile (`GetInferenceProfile`)
+  and the guardrail before the first paid request, reject global profiles and fail
+  closed. New `DataResidencyError` (a `ConfigurationError`).
+* Capabilities per model family (Claude 5.x, Claude 4.5–4.8, older Claude, Amazon
+  Nova; `unknown` for other models and opaque ARNs).
+* Usage is priced for provider `bedrock` only, never with Anthropic's first-party
+  prices; every record carries the tariff condition `aws_region` (the source region).
+  Orkexa ships no Bedrock prices. `record_token_usage()` takes an additive
+  `conditions=` argument for such provider-reported tariff conditions.
+* Example `examples/bedrock_agent.py`; documentation of credentials, the differences
+  between the Anthropic API and Claude on Bedrock, EU data residency with an example
+  SCP, invocation logging and Bedrock prices.
+
 ### Fixed: sandbox output is bounded in the host
 
 * `SubprocessSandbox` and `DockerSandbox` read the runner's output with

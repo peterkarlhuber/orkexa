@@ -102,6 +102,8 @@ def test_reasoning_only_message_of_another_model_is_removed() -> None:
 @pytest.mark.parametrize("cls", HARNESSES, ids=[h.name for h in HARNESSES])
 def test_dated_model_versions_keep_reasoning_in_the_tool_loop(cls: type[Harness]) -> None:
     """APIs report a dated version (``gpt-5.5-2026-08-01``); it is the same model."""
+    if not cls.reports_model_version:
+        pytest.skip(f"{cls.name} responses never name a model version")
     harness = cls()
     requested = harness.agent_kwargs()["model"]
     harness.model = f"{requested}-2026-08-01"  # type: ignore[attr-defined]
