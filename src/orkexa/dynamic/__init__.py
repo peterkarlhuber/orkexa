@@ -76,7 +76,17 @@ from .policy import (
     UnpricedPolicy,
 )
 from .review import AGENT_REVIEW_CRITERIA, TOOL_REVIEW_CRITERIA, review_agent, review_tool
-from .sandbox import DockerSandbox, Sandbox, SandboxTestResult, SubprocessSandbox, ValidationResult
+from .sandbox import (
+    BoundedOutput,
+    DockerSandbox,
+    Sandbox,
+    SandboxTestResult,
+    SubprocessSandbox,
+    ValidationResult,
+    communicate_bounded,
+    response_limit,
+    run_bounded,
+)
 from .sandboxed_tool import SandboxedTool
 from .static_check import StaticReport, check_tool_source, check_tool_tests
 from .tool_builder import ToolBuilder
@@ -95,6 +105,7 @@ __all__ = [
     "ApprovalRequest",
     "Approver",
     "AutoApprover",
+    "BoundedOutput",
     "BudgetExceededError",
     "BudgetTracker",
     "CallbackApprover",
@@ -134,6 +145,9 @@ __all__ = [
     "ValidationResult",
     "check_tool_source",
     "check_tool_tests",
+    "communicate_bounded",
+    "response_limit",
     "review_agent",
     "review_tool",
+    "run_bounded",
 ]

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+import contextlib
 from dataclasses import dataclass
 import json
 import os
@@ -31,7 +32,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any, ClassVar
+import threading
+from typing import IO, Any, ClassVar
 import uuid
 import warnings
 
@@ -176,6 +178,154 @@ class Sandbox(ABC):
         return result
 
 
+#: Bytes kept of a sandbox's diagnostic output (stderr): only its end is shown in errors.
+_STDERR_TAIL = 64 * 1024
+
+
+@dataclass(frozen=True)
+class BoundedOutput:
+    """What :func:`communicate_bounded` collected from a process."""
+
+    stdout: bytes
+    #: The last bytes of stderr (at most ``max_stderr``).
+    stderr: bytes
+    #: Whether stdout passed ``max_stdout``; the process was then killed and ``stdout`` is cut.
+    overflow: bool
+
+
+def response_limit(max_output_chars: int) -> int:
+    """The largest runner response (bytes) for a tool result of ``max_output_chars`` characters.
+
+    The response is JSON: a result of n characters takes at most 12n bytes (``ensure_ascii`` escapes
+    astral characters as two ``\\uXXXX`` sequences), plus test reports and captured output.
+    """
+    return max(12 * max_output_chars, 0) + 1024 * 1024
+
+
+def communicate_bounded(
+    process: subprocess.Popen[bytes],
+    data: bytes,
+    *,
+    max_stdout: int,
+    max_stderr: int = _STDERR_TAIL,
+    on_overflow: Any = None,
+) -> BoundedOutput:
+    """Like :meth:`subprocess.Popen.communicate`, but the host never holds more than ``max_stdout`` bytes of
+    stdout and ``max_stderr`` bytes of stderr, whatever the process writes.
+
+    Code in a sandbox can write to the inherited stdout and stderr directly (``os.write(1, ...)``), past
+    the runner's own output limit. The sandbox's memory limit applies to the child, not to what the host
+    reads, so an unbounded read would let one tool call exhaust the memory of the API or worker process.
+    When stdout passes the limit, ``on_overflow()`` is called (default: ``process.kill()``) and reading
+    stops; stderr keeps only its end. Blocks until both pipes are closed.
+    """
+    stdout: list[bytes] = []
+    tail = bytearray()
+    state = {"size": 0, "overflow": False}
+    lock = threading.Lock()
+
+    def stop() -> None:
+        with contextlib.suppress(OSError):
+            (on_overflow or process.kill)()
+
+    def read_stdout(pipe: IO[bytes]) -> None:
+        while True:
+            chunk = pipe.read1(65536) if hasattr(pipe, "read1") else pipe.read(65536)
+            if not chunk:
+                return
+            with lock:
+                if state["overflow"]:
+                    continue  # drain, so the process is never blocked on a full pipe before it dies
+                if state["size"] + len(chunk) > max_stdout:
+                    state["overflow"] = True
+                    stdout.append(chunk[: max_stdout - state["size"]])
+                    state["size"] = max_stdout
+                    overflow = True
+                else:
+                    stdout.append(chunk)
+                    state["size"] += len(chunk)
+                    overflow = False
+            if overflow:
+                stop()
+
+    def read_stderr(pipe: IO[bytes]) -> None:
+        while True:
+            chunk = pipe.read1(65536) if hasattr(pipe, "read1") else pipe.read(65536)
+            if not chunk:
+                return
+            tail.extend(chunk)
+            if len(tail) > max_stderr:
+                del tail[: len(tail) - max_stderr]
+
+    def write_stdin(pipe: IO[bytes]) -> None:
+        try:
+            pipe.write(data)
+        except (BrokenPipeError, OSError):
+            pass
+        finally:
+            with contextlib.suppress(OSError):
+                pipe.close()
+
+    assert process.stdout is not None and process.stderr is not None
+    threads = [
+        threading.Thread(target=read_stdout, args=(process.stdout,), daemon=True),
+        threading.Thread(target=read_stderr, args=(process.stderr,), daemon=True),
+    ]
+    if process.stdin is not None:
+        threads.append(threading.Thread(target=write_stdin, args=(process.stdin,), daemon=True))
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    process.wait()
+    return BoundedOutput(stdout=b"".join(stdout), stderr=bytes(tail), overflow=bool(state["overflow"]))
+
+
+def run_bounded(
+    args: list[str],
+    data: bytes,
+    *,
+    timeout: float,
+    max_stdout: int,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | None = None,
+    on_abort: Any = None,
+) -> tuple[int, BoundedOutput]:
+    """Run ``args`` with ``data`` on stdin under a wall-clock ``timeout`` and :func:`communicate_bounded`.
+
+    Returns the exit code and the output. Raises :class:`SandboxError` on a timeout or when stdout passes
+    ``max_stdout``; in both cases the process is killed and ``on_abort()`` runs (e.g. removing a container
+    that the killed client started). Raises :class:`OSError` when the program cannot be started.
+    """
+    process = subprocess.Popen(
+        args,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=dict(env) if env is not None else None,
+        cwd=cwd,
+    )
+    result: dict[str, BoundedOutput] = {}
+    reader = threading.Thread(
+        target=lambda: result.setdefault("output", communicate_bounded(process, data, max_stdout=max_stdout)),
+        daemon=True,
+    )
+    reader.start()
+    reader.join(timeout)
+    if reader.is_alive():
+        process.kill()
+        reader.join(10)
+        if on_abort is not None:
+            on_abort()
+        raise SandboxError(f"Timed out after {timeout:g} seconds")
+    output = result["output"]
+    if output.overflow:
+        if on_abort is not None:
+            on_abort()
+        raise SandboxError(f"The sandbox wrote more than {max_stdout} bytes of output; the run was stopped")
+    return process.returncode if process.returncode is not None else -1, output
+
+
 def _minimal_environment() -> dict[str, str]:
     """No inherited variables, so no API keys or tokens reach the code."""
     if sys.platform == "win32":  # pragma: no cover - Python needs SYSTEMROOT on Windows
@@ -226,24 +376,19 @@ class SubprocessSandbox(Sandbox):
         self.env = dict(env or {})
 
     def _execute(self, workdir: Path, request: str) -> str:
-        try:
-            completed = subprocess.run(
-                [self.python, "-I", "-B", str(_RUNNER)],
-                input=request,
-                capture_output=True,
-                text=True,
-                cwd=workdir,
-                env={**self.env, **_minimal_environment()},
-                timeout=self.timeout,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise SandboxError(f"Timed out after {self.timeout:g} seconds") from exc
-        if not completed.stdout.strip():
-            raise SandboxError(
-                f"Sandbox process exited with code {completed.returncode}: {completed.stderr[-1000:]}"
-            )
-        return completed.stdout
+        code, output = run_bounded(
+            [self.python, "-I", "-B", str(_RUNNER)],
+            request.encode("utf-8"),
+            timeout=self.timeout,
+            max_stdout=response_limit(self.max_output_chars),
+            env={**self.env, **_minimal_environment()},
+            cwd=workdir,
+        )
+        stdout = output.stdout.decode("utf-8", "replace")
+        if not stdout.strip():
+            stderr = output.stderr.decode("utf-8", "replace")
+            raise SandboxError(f"Sandbox process exited with code {code}: {stderr[-1000:]}")
+        return stdout
 
 
 _DOCKER_HINT = (
@@ -341,24 +486,27 @@ class DockerSandbox(Sandbox):
 
     def _execute(self, workdir: Path, request: str) -> str:
         name = f"orkexa-sandbox-{uuid.uuid4().hex[:12]}"
-        try:
-            completed = subprocess.run(
-                self.command(workdir, name),
-                input=request,
-                capture_output=True,
-                text=True,
-                env=None,  # the docker CLI's environment is never passed into the container
-                timeout=self.timeout,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
+
+        def remove() -> None:
+            # Killing the docker client does not stop the container.
             subprocess.run([self.docker, "rm", "-f", name], capture_output=True, check=False)
-            raise SandboxError(f"Timed out after {self.timeout:g} seconds") from exc
+
+        try:
+            code, output = run_bounded(
+                self.command(workdir, name),
+                request.encode("utf-8"),
+                timeout=self.timeout,
+                max_stdout=response_limit(self.max_output_chars),
+                env=None,  # the docker CLI's environment is never passed into the container
+                on_abort=remove,
+            )
         except OSError as exc:
             raise SandboxError(f"Cannot start docker: {exc}. {_DOCKER_HINT}") from exc
-        if not completed.stdout.strip():
+        stdout = output.stdout.decode("utf-8", "replace")
+        if not stdout.strip():
+            stderr = output.stderr.decode("utf-8", "replace")
             raise SandboxError(
-                f"Container exited with code {completed.returncode}: {completed.stderr[-1000:]}"
-                + (f" {_DOCKER_HINT}" if completed.returncode == 125 else "")
+                f"Container exited with code {code}: {stderr[-1000:]}"
+                + (f" {_DOCKER_HINT}" if code == 125 else "")
             )
-        return completed.stdout
+        return stdout

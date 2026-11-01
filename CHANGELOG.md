@@ -4,6 +4,16 @@
 
 First release of Orkexa.
 
+### Fixed: sandbox output is bounded in the host
+
+* `SubprocessSandbox` and `DockerSandbox` read the runner's output with
+  `communicate_bounded()`: at most `response_limit(max_output_chars)` bytes of stdout and
+  the last 64 KiB of stderr stay in the host process. Code that wrote straight to the
+  inherited stdout (`os.write(1, ...)`) could previously make the host buffer any amount
+  (the child's memory limit does not cover the host). A run that writes more is stopped
+  (`SandboxError`, the container is removed). `communicate_bounded()`, `run_bounded()` and
+  `response_limit()` are public in `orkexa.dynamic` for other sandbox backends.
+
 ### Added: turn checkpoints (Adaptive Orchestration M6b)
 
 * A `before_tool` hook may raise `ToolCallSuspended(reason, ref)`: the call does not

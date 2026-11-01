@@ -8,6 +8,7 @@ import pytest
 
 from orkexa import ClaudeAgent, ToolDefinitionError, ToolExecutionError
 from orkexa.dynamic import DockerSandbox, SandboxedTool, SandboxError, SubprocessSandbox
+from orkexa.dynamic.sandbox import communicate_bounded
 
 from .conftest import FakeClient
 from .dynamic_helpers import MARGIN_CODE, MARGIN_TESTS, text, tool_result, tool_use
@@ -94,6 +95,33 @@ def test_output_limit() -> None:
     code = f"def long() -> str:\n    {_DOC}\n    return 'x' * 100\n"
     with pytest.raises(ToolExecutionError, match="limit is 10"):
         tiny.call(code, "long", {})
+
+
+def test_raw_output_is_bounded_in_the_host() -> None:
+    # Code that writes past the runner straight to the inherited stdout must not fill the host's memory:
+    # reading stops at the response limit and the process is killed.
+    tiny = SubprocessSandbox(max_output_chars=10, timeout=20)
+    code = (
+        "import os\n\n"
+        f"def flood() -> str:\n    {_DOC}\n"
+        "    block = b'x' * (1024 * 1024)\n"
+        "    for _ in range(64):\n        os.write(1, block)\n"
+        "    return 'done'\n"
+    )
+    with pytest.raises(ToolExecutionError, match="more than 1048696 bytes of output"):
+        tiny.call(code, "flood", {})
+
+
+def test_communicate_bounded_keeps_the_stderr_tail() -> None:
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import sys; sys.stderr.write('a' * 200000 + 'END'); print('ok')"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    output = communicate_bounded(process, b"", max_stdout=100, max_stderr=10)
+    assert output.stdout.strip() == b"ok" and not output.overflow
+    assert output.stderr == b"aaaaaaaEND"
 
 
 def test_tool_errors_become_tool_execution_errors(sandbox: SubprocessSandbox) -> None:
