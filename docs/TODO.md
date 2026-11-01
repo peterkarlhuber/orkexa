@@ -163,7 +163,7 @@ None known.
 - **Priority:** P3 Low · **Status:** Needs decision · **Refs:** #25
 - **What:** Python 3.10 reached end of life in October 2026 and still sets the lowest supported version (and holds
   back the docs toolchain pins); Python 3.14 is not in the CI matrix or classifiers.
-- **Next step:** Add 3.14; decide with nodestro-runtime whether to drop 3.10.
+- **Next step:** Add 3.14; follow the platform decision in nodestro-runtime RT-022 on dropping 3.10.
 
 ### ORK-014 · Small leftovers
 
@@ -211,7 +211,7 @@ None known.
 | ORK-001 | nodestro-runtime | audit B-03 (runtime side) | Runtime passes cancellation into Orkexa sandboxes once ORK-001 lands |
 | ORK-002 | nodestro-runtime | #57 (registry refresh workaround) | Runtime can drop its workaround after ORK-002 |
 | ORK-005 | nodestro-runtime | `require_session` guard | Runtime already enforces it; ORK-005 would add a second layer |
-| ORK-007 | nodestro-runtime | supported Python versions | Decide together; runtime depends on Orkexa |
+| ORK-007 | nodestro-runtime | RT-022 (supported Python versions) | One platform decision, held in runtime; runtime depends on Orkexa |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `3467940`) | Changes reach Nodestro only through a coordinated pin cascade |
 
 ## Maintaining this file
