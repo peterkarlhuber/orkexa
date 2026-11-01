@@ -2,9 +2,9 @@
 
 Each harness builds *real* SDK response objects (``anthropic.types.Message``,
 ``openai.types.responses.Response``, ``google.genai.types.GenerateContentResponse``,
-``openai.types.chat.ChatCompletion``) and records the native keyword arguments the
-adapter sent, so the same scenario can be checked against every adapter without
-network access.
+``openai.types.chat.ChatCompletion``, a real ``boto3`` ``bedrock-runtime`` client behind
+``botocore.stub.Stubber``) and records the native keyword arguments the adapter sent, so
+the same scenario can be checked against every adapter without network access.
 """
 
 from __future__ import annotations
@@ -20,6 +20,10 @@ import anthropic
 from anthropic.resources.beta.messages import Messages as _BetaMessagesSDK
 from anthropic.resources.messages import Messages as _MessagesSDK
 from anthropic.types import Message as AnthropicMessage
+import boto3
+from botocore.exceptions import ClientError
+from botocore.stub import Stubber
+from botocore.validate import validate_parameters
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 from google.genai.models import Models as _GeminiSDK
@@ -77,6 +81,10 @@ class Harness:
     name: str
     provider: str
     async_client: bool = False
+    reports_thinking_tokens: bool = True
+    """Whether the API reports reasoning tokens separately (Bedrock Converse does not)."""
+    reports_model_version: bool = True
+    """Whether responses name the (dated) model version that answered (Bedrock Converse does not)."""
 
     def __init__(self) -> None:
         self.script = Script([])
@@ -837,10 +845,250 @@ class CompatibleResponsesHarness(OpenAIHarness):
         return any(i.get("type") == "reasoning" for i in call["input"])
 
 
+# ---- Amazon Bedrock (Converse) -----------------------------------------------------------------
+
+#: Fake AWS credentials: requests are answered by a Stubber and never signed or sent.
+FAKE_AWS = {
+    "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+    "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+}
+
+
+def bedrock_client(service: str = "bedrock-runtime", region: str = "eu-central-1", **kwargs: Any) -> Any:
+    """A real boto3 client with fake credentials (use it only behind a Stubber or a patch)."""
+    return boto3.client(service, region_name=region, **FAKE_AWS, **kwargs)
+
+
+def converse_response(
+    content: list[dict[str, Any]],
+    stop: str = "end_turn",
+    *,
+    usage: dict[str, Any] | None = None,
+    request_id: str = "req-bedrock-1",
+    **extra: Any,
+) -> dict[str, Any]:
+    """A Converse response as boto3 returns it."""
+    return {
+        "output": {"message": {"role": "assistant", "content": content}},
+        "stopReason": stop,
+        "usage": usage
+        or {"inputTokens": 80, "outputTokens": 50, "totalTokens": 150, "cacheReadInputTokens": 20},
+        "metrics": {"latencyMs": 12},
+        "ResponseMetadata": {"RequestId": request_id, "HTTPStatusCode": 200},
+        **extra,
+    }
+
+
+def converse_events(response: dict[str, Any]) -> list[dict[str, Any]]:
+    """The ConverseStream events that carry the same answer as a Converse ``response``."""
+    events: list[dict[str, Any]] = [{"messageStart": {"role": "assistant"}}]
+    for index, block in enumerate(response["output"]["message"]["content"]):
+        if "text" in block:
+            text = block["text"]
+            middle = len(text) // 2
+            for piece in (text[:middle], text[middle:]):
+                if piece:
+                    events.append(
+                        {"contentBlockDelta": {"contentBlockIndex": index, "delta": {"text": piece}}}
+                    )
+        elif "toolUse" in block:
+            use = block["toolUse"]
+            events.append(
+                {
+                    "contentBlockStart": {
+                        "contentBlockIndex": index,
+                        "start": {"toolUse": {"toolUseId": use["toolUseId"], "name": use["name"]}},
+                    }
+                }
+            )
+            arguments = json.dumps(use["input"])
+            middle = len(arguments) // 2
+            for piece in (arguments[:middle], arguments[middle:]):
+                events.append(
+                    {
+                        "contentBlockDelta": {
+                            "contentBlockIndex": index,
+                            "delta": {"toolUse": {"input": piece}},
+                        }
+                    }
+                )
+        elif "reasoningContent" in block:
+            reasoning = block["reasoningContent"]
+            if "redactedContent" in reasoning:
+                delta: dict[str, Any] = {"redactedContent": reasoning["redactedContent"]}
+                events.append(
+                    {"contentBlockDelta": {"contentBlockIndex": index, "delta": {"reasoningContent": delta}}}
+                )
+            else:
+                text_block = reasoning["reasoningText"]
+                for delta in ({"text": text_block["text"]}, {"signature": text_block.get("signature", "")}):
+                    events.append(
+                        {
+                            "contentBlockDelta": {
+                                "contentBlockIndex": index,
+                                "delta": {"reasoningContent": delta},
+                            }
+                        }
+                    )
+        events.append({"contentBlockStop": {"contentBlockIndex": index}})
+    events.append({"messageStop": {"stopReason": response["stopReason"]}})
+    metadata: dict[str, Any] = {"usage": response["usage"], "metrics": response["metrics"]}
+    if "serviceTier" in response:
+        metadata["serviceTier"] = response["serviceTier"]
+    events.append({"metadata": metadata})
+    return events
+
+
+class FakeEventStream:
+    """Stands in for botocore's ``EventStream``: iterable, and records ``close()``."""
+
+    def __init__(self, events: list[Any]) -> None:
+        self.events = list(events)
+        self.closed = False
+        self.consumed = 0
+
+    def __iter__(self) -> Iterator[Any]:
+        for event in self.events:
+            if self.closed:
+                return
+            self.consumed += 1
+            if isinstance(event, BaseException):
+                raise event
+            yield event
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class BedrockHarness(Harness):
+    """A real ``bedrock-runtime`` client: Converse answered by ``Stubber`` (which validates
+    the request against the service model), ConverseStream by a patched method that
+    validates the request the same way and returns a :class:`FakeEventStream`."""
+
+    name = "bedrock"
+    provider = "bedrock"
+    model = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    reports_thinking_tokens = False
+    reports_model_version = False
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.streams: list[FakeEventStream] = []
+
+    def agent_kwargs(self) -> dict[str, Any]:
+        return {"model": self.model}
+
+    def text(self, text: str) -> Any:
+        return converse_response([{"text": text}])
+
+    def tool_calls(self, calls: list[tuple[str, str, dict[str, Any]]]) -> Any:
+        blocks: list[dict[str, Any]] = [
+            {"reasoningContent": {"reasoningText": {"text": "plan", "signature": "sig-abc"}}}
+        ]
+        blocks += [{"toolUse": {"toolUseId": i, "name": n, "input": a}} for i, n, a in calls]
+        return converse_response(blocks, "tool_use")
+
+    def refusal(self) -> Any:
+        return converse_response(
+            [{"text": "Sorry, the model cannot answer this question."}], "guardrail_intervened"
+        )
+
+    def truncated(self, text: str) -> Any:
+        return converse_response([{"text": text}], "max_tokens")
+
+    def status_error(self, status: int) -> BaseException:
+        code = "ThrottlingException" if status == 429 else "InternalServerException"
+        return ClientError(
+            {
+                "Error": {"Code": code, "Message": f"rate limited for key {SECRET}"},
+                "ResponseMetadata": {"HTTPStatusCode": status, "RequestId": "req-err"},
+            },
+            "Converse",
+        )
+
+    def tool_results(self, call: dict[str, Any]) -> list[tuple[str, str, bool]]:
+        results: list[tuple[str, str, bool]] = []
+        for block in call["messages"][-1]["content"]:
+            result = block.get("toolResult")
+            if result is None:
+                continue
+            texts = [c["text"] for c in result["content"] if "text" in c]
+            error = result.get("status") == "error" or (bool(texts) and texts[0] == "Error:")
+            if texts and texts[0] == "Error:":
+                texts = texts[1:]
+            results.append((result["toolUseId"], "\n".join(texts), error))
+        return results
+
+    def native_replayed(self, call: dict[str, Any]) -> bool:
+        blocks = [b for m in call["messages"] if m["role"] == "assistant" for b in m["content"]]
+        return {"reasoningContent": {"reasoningText": {"text": "plan", "signature": "sig-abc"}}} in blocks
+
+    def user_texts(self, call: dict[str, Any]) -> list[str]:
+        texts: list[str] = []
+        for message in call["messages"]:
+            if message["role"] != "user":
+                continue
+            pieces = [b["text"] for b in message["content"] if "text" in b]
+            if pieces:
+                texts.append("\n".join(pieces))
+        return texts
+
+    def client(self, asynchronous: bool) -> Any:
+        """The same synchronous boto3 client serves ``Agent`` and ``AsyncAgent``."""
+        return self.scripted_client()
+
+    def scripted_client(self, region: str = "eu-central-1", **kwargs: Any) -> Any:
+        script = lambda: self.script  # noqa: E731
+        client = bedrock_client(region=region, **kwargs)
+        stubber = Stubber(client)
+        stubber.activate()
+
+        def provide(params: dict[str, Any], model: Any, **_: Any) -> None:
+            if model.name != "Converse":
+                return
+            response = _next(script(), params)
+            if isinstance(response, ClientError):
+                error = response.response
+                stubber.add_client_error(
+                    "converse",
+                    service_error_code=error["Error"]["Code"],
+                    service_message=error["Error"]["Message"],
+                    http_status_code=error.get("ResponseMetadata", {}).get("HTTPStatusCode", 400),
+                )
+            elif isinstance(response, BaseException):
+                raise response
+            else:
+                stubber.add_response("converse", response)
+
+        def converse_stream(**params: Any) -> Any:
+            validate_parameters(
+                params, client.meta.service_model.operation_model("ConverseStream").input_shape
+            )
+            response = _next(script(), params)
+            if isinstance(response, BaseException):
+                raise response
+            stream = FakeEventStream(converse_events(response))
+            self.streams.append(stream)
+            return {"stream": stream, "ResponseMetadata": response["ResponseMetadata"]}
+
+        client.meta.events.register("provide-client-params.bedrock-runtime.Converse", provide)
+        client.converse_stream = converse_stream
+        client.stubber = stubber
+        return client
+
+
+def _next(script: Script, params: dict[str, Any]) -> Any:
+    script.calls.append(deepcopy(params))
+    if not script.responses:
+        raise AssertionError("no scripted response left")
+    return script.responses.pop(0)
+
+
 HARNESSES: list[type[Harness]] = [
     AnthropicHarness,
     OpenAIHarness,
     GeminiHarness,
     ChatHarness,
     CompatibleResponsesHarness,
+    BedrockHarness,
 ]

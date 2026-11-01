@@ -303,3 +303,66 @@ def test_example_13(capsys: pytest.CaptureFixture[str]) -> None:
     assert "suspended: waiting for ['approve//1']" in out
     assert "succeeded: drafts ['draft/0/1', 'draft/1/1'], loop counters {'retry@': 1}" in out
     assert "published: Orkexa runs agents on four providers with one API." in out
+
+
+def test_bedrock_example(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    boto3 = pytest.importorskip("boto3")
+    pixel = EXAMPLES.parent / "assets" / "branding" / "favicon-32.png"
+    monkeypatch.setenv("AWS_PROFILE", "offline")
+    monkeypatch.setenv("ORKEXA_BEDROCK_IMAGE", str(pixel))
+    monkeypatch.delenv("ORKEXA_BEDROCK_MODEL", raising=False)
+    usage = {"inputTokens": 30, "outputTokens": 10}
+    replies = [
+        {"output": {"message": {"role": "assistant", "content": [{"text": "A managed AI service."}]}}},
+        {
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": "v1",
+                                "name": "vat_amount",
+                                "input": {"net": 1250, "rate_percent": 20},
+                            }
+                        }
+                    ],
+                }
+            },
+            "stopReason": "tool_use",
+        },
+        {"output": {"message": {"role": "assistant", "content": [{"text": "250 EUR"}]}}},
+        {"output": {"message": {"role": "assistant", "content": [{"text": "A small logo."}]}}},
+    ]
+    sent: list[dict[str, Any]] = []
+    sessions: list[dict[str, Any]] = []
+
+    class Runtime:
+        meta = SimpleNamespace(region_name="eu-central-1", endpoint_url=None)
+
+        def converse(self, **request: Any) -> dict[str, Any]:
+            sent.append(request)
+            return {"stopReason": "end_turn", "usage": usage, **replies[len(sent) - 1]}
+
+    class Control:
+        def get_inference_profile(self, inferenceProfileIdentifier: str) -> dict[str, Any]:
+            assert inferenceProfileIdentifier == "eu.anthropic.claude-sonnet-5-5"
+            arn = "arn:aws:bedrock:{}::foundation-model/anthropic.claude-sonnet-5-5"
+            regions = ("eu-central-1", "eu-west-1", "eu-west-3")
+            return {"status": "ACTIVE", "models": [{"modelArn": arn.format(r)} for r in regions]}
+
+    class Session:
+        def __init__(self, **kwargs: Any) -> None:
+            sessions.append(kwargs)
+
+        def client(self, service: str, **kwargs: Any) -> Any:
+            return Runtime() if service == "bedrock-runtime" else Control()
+
+    monkeypatch.setattr(boto3, "Session", Session)
+    run("bedrock_agent.py")
+    out = capsys.readouterr().out
+    assert "A managed AI service." in out and "250 EUR" in out and "A small logo." in out
+    assert sessions[0] == {"profile_name": "offline", "region_name": "eu-central-1"}
+    assert sent[2]["messages"][-1]["content"][0]["toolResult"]["content"] == [{"text": "250.0"}]
+    assert "image" in sent[3]["messages"][-1]["content"][0]
+    assert "cost=None missing=['price']" in out

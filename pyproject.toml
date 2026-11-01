@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "orkexa"
 version = "0.1.0"
-description = "Provider-independent Python agents and multi-agent systems: one runtime for Anthropic Claude, OpenAI, Google Gemini and OpenAI-compatible endpoints, with strict tools, memory, RAG, evaluation, dynamic agents and cost tracking."
+description = "Provider-independent Python agents and multi-agent systems: one runtime for Anthropic Claude, OpenAI, Google Gemini, Amazon Bedrock and OpenAI-compatible endpoints, with strict tools, memory, RAG, evaluation, dynamic agents and cost tracking."
 dynamic = ["readme"]
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [{ name = "Peter Karlhuber" }]
-keywords = ["llm", "agent", "multi-agent", "tool-use", "anthropic", "claude", "openai", "gemini", "ollama", "vllm", "pydantic", "rag", "evaluation"]
+keywords = ["llm", "agent", "multi-agent", "tool-use", "anthropic", "claude", "openai", "gemini", "bedrock", "aws", "ollama", "vllm", "pydantic", "rag", "evaluation"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: Pydantic :: 2",
@@ -34,7 +34,10 @@ dependencies = [
 anthropic = ["anthropic>=2.0,<3"]
 openai = ["openai>=3.0,<4"]
 gemini = ["google-genai>=2.0,<3"]
-all = ["anthropic>=2.0,<3", "openai>=3.0,<4", "google-genai>=2.0,<3"]
+# 1.43.80 is the first release whose Converse model has outputConfig.effort (structured output,
+# strict tools and serviceTier are older); boto3 and botocore share version numbers.
+bedrock = ["boto3>=1.43.80,<2"]
+all = ["anthropic>=2.0,<3", "openai>=3.0,<4", "google-genai>=2.0,<3", "boto3>=1.43.80,<2"]
 pdf = ["pypdf>=4"]
 vector = ["sqlite-vec>=0.1.6"]
 docs = [
@@ -50,6 +53,7 @@ dev = [
     "anthropic>=2.0,<3",
     "openai>=3.0,<4",
     "google-genai>=2.0,<3",
+    "boto3>=1.43.80,<2",
     "build>=1.2",
     "mypy>=1.13",
     "pypdf>=4",

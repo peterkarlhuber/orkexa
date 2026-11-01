@@ -251,6 +251,73 @@ the default policy accepts every price).
 | OpenAI (Responses) | tokens, cache reads/writes, reasoning, the `service_tier` OpenAI reports (else the requested one), audio tokens, hosted-tool calls (`web_search_call`, `file_search_call`, `code_interpreter_call`, `image_generation_call`) |
 | Chat Completions / compatible | tokens, cache reads, reasoning, reported `service_tier`, audio tokens |
 | Gemini | tokens incl. thoughts, cached tokens, audio input/cache/output and image output tokens, Google Search grounding (`google_search_query`, `google_search_grounded_prompt`) |
+| Bedrock | uncached input, output, cache reads, cache writes split by lifetime (5 minutes / 1 hour), the `service_tier` Bedrock reports, and always `aws_region` (the source region) |
+
+## Amazon Bedrock
+
+Bedrock is its own price source. Orkexa ships **no** Bedrock prices, and Anthropic's
+first-party prices in `BUILTIN_SNAPSHOT` are never used for Claude on Bedrock:
+prices are looked up for provider `"bedrock"` only. Until you register a price, the
+cost of every Bedrock request is unknown (`None`), never 0.
+
+AWS prices depend on the region and on the kind of model id
+([Amazon Bedrock pricing](https://aws.amazon.com/bedrock/pricing/)), so a Bedrock
+price has to say what it applies to:
+
+* **Per model id or profile id.** The usage record carries the id the agent used
+  (`eu.anthropic.claude-sonnet-5-5`, `anthropic.claude-sonnet-4-6`, an ARN), and the
+  lookup is exact. Global cross-Region profiles are priced differently from
+  geographic and in-region use (AWS documents roughly 10 % savings for global
+  profiles, see
+  [global cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html)),
+  so register `global.` and `eu.` ids as separate prices. Use `aliases=` for ARNs
+  of the same model and price.
+* **Per region.** Every Bedrock usage record carries the tariff condition
+  `aws_region`: the source region of the client, which is the region AWS prices a
+  cross-Region request by
+  ([cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)).
+  A price must declare the regions it covers with a tariff; a region it does not
+  list, and a price without an `aws_region` tariff, make the cost unknown
+  (`tariff:aws_region=eu-west-3`).
+* **Per service tier.** `BedrockOptions(service_tier="priority")` or `"flex"` is
+  reported back as `service_tier` and needs a tariff option; `default` (or no
+  report) is the standard price. Any other reported tier, such as `reserved`, is
+  unknown unless the price lists it.
+* **Cache tokens** are separate from input: `input_tokens` holds only uncached input,
+  cache reads use `cache_read`, and cache writes use `cache_write_5m` /
+  `cache_write_1h` (Bedrock reports the lifetime of each write).
+
+```python
+from orkexa import Agent, BedrockOptions
+from orkexa.pricing import ModelPrice, Tariff, TokenRates
+
+price = ModelPrice(
+    provider="bedrock",
+    model="eu.anthropic.claude-sonnet-5-5",
+    # Illustrative numbers in USD per million tokens; copy your own from the AWS price list.
+    rates=TokenRates.of("3.30", "16.50", "0.33", cache_write_5m="4.125", cache_write_1h="6.60"),
+    tariffs=(
+        Tariff.of("aws_region", "eu-central-1", **{"eu-west-1": "1", "eu-west-3": "1"}),
+        Tariff.of("service_tier", "default", priority="1.75", flex="0.5"),
+    ),
+    source="my-aws-price-list",
+    quality="unverified",
+)
+agent = Agent(
+    provider="bedrock",
+    model="eu.anthropic.claude-sonnet-5-5",
+    options=BedrockOptions(region_name="eu-central-1"),
+    pricing=price,
+)
+```
+
+A region with different rates gets a `TariffOption` with its own `rates` instead of a
+multiplier. For catalogs shared by many agents, put the prices into a
+`PriceSnapshot` and pass a `PriceResolver` (see [Resolvers](#resolvers)).
+
+Anthropic models on Bedrock are billed through AWS Marketplace and appear on the AWS
+bill under the model provider. Orkexa's figures are estimates from the prices you
+register; the AWS bill is authoritative.
 
 ## Built-in prices
 
@@ -261,7 +328,8 @@ Claude API list prices, checked against the
 Haiku 5.5 long-context tier, batch (50 %), fast mode (2x, Opus 5.5 / Opus 5 /
 Opus 4.8), US-only data residency (1.1x, Claude 4.6 and later), web search ($10 per
 1,000) and web fetch (free). Priority Tier is contractual and therefore unknown.
-Orkexa ships no prices for other providers or for Bedrock/Vertex.
+Orkexa ships no prices for other providers or for Bedrock/Vertex; these prices are
+never applied to the `bedrock` provider (see [Amazon Bedrock](#amazon-bedrock)).
 
 ## Concurrency
 
@@ -317,7 +385,8 @@ do not depend on the global one.
 
 ## Known limitations
 
-* Orkexa ships Anthropic prices only; every other price must be supplied.
+* Orkexa ships Anthropic prices only; every other price must be supplied, including
+  Claude on Bedrock, per model or profile id and `aws_region`.
 * Charges that usage does not report are not modeled: Anthropic code-execution
   container hours, Gemini context-cache storage per hour, OpenAI container and vector
   store storage, and per-call fees of search-enabled Chat Completions models. Where

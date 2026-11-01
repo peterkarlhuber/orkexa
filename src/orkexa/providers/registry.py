@@ -35,6 +35,7 @@ _BUILTIN: dict[str, str] = {
     "anthropic": "orkexa.providers.anthropic:AnthropicProvider",
     "openai": "orkexa.providers.openai:OpenAIProvider",
     "gemini": "orkexa.providers.gemini:GeminiProvider",
+    "bedrock": "orkexa.providers.bedrock:BedrockProvider",
     "compatible": "orkexa.providers.compatible:CompatibleProvider",
     "ollama": "orkexa.providers.compatible:OllamaProvider",
     "vllm": "orkexa.providers.compatible:VLLMProvider",

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>One agent runtime for Anthropic Claude, OpenAI, Google Gemini and OpenAI-compatible endpoints.</strong>
+  <strong>One agent runtime for Anthropic Claude, OpenAI, Google Gemini, Amazon Bedrock and OpenAI-compatible endpoints.</strong>
 </p>
 
 <p align="center">
@@ -28,7 +28,8 @@ pip install "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"
 ```
 
 The core needs only Pydantic. Each provider SDK is an extra: `orkexa[anthropic]`,
-`orkexa[openai]` (also for compatible endpoints), `orkexa[gemini]`, or `orkexa[all]`;
+`orkexa[openai]` (also for compatible endpoints), `orkexa[gemini]`, `orkexa[bedrock]`
+(Amazon Bedrock through `boto3`), or `orkexa[all]` with all of them;
 `orkexa[pdf]` and `orkexa[vector]` add PDF extraction and vector search.
 `import orkexa` never imports a provider SDK.
 
@@ -72,6 +73,31 @@ The model ids are examples; use any model your account can access. Every call ab
 a paid API request; the test suite and the [offline examples](examples/README.md) need
 no key.
 
+### Amazon Bedrock
+
+Bedrock uses your AWS credentials (boto3's credential chain: a profile, SSO, a role or
+`AWS_BEARER_TOKEN_BEDROCK`), never an API key. With `data_residency="eu_only"`,
+Orkexa checks before the first paid request that the region and every destination
+region of the inference profile are in the EU, and raises `DataResidencyError`
+otherwise:
+
+```python
+from orkexa import Agent, BedrockOptions
+
+agent = Agent(
+    provider="bedrock",
+    model="eu.anthropic.claude-sonnet-5-5",  # an EU cross-Region inference profile
+    options=BedrockOptions(region_name="eu-central-1", profile_name="my-profile", data_residency="eu_only"),
+    tools=[add],
+)
+print(agent.ask("What is 17 + 25?"))
+```
+
+Claude on Bedrock is billed by AWS and processed under AWS terms; it is a different
+provider from `anthropic`, with a subset of its features. See
+[Providers and capabilities](docs/getting-started/providers.md#amazon-bedrock) and
+[`examples/bedrock_agent.py`](examples/bedrock_agent.py).
+
 ## Provider support
 
 | Provider | Kind | API | Install | Credentials |
@@ -79,6 +105,7 @@ no key.
 | `anthropic` | native | Messages API (`anthropic` SDK) | `orkexa[anthropic]` | `ANTHROPIC_API_KEY` or `api_key=` |
 | `openai` | native | Responses API, stateless (`openai` SDK) | `orkexa[openai]` | `OPENAI_API_KEY` or `api_key=` |
 | `gemini` | native | Gemini API (`google-genai` SDK) | `orkexa[gemini]` | `GEMINI_API_KEY` / `GOOGLE_API_KEY` or `api_key=` |
+| `bedrock` | native | Amazon Bedrock Converse API (`boto3`) | `orkexa[bedrock]` | AWS credential chain (profile, SSO, role, `AWS_BEARER_TOKEN_BEDROCK`); no `api_key=` |
 | `compatible` | compatible | Chat Completions or Responses at any `base_url` | `orkexa[openai]` | explicit `api_key=` only |
 | `ollama`, `vllm` | compatible (presets) | as `compatible`, with local default URLs | `orkexa[openai]` | explicit `api_key=` only |
 
@@ -156,7 +183,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 * **License:** [MIT](LICENSE).
 * **Notices:** [NOTICE](NOTICE).
 * **Independence:** Orkexa is an independent open-source project. It is not affiliated
-  with, endorsed by or sponsored by Anthropic, OpenAI or Google; their names identify
-  the APIs Orkexa connects to.
+  with, endorsed by or sponsored by Anthropic, OpenAI, Google or Amazon Web Services;
+  their names identify the APIs Orkexa connects to.
 * **Support and contributing:** [SUPPORT.md](SUPPORT.md) ·
   [CONTRIBUTING.md](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md)

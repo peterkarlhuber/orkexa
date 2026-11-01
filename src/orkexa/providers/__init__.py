@@ -8,7 +8,14 @@ the extra to install if it is missing.
 from __future__ import annotations
 
 from .base import Provider, ProviderConfig, redact
-from .options import AnthropicOptions, CompatibleOptions, GeminiOptions, OpenAIOptions, ProviderOptions
+from .options import (
+    AnthropicOptions,
+    BedrockOptions,
+    CompatibleOptions,
+    GeminiOptions,
+    OpenAIOptions,
+    ProviderOptions,
+)
 from .registry import (
     DEFAULT_PROVIDER,
     create_provider,
@@ -21,6 +28,7 @@ from .registry import (
 __all__ = [
     "DEFAULT_PROVIDER",
     "AnthropicOptions",
+    "BedrockOptions",
     "CompatibleOptions",
     "GeminiOptions",
     "OpenAIOptions",
