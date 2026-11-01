@@ -116,6 +116,7 @@ nav:
       - ADR 0008 pricing engine: architecture/decisions/0008-pricing-engine.md
       - ADR 0009 flow kernel: architecture/decisions/0009-flow-kernel.md
       - ADR 0010 orchestration protocol: architecture/decisions/0010-orchestration-protocol.md
+      - ADR 0011 dynamic teams and paused delegations: architecture/decisions/0011-dynamic-teams-and-paused-delegations.md
   - Development:
       - development/index.md
       - Releasing: development/releasing.md
