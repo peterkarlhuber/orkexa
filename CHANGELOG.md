@@ -4,6 +4,19 @@
 
 First release of Orkexa.
 
+### Added: dynamic teams and paused delegations (Adaptive Orchestration M6b, ADR 0011)
+
+* Orchestration protocol version 2 (version 1 records still read and replay):
+  `Parallel` (several members at once, `max_parallel`), `Staff` (a team assembled from
+  the pool while the orchestration runs, `staffing`, `max_team`), member `Parameter`s
+  with validated `values`, an `Outcome` per assignment (`succeeded`, `failed`,
+  `rejected`, `cancelled`, `expired`, `waiting`) and `Pending` delegations: a member
+  that waits pauses the orchestration, which later continues the same execution
+  (`ref`) without asking the model again (`complete_pending()`).
+* Drivers take `execute(Delegation)`; `DelegationSuspended` pauses, `DelegationEnded`
+  reports rejected, cancelled or expired members. The async driver runs parallel
+  assignments concurrently and cancels the others on a budget error.
+
 ### Added: orchestration protocol (Adaptive Orchestration M4, ADR 0010)
 
 * `orkexa.orchestration`: a model chooses which member of a fixed `Pool` works next.

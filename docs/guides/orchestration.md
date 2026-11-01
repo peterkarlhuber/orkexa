@@ -56,3 +56,43 @@ for step in state.steps:
   `BudgetExceededError` ends the orchestration.
 * **Record and replay:** `state.model_dump_json()` is the complete record;
   `replay(state, pool, limits)` checks it again without model calls.
+
+## Teams, parallel work, parameters and pauses (protocol version 2)
+
+[ADR 0011](../architecture/decisions/0011-dynamic-teams-and-paused-delegations.md) gives
+the orchestrator more freedom, always inside the pool and the limits:
+
+```python
+from orkexa.orchestration import (
+    Delegation,
+    DelegationSuspended,
+    OrchestrationLimits,
+    run_orchestration,
+)
+
+limits = OrchestrationLimits(staffing=True, max_team=3, max_parallel=2)
+
+
+def execute(item: Delegation) -> str:
+    # item.values holds parameter values the member declared (Member.parameters).
+    # item.ref is set when this assignment waited before: continue that execution.
+    if needs_approval(item):
+        raise DelegationSuspended(ref=start_or_continue(item))
+    return run_member(item)
+
+
+state = run_orchestration("Write the report", pool, decide=decide, execute=execute, limits=limits)
+if state.paused:
+    save(state)  # later: run_orchestration(..., state=load()) continues the waiting members
+```
+
+* **`Staff(add, remove)`** assembles the team with `staffing=True`; only team members
+  can get work, the team never exceeds `max_team` and never leaves the pool.
+* **`Parallel(assignments)`** starts 2 to `max_parallel` different members at once
+  (concurrently in `arun_orchestration`). Every assignment gets its own `Outcome`.
+* **Parameters:** a `Member` lists `Parameter`s; the orchestrator sets them in `values`
+  and `validate` refuses unknown keys and wrong values.
+* **Pauses:** raising `DelegationSuspended` keeps the decision as `state.pending`. Calling
+  the driver again with that state runs only the waiting members, with the `ref` they
+  waited with, and asks the model nothing until they ended. `DelegationEnded("rejected")`,
+  `"expired"` or `"cancelled"` reports a member that ended without a result.
