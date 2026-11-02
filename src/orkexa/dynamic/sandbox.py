@@ -18,7 +18,8 @@ Two backends share one interface:
 Other backends (gVisor, Firecracker, a hosted sandbox) only need to implement
 :meth:`Sandbox._execute`; they should also describe what they enforce
 (:meth:`Sandbox.capabilities`) and whether they can run here (:meth:`Sandbox.probe`).
-The operating system sandbox :class:`~orkexa.dynamic.MacOSSandbox` is experimental.
+The former macOS sandbox :class:`~orkexa.dynamic.MacOSSandbox` was removed (Docker-first, ADR 0012); the
+name remains as a deprecated placeholder that never runs code.
 
 Every call can be cancelled: by its caller (:func:`orkexa.dynamic.cancel_scope`)
 or for all callers at once (:meth:`Sandbox.cancel`). The call's process (and

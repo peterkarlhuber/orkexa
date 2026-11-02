@@ -4,6 +4,17 @@
 
 First release of Orkexa.
 
+### Removed: native macOS sandbox (Docker-first, ADR 0012)
+
+* The experimental Seatbelt `MacOSSandbox` (ORK-014) is removed; `DockerSandbox` is the sandbox for untrusted
+  code on all platforms. An independent review found it not releasable (MS-1: same-user processes can read a
+  sandboxed process's environment through `KERN_PROCARGS2`; MS-2 to MS-10).
+* `orkexa.dynamic.MacOSSandbox` remains as a deprecated placeholder for one release: `probe()` always reports
+  `available=False`, `reason="removed"`; its capabilities claim no isolation; constructing it emits a
+  `DeprecationWarning`; `validate()` / `call()` raise `SandboxError` / `ToolExecutionError` without running
+  anything. It will be deleted later.
+* The `Platforms` workflow no longer requires a native sandbox on macOS (`ORKEXA_REQUIRE_NATIVE_SANDBOX` is gone).
+
 ### Added: Amazon Bedrock provider
 
 * Provider `"bedrock"` (`pip install "orkexa[bedrock]"`, also part of `orkexa[all]`):
