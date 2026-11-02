@@ -360,7 +360,26 @@ def reap(
 def stop_container(
     docker: str, name: str, *, env: Mapping[str, str] | None = None, timeout: float = 30.0
 ) -> None:
-    """Kill and remove the container ``name`` (killing the docker client does not stop it). Never raises."""
+    """Kill and remove the container ``name`` (killing the docker client does not stop it). Never raises.
+
+    A client killed while its create request is in flight can leave the daemon to create the container a
+    moment after the first ``rm -f`` found nothing, so the name is checked again for ``_SETTLE_S`` seconds
+    (the owner's deadline label and :func:`reap` remain the backstop)."""
     for args in (["kill", name], ["rm", "-f", name]):
         with contextlib.suppress(SandboxError):
             _cli(docker, args, env, timeout)
+    settle = time.monotonic() + _SETTLE_S
+    while time.monotonic() < settle:
+        time.sleep(_SETTLE_POLL_S)
+        try:
+            listed = _cli(docker, ["ps", "-aq", "--filter", f"name=^/?{name}$"], env, timeout)
+        except SandboxError:
+            return
+        if listed.returncode == 0 and listed.stdout.strip():
+            with contextlib.suppress(SandboxError):
+                _cli(docker, ["rm", "-f", name], env, timeout)
+
+
+#: How long :func:`stop_container` keeps checking for a container created after the client was killed.
+_SETTLE_S = 3.0
+_SETTLE_POLL_S = 0.5
