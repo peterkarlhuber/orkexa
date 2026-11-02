@@ -28,7 +28,10 @@ First release of Orkexa.
   seccomp profiles of Docker and Podman block, and refuses the host if any succeeds (a permissive custom profile
   passed the old `Seccomp: 2` check). The probes exist for x86-64 and arm64; other architectures are refused.
 * Where the host reports AppArmor, the container must run under an enforcing profile (not `unconfined` or
-  `complain`); otherwise the label is reported as the new fact `apparmor_label`.
+  `complain`); otherwise the label is reported as the new fact `apparmor_label`. A stack of the engine's container
+  profile (`docker-default`, `containers-default-<version>`) with the OCI runtime's unconfined helper profile
+  (`crun`, `runc`; Ubuntu 24.04 Podman reports `containers-default-0.57.4-apparmor1//&crun (mixed)`) counts as
+  enforcing, because every member of a stack confines the process; any other member or order is refused.
   `evaluate_self_test()` has the new keyword `apparmor`; the report format is version 2.
 * `run_args()` adds root-owned, empty `noexec` tmpfs file systems on `/run` and `/var/tmp` (1 MiB): Podman mounted
   writable, executable tmpfs file systems there for every read-only container.

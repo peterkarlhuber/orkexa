@@ -377,6 +377,13 @@ def test_check_seccomp_probes() -> None:
         ("docker-default (complain)", False),
         ("docker-default (unconfined)", False),
         ("unconfined", False),
+        # Ubuntu 24.04 Podman: the container profile stacked with crun's unconfined helper profile.
+        ("containers-default-0.57.4-apparmor1//&crun (mixed)", True),
+        ("docker-default//&runc (mixed)", True),
+        ("crun//&containers-default-0.57.4 (mixed)", False),
+        ("containers-default-0.57.4//&evil (mixed)", False),
+        ("unconfined//&crun (mixed)", False),
+        ("docker-default (mixed)", False),
         ("", False),
         (None, False),
     ],

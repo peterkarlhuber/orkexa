@@ -474,6 +474,27 @@ def check_seccomp_probes(probes: Any) -> list[str]:
     return problems
 
 
+# Profiles the engines load in enforce mode for every container (Docker's ``docker-default``, the
+# ``containers-default-<version>`` profile of containers/common that Podman applies).
+_CONTAINER_PROFILE = re.compile(r"^(docker-default|containers-default(-[0-9][0-9A-Za-z.\-]*)?)$")
+# Profiles some distributions attach to the OCI runtime binary itself, as ``unconfined`` profiles that
+# exist only to grant user namespaces (Ubuntu 23.10+ ``crun``, ``runc``).
+_RUNTIME_PROFILE = re.compile(r"^(crun|runc|youki)$")
+
+
+def _engine_stack(text: str) -> bool:
+    """A stacked label such as ``containers-default-0.57.4-apparmor1//&crun (mixed)``: the container profile
+    (enforcing) stacked with the OCI runtime's unconfined helper profile. A stack is confined by each of its
+    members, so the container profile still applies; anything else in the stack is refused."""
+    body, _, mode = text.rpartition(" ")
+    if mode != "(mixed)" or "//&" not in body:
+        return False
+    members = [member.strip() for member in body.split("//&")]
+    if len(members) < 2 or not _CONTAINER_PROFILE.match(members[0]):
+        return False
+    return all(_CONTAINER_PROFILE.match(m) or _RUNTIME_PROFILE.match(m) for m in members[1:])
+
+
 def check_apparmor(label: Any, *, required: bool) -> list[str]:
     """Whether the container's AppArmor label (``/proc/self/attr/apparmor/current``) is an enforcing
     profile, as needed when the host reports AppArmor (``required``); otherwise nothing is refused."""
@@ -481,6 +502,8 @@ def check_apparmor(label: Any, *, required: bool) -> list[str]:
         return []
     text = str(label or "").strip()
     if text.endswith(("(enforce)", "(kill)")):
+        return []
+    if _engine_stack(text):
         return []
     return [
         "the host reports AppArmor, but the container is not confined by an enforcing profile "
