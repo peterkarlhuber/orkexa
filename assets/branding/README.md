@@ -16,7 +16,7 @@ the transparent master and must not be edited by hand.
 | `favicon.ico` | 16, 32, 48 | browser favicon (symbol on a rounded white tile) |
 | `favicon-32.png` | 32 × 32 | PNG favicon (docs site) |
 | `apple-touch-icon.png` | 180 × 180 | home-screen icon (opaque white tile) |
-| `social-preview.png` | 1280 × 640 | GitHub social preview: the light lockup centered on white (uploaded manually in the repository settings) |
+| `social-preview.png` | 1280 × 640 | GitHub social preview: the white-wordmark lockup on the shared dark brand template (uploaded manually in the repository settings) |
 
 ## Rules
 
@@ -40,6 +40,14 @@ uv run --with pillow --with numpy python assets/branding/build.py
 ```
 
 `build.py` checks the masters, runs `derive_branding.py`, keeps the files listed above,
-lays out `social-preview.png` and copies the web assets into `docs/assets/branding/`,
+renders `social-preview.png` with `social_preview.py` and copies the web assets into `docs/assets/branding/`,
 because MkDocs only serves files below `docs/`. `tests/test_repository.py` checks that the
 copies match.
+
+`social_preview.py` is the social preview template shared with the Nodestro and Axentra
+repositories (vendored unchanged next to `derive_branding.py`): a dark background with a soft
+glow in the brand blue, the white-wordmark lockup, a short accent rule and a one-line caption.
+Only the logo pixels come from the masters; the background and caption are drawn by the
+script. Output bytes, like those of `derive_branding.py`, depend on the Pillow version, so
+`build.py` may rewrite the favicons byte-for-byte differently on another Pillow release; commit
+only the files you meant to change.
