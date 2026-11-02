@@ -595,6 +595,10 @@ class DockerSandbox(Sandbox):
         transport: ``"stdin"`` (default) or the deprecated ``"bind"``, which mounts the run directory and the
             installed ``orkexa`` package read-only from the host (the daemon must see the host's files).
         owner: The value of the ``org.orkexa.sandbox`` label of this sandbox's containers.
+        environ: The environment of every ``docker`` CLI process this sandbox starts (preflight, image
+            inspection, self-test, runs, stopping and reaping containers), e.g. only ``PATH``, ``HOME`` and
+            ``DOCKER_HOST``; ``None`` (default) inherits this process's. It never reaches the container:
+            :func:`~orkexa.dynamic.docker.run_args` passes no ``-e``.
     """
 
     isolated: ClassVar[bool] = True
@@ -612,6 +616,7 @@ class DockerSandbox(Sandbox):
         docker: str = "docker",
         transport: Literal["stdin", "bind"] = "stdin",
         owner: str = "orkexa",
+        environ: Mapping[str, str] | None = None,
     ) -> None:
         super().__init__(timeout=timeout, memory_mb=memory_mb, max_output_chars=max_output_chars)
         if transport not in ("stdin", "bind"):
@@ -629,6 +634,7 @@ class DockerSandbox(Sandbox):
         self.docker = docker
         self.transport: Literal["stdin", "bind"] = transport
         self.owner = owner
+        self.environ: dict[str, str] | None = dict(environ) if environ is not None else None
         #: (monotonic time, image id) of the last passed preflight and self-test.
         self._ready: tuple[float, str] | None = None
         self._ready_lock = threading.Lock()
@@ -698,21 +704,26 @@ class DockerSandbox(Sandbox):
     def _host_and_image(self, image: str | None) -> tuple[SandboxProbe, DockerHost | None, ImageInfo | None]:
         """CLI, daemon, preflight and image: the checks before any container starts."""
         ref = image or self.image
-        if shutil.which(self.docker) is None:
+        found = (
+            shutil.which(self.docker)
+            if self.environ is None or "PATH" not in self.environ
+            else shutil.which(self.docker, path=self.environ["PATH"])
+        )
+        if found is None:
             return (
                 SandboxProbe("docker", False, "missing", f"The {self.docker} command is not installed"),
                 None,
                 None,
             )
         try:
-            host = inspect_host(self.docker)
+            host = inspect_host(self.docker, env=self.environ)
         except DockerProbeError as exc:
             return SandboxProbe("docker", False, exc.reason, exc.detail), None, None
         checked = preflight(host)
         if not checked.available:
             return checked, host, None
         try:
-            info = inspect_image(self.docker, ref)
+            info = inspect_image(self.docker, ref, env=self.environ)
         except (SandboxError, ValueError) as exc:
             return (
                 SandboxProbe(
@@ -769,7 +780,8 @@ class DockerSandbox(Sandbox):
                     b"",
                     timeout=max(self.timeout, _SELF_TEST_TIMEOUT),
                     max_stdout=1024 * 1024,
-                    on_abort=lambda: stop_container(self.docker, name),
+                    env=self.environ,
+                    on_abort=lambda: stop_container(self.docker, name, env=self.environ),
                     stop=stop,
                 )
         except SandboxCancelled:
@@ -837,7 +849,7 @@ class DockerSandbox(Sandbox):
 
         def remove() -> None:
             # Killing the docker client does not stop the container.
-            stop_container(self.docker, name)
+            stop_container(self.docker, name, env=self.environ)
 
         try:
             with self._call_scope() as stop:
@@ -846,7 +858,7 @@ class DockerSandbox(Sandbox):
                     data,
                     timeout=self.timeout,
                     max_stdout=response_limit(self.max_output_chars),
-                    env=None,  # the docker CLI's environment is never passed into the container
+                    env=self.environ,  # the docker CLI's environment; it never reaches the container
                     on_abort=remove,
                     stop=stop,
                 )
@@ -865,4 +877,4 @@ class DockerSandbox(Sandbox):
 
     def reap(self, *, remove_all: bool = False) -> int:
         """Remove this owner's containers past their deadline (:func:`orkexa.dynamic.docker.reap`)."""
-        return reap(self.docker, self.owner, remove_all=remove_all)
+        return reap(self.docker, self.owner, remove_all=remove_all, env=self.environ)

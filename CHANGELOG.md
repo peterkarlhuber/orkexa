@@ -69,6 +69,10 @@ First release of Orkexa.
   envelope on stdin, so nothing of the host's file system is mounted and the daemon
   may run in a VM or on another host. `transport="bind"` keeps the old mounts and
   emits a `DeprecationWarning`. New `owner=` (the label value).
+* `DockerSandbox(environ=...)`: the environment of every `docker` CLI process the
+  sandbox starts (preflight, image inspection, self-test, runs, stop, reap), e.g. only
+  `PATH`, `HOME` and `DOCKER_HOST`; default `None` inherits this process's. It never
+  reaches the container.
 * `Sandbox.cancel()` and timeouts kill and remove the call's container by name;
   `list_sandbox_containers()`, `reap()` and `DockerSandbox.reap()` remove containers
   past their deadline label (after a crash of the host process).

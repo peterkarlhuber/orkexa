@@ -363,3 +363,49 @@ def test_command_keeps_its_signature(tmp_path: Path) -> None:
         warnings.simplefilter("error")
         command = DockerSandbox().command(tmp_path, "sb-1")
     assert command[0] == "docker" and "orkexa-sandbox" in command
+
+
+@needs_posix
+def test_environ_is_the_environment_of_every_docker_cli_call(
+    fake_docker: FakeDocker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fake CLI finds its state only through FAKE_DOCKER_DIR: without it in this process's environment,
+    # every call (preflight, image, self-test, run, stop, reap) works only with the sandbox's environ.
+    environ = {"FAKE_DOCKER_DIR": os.environ["FAKE_DOCKER_DIR"], "PATH": "/usr/bin:/bin"}
+    monkeypatch.delenv("FAKE_DOCKER_DIR")
+    without = DockerSandbox(docker=str(fake_docker.path))
+    with pytest.raises(ToolExecutionError, match="FAKE_DOCKER_DIR"):
+        without.call(CODE, "square", {"x": 2})
+    sandbox = DockerSandbox(docker=str(fake_docker.path), owner="environ-test", environ=environ, timeout=30)
+    assert sandbox.environ == environ and sandbox.environ is not environ
+    assert sandbox.self_test().available
+    assert sandbox.call(CODE, "square", {"x": 6}) == "36"
+    assert len(fake_docker.runs()) == 1
+    caught: list[BaseException] = []
+
+    def call() -> None:
+        try:
+            sandbox.call(SLEEP, "wait", {})
+        except BaseException as exc:
+            caught.append(exc)
+
+    worker = threading.Thread(target=call)
+    worker.start()
+    deadline = time.monotonic() + 15
+    while len(fake_docker.runs()) < 2 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.2)
+    sandbox.cancel()
+    worker.join(20)
+    assert caught and isinstance(caught[0].__cause__, SandboxCancelled)
+    name = next(a for a in fake_docker.runs()[-1] if a.startswith("orkexa-sandbox-"))
+    assert ["rm", "-f", name] in fake_docker.calls()  # stopped with the environ, too
+    now = time.time()
+    fake_docker.write("containers.json", [_container("left", "environ-test", str(int(now - 10)))])
+    assert sandbox.reap() == 1
+    assert fake_docker.containers() == []
+
+
+def test_environ_with_a_path_finds_the_cli(tmp_path: Path) -> None:
+    probe = DockerSandbox(docker="docker", environ={"PATH": str(tmp_path)}).self_test()
+    assert not probe.available and probe.reason == "missing"
