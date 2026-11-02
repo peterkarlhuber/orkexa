@@ -1,9 +1,10 @@
 # Docker manual verification
 
-The `docker` jobs of the `Platforms` workflow check rootful and rootless Docker, Podman,
-Linux arm64 and (non-blocking) Colima on every push. Hosted runners cannot run Docker
-Desktop on Apple Silicon (no nested virtualization), Linux containers on Windows, or
-OrbStack, so these hosts are **unverified in CI** (see the
+The `docker` jobs of the `Platforms` workflow check rootful and rootless Docker, rootful
+Podman, Linux arm64 and (non-blocking) rootless Podman and Colima on macOS x86-64 on every
+push. Docker Desktop has never run in CI: hosted runners cannot run it on Apple Silicon
+(no nested virtualization), Linux containers on Windows (x64 or ARM64), OrbStack or
+`podman machine`, so these hosts are **unverified in CI** (see the
 [feature matrix](../feature-matrix.md#docker-sandbox-hosts)). Use this checklist on such
 a computer before relying on it, after a Docker or OS update, and before a release.
 
@@ -79,7 +80,7 @@ a computer before relying on it, after a Docker or OS update, and before a relea
 | Docker Desktop, Windows (WSL2) | Linux containers only: "Switch to Windows containers" makes the daemon report `OSType: windows`, which is refused (`os-type`). Run the checklist from a WSL2 shell or PowerShell with Python for Windows; both use the same daemon. |
 | Colima (macOS arm64 or x86-64) | Start with `colima start --vm-type vz` (or `qemu`); the CLI's socket is `~/.colima/default/docker.sock`. |
 | OrbStack | Its daemon reports `OperatingSystem: OrbStack`; the name is only recorded, the checks decide. |
-| Podman (Linux, macOS `podman machine`) | Use the Docker API (`podman system service`, or the machine's socket) through `DOCKER_HOST`, or pass `--docker podman`. Rootless Podman needs cgroup v2 and the `cpu`, `memory` and `pids` controllers delegated to the user. |
+| Podman (Linux, macOS `podman machine`) | Use the Docker API (`podman system service`, or the machine's socket) through `DOCKER_HOST`, or pass `--docker podman`. Rootless Podman needs cgroup v2 and the `cpu`, `memory` and `pids` controllers delegated to the user. A `mounts.conf` entry (RHEL subscription secrets on `/run/secrets`), a containers.conf `volumes` or `tz` default is refused (`self-test`, "unexpected ... mount"): remove it for the sandbox's engine; the check is not relaxed. |
 
 ## Recording the result
 
