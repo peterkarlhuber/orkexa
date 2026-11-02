@@ -52,6 +52,8 @@
 
 ::: orkexa.dynamic.docker.host_fingerprint
 
+::: orkexa.dynamic.docker.redact_docker_output
+
 ::: orkexa.dynamic.docker.ContainerLimits
 
 ::: orkexa.dynamic.docker.run_args
