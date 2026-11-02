@@ -78,10 +78,15 @@ runner can run it, so it is checked with the
 | Docker Engine, rootful, Linux arm64 (ubuntu-24.04-arm) | CI | cgroup v2 |
 | Docker Engine, rootless, Linux x86-64 | CI | needs cpu, memory and pids delegated to the user |
 | Docker Engine, rootless without cpu delegation | CI: refused | reason `limits` |
-| Podman (`podman system service`, Docker API) | CI | rootful service in CI; rootless needs delegation like Docker |
+| Podman, rootful (`podman system service`, Docker API) | CI | Podman 4.9.3 with crun 1.14.1 on ubuntu-24.04 x86-64 |
+| Podman, rootless (`podman system service`, Docker API) | CI, non-blocking: refused | Podman 4.9.3 with crun 1.14.1 on ubuntu-24.04: the mount table passes (recorded in `tests/fixtures/docker/mountinfo/podman-rootless.txt`), but the self-test refuses it (`self-test`): the `--ulimit` limits are not applied (`RLIMIT_NOFILE` 65536, `RLIMIT_FSIZE` unlimited, core hard limit unlimited) and crun runs unconfined by AppArmor. Newer Podman versions are untested |
+| Podman with `mounts.conf` entries (RHEL subscription secrets on `/run/secrets`) or a containers.conf `volumes` or `tz` default (a mount at `/etc/localtime`) | refused | the self-test refuses every host-backed mount, by design |
 | Colima, macOS x86-64 (macos-15-intel) | CI, non-blocking | nested virtualization on hosted runners is not guaranteed |
-| Docker Desktop, macOS arm64 | unverified in CI | refused if it reports an unconfined seccomp default |
-| Docker Desktop, Windows (WSL2 backend) | unverified in CI | Linux containers only; Windows containers are refused (`os-type`) |
+| Docker Desktop, macOS arm64 (Apple silicon) | unverified in CI | never run in CI; refused if it reports an unconfined seccomp default |
+| Docker Desktop, macOS x86-64 (Intel) | unverified in CI | never run in CI |
+| Docker Desktop, Windows x64 (WSL2 backend) | unverified in CI | never run in CI; Linux containers only, Windows containers are refused (`os-type`) |
+| Docker Desktop, Windows ARM64 (WSL2 backend) | unverified in CI | never run in CI; arm64 Linux containers (the seccomp probes cover arm64) |
 | Colima, macOS arm64 | unverified in CI | |
-| OrbStack, macOS | unverified in CI | |
+| OrbStack, macOS | unverified in CI | reports AppArmor, so an enforcing profile is required in the container |
+| Podman machine (macOS, Windows) | unverified in CI | the machine's Linux VM runs Podman rootless by default |
 | Any daemon on cgroup v1 | refused | rootless: `rootless-cgroup`; rootful: `self-test` (limits cannot be verified) |

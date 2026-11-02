@@ -11,7 +11,7 @@
 |---|---|
 | P0 Critical | 0 |
 | P1 High | 0 |
-| P2 Medium | 6 |
+| P2 Medium | 1 |
 | P3 Low | 10 |
 | P4 Optional | 7 |
 
@@ -142,58 +142,77 @@ None known.
 
 ### ORK-019 · Docker preflight: the daemon's limits were not checked
 
-- **Priority:** P2 Medium · **Status:** In progress (branch `docker-unify`, not yet pushed) · **Refs:** Docker-first
-  sandbox plan 2026-11-02 (O1)
+- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #31) · **Refs:** Docker-first sandbox plan 2026-11-02 (O1)
 - **What:** `DockerSandbox.probe()` only ran `docker info`. A daemon that cannot enforce memory, process or CPU limits
   (rootless without cgroup delegation, cgroup v1 rootless), an unconfined seccomp default or Windows containers would
   have run code without those limits.
-- **Done in the branch:** `orkexa.dynamic.docker.inspect_host()`/`preflight()` with the reason codes `os-type`,
+- **Done:** `orkexa.dynamic.docker.inspect_host()`/`preflight()` with the reason codes `os-type`,
   `limits`, `seccomp`, `rootless-cgroup`; recorded `docker info` outputs of rootful/rootless cgroup v1/v2, Podman,
   Docker Desktop, Colima, OrbStack, unconfined seccomp and Windows in the unit tests.
-- **Next step:** Merge after the MacOSSandbox removal; runtime R1/R2 adopt it.
+- **Next step:** None here; nodestro-runtime's Docker monitor uses it. Hosts without CI evidence: ORK-024.
 
 ### ORK-020 · One container shape, stdin transport, cancel and reaper
 
-- **Priority:** P2 Medium · **Status:** In progress (branch `docker-unify`) · **Refs:** plan O2
+- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #31) · **Refs:** plan O2
 - **What:** Orkexa and the runtime used different `docker run` shapes; Orkexa bind-mounted the host's run directory
   and package (a remote daemon could not see them); a crashed host process left containers running.
-- **Done in the branch:** `ContainerLimits`/`run_args()` (no `-v`, no `-e`, `--pull never`, private IPC, ulimits,
+- **Done:** `ContainerLimits`/`run_args()` (no `-v`, no `-e`, `--pull never`, private IPC, ulimits,
   no logging, `noexec` tmpfs `/tmp` and `/work`, owner and deadline labels); `transport="stdin"` default
   (`"bind"` deprecated); cancel and timeout kill the container by name; `list_sandbox_containers()`/`reap()`.
-- **Next step:** Runtime R1 replaces its own `sandbox_run_args`/`StreamedSandbox` with these.
+- **Next step:** None here; nodestro-runtime's `sandbox_run_args` and `StreamedSandbox` now build on them.
 
 ### ORK-021 · In-container self-test before the first run
 
-- **Priority:** P2 Medium · **Status:** In progress (branch `docker-unify`) · **Refs:** plan O3
+- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #31) · **Refs:** plan O3
 - **What:** A daemon can accept a flag and not apply it; nothing proved that the limits reached the container.
-- **Done in the branch:** `DockerSandbox.self_test()` (uid, capabilities, `NoNewPrivs`, seccomp, interfaces, read-only
+- **Done:** `DockerSandbox.self_test()` (uid, capabilities, `NoNewPrivs`, seccomp, interfaces, read-only
   root, `noexec`, cgroup v2 limits, rlimits, environment), remembered per host fingerprint, image id and shape;
   images run by id; `pin_base()`; `python -m orkexa.dynamic.docker --self-test`; CI matrix (rootful, rootless, refused
   rootless, Podman, arm64, Colima non-blocking) with real-container tests that fail instead of skipping.
-- **Next step:** Watch the first CI runs of the new matrix (the rootless, Podman and Colima jobs are new and were not
-  run before the push); Docker Desktop on macOS arm64, Windows/WSL2, Colima and OrbStack need the manual checklist
-  ([Docker manual verification](development/docker-manual-verification.md)).
+- **Next step:** None here: the matrix has passed on `master` (e.g. the Platforms run of #36 on 2026-11-02: rootful,
+  rootless, refused rootless, rootful Podman, arm64 and Colima x86-64). Hosts that never ran in CI: ORK-024.
 
 ### ORK-023 · Self-test hardening: mount table, seccomp probes, AppArmor (DS-8/9/10)
 
-- **Priority:** P3 Low · **Status:** In progress (branch `fix-ds10`) · **Refs:** security review DS-8, DS-9, DS-10
+- **Priority:** P3 Low · **Status:** Done (2026-11-02, #34) · **Refs:** security review DS-8, DS-9, DS-10
 - **What:** The self-test checked only a few mount points (not that no other mount exists), seccomp only as mode 2
   (not the profile) and reported AppArmor without checking it; probe errors kept raw CLI stderr; the sandbox image
   was not pinned.
-- **Done in the branch:** the self-test reads `/proc/self/mountinfo` and refuses every mount outside an allow list
-  recorded from Docker (rootful, rootless, Desktop) and Podman (rootful, rootless); `run_args()` mounts root-owned
+- **Done:** the self-test reads `/proc/self/mountinfo` and refuses every mount outside an allow list
+  built from mount tables of Docker (rootful, rootless, Desktop) and Podman (rootful, rootless); `run_args()` mounts root-owned
   `noexec` tmpfs on `/run` and `/var/tmp` (Podman's `--read-only-tmpfs` default left them writable and executable);
   probes `add_key`, `bpf`, `perf_event_open`, `userfaultfd` and `move_pages` (blocked by the default profiles of both
   engines) on x86-64 and arm64 and refuses other architectures; requires an enforcing AppArmor profile when the host
   reports AppArmor (`apparmor_label` fact otherwise); `redact_docker_output()` for probe errors; base image pinned by
   digest, requirements installed with `--require-hashes`, a test refuses unpinned `FROM`s.
-- **Next step:** Watch the Docker CI matrix (rootful, rootless, Podman, arm64, Colima): the mount allow list and the
-  probes are built from recorded mount tables and the engines' published seccomp profiles, not yet from a run on
-  each engine. Hosts with Podman `mounts.conf` entries (RHEL subscription secrets), a `--init` default other than
-  Docker's or Podman's, OrbStack (reports AppArmor) and 32-bit or other architectures may be refused and need the
-  manual checklist. Refresh the base image digest and the hashed requirements with each Python patch release.
+- **Next step:** Refresh the base image digest and the hashed requirements with each Python patch release. The
+  self-test (mount table included) passes in CI on rootful and rootless Docker, rootful Podman, arm64 and Colima;
+  the hosts it has never run on are tracked in ORK-024.
 
 ## Platform coverage
+
+### ORK-024 · Docker sandbox hosts without CI evidence (Docker Desktop, OrbStack, rootless Podman)
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** [Feature matrix](feature-matrix.md#docker-sandbox-hosts),
+  [Docker manual verification](development/docker-manual-verification.md), ORK-021, ORK-023
+- **What:** The preflight and the self-test have run in CI only on Docker Engine (rootful x86-64 and arm64, rootless
+  x86-64), rootful Podman 4.9.3 (crun 1.14.1, Ubuntu 24.04) and, non-blocking, Colima on macOS x86-64. **Docker
+  Desktop has never run in CI** (macOS Apple silicon and Intel, Windows x64 and ARM64), nor have OrbStack, Colima on
+  Apple silicon or `podman machine`: their `docker info` outputs in the unit tests are fixtures, not CI runs.
+  Rootless Podman 4.9.3 (crun 1.14.1, Ubuntu 24.04) ran once in CI on 2026-11-02 (non-blocking job): its mount table
+  passes `check_mount_table()` (now the recorded fixture `podman-rootless.txt`), but the self-test rightly refuses it:
+  the `--ulimit` limits do not reach the container (`RLIMIT_NOFILE` 65536, `RLIMIT_FSIZE` unlimited, core hard limit
+  unlimited) and crun runs unconfined by AppArmor (`crun (unconfined)`). The mount allow list was reviewed against
+  what rootless Podman with crun adds (`/run/.containerenv`, `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf` from its state directory,
+  `/dev/shm`, a read-only `cgroup2`, device nodes bound from the host's `/dev`, `/dev/null` and empty read-only tmpfs
+  masks, read-only `/proc` views, `/run/podman-init`): every one is allowed, so no gap was found and nothing was
+  widened. Refused by design (host-backed mounts): `mounts.conf` entries such as RHEL's subscription secrets on
+  `/run/secrets`, containers.conf `volumes`, a `tz` default (`/etc/localtime`), and a generated `/etc/passwd` or
+  `/etc/group` (Podman adds them only when the image lacks the sandbox user 65534, which the sandbox images have).
+- **Next step:** Find out whether a newer rootless Podman (5.x, or containers.conf `default_ulimits`) applies the
+  limits and an AppArmor profile; until then the non-blocking job `podman rootless is refused` asserts the refusal
+  (the checks are not relaxed). Run the manual checklist on Docker Desktop (macOS arm64 and x86-64, Windows x64 and ARM64), OrbStack and `podman machine`
+  and record the results in the feature matrix.
 
 ### ORK-012 · Real providers are not exercised
 

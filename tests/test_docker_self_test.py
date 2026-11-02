@@ -344,8 +344,8 @@ def test_init_binaries_and_masks_are_allowed() -> None:
 
 
 def test_parse_mountinfo() -> None:
-    entries = parse_mountinfo(sample("podman-rootless"))
-    root = entries[0]
+    entries = parse_mountinfo(sample("podman-rootless"))  # recorded in CI: the root is not the first line
+    root = next(entry for entry in entries if entry.point == "/")
     assert root.point == "/" and root.read_only and root.fstype == "overlay" and "-" not in root.options
     escaped = parse_mountinfo(r"1 0 8:1 /a\040b /x\011y rw shared:1 master:2 - ext4 /dev/s\134d rw" + "\n")
     assert escaped[0].root == "/a b" and escaped[0].point == "/x\ty" and escaped[0].source == "/dev/s\\d"

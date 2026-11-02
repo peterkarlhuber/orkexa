@@ -65,6 +65,9 @@ jobs:
           - { name: rootless, os: ubuntu-24.04, mode: rootless, experimental: false }
           - { name: rootless without cpu delegation is refused, os: ubuntu-24.04, mode: refused, experimental: false }
           - { name: podman, os: ubuntu-24.04, mode: podman, experimental: false }
+          # Rootless Podman 4.9.3 (Ubuntu 24.04) does not apply the --ulimit limits and runs crun unconfined by
+          # AppArmor: the self-test must refuse it (its mount table passes; it is printed below).
+          - { name: podman rootless is refused, os: ubuntu-24.04, mode: podman-rootless, experimental: true }
           - { name: rootful arm64, os: ubuntu-24.04-arm, mode: rootful, experimental: false }
           - { name: colima macOS x86-64, os: macos-15-intel, mode: colima, experimental: true }
     env:
@@ -79,12 +82,12 @@ jobs:
       - run: pip install -e ".[dev]"
 
       - name: Delegate cgroup controllers to the runner user
-        if: matrix.mode == 'rootless' || matrix.mode == 'refused'
+        if: matrix.mode == 'rootless' || matrix.mode == 'refused' || matrix.mode == 'podman-rootless'
         run: |
           set -euo pipefail
           # rootless: cpu, memory and pids for the user's containers; refused: no cpu (systemd delegates pids to
           # every user manager anyway), so the daemon cannot enforce --cpus and the preflight must refuse it.
-          if [ "${{ matrix.mode }}" = rootless ]; then controllers="cpu cpuset io memory pids"; else controllers="memory pids"; fi
+          if [ "${{ matrix.mode }}" = refused ]; then controllers="memory pids"; else controllers="cpu cpuset io memory pids"; fi
           sudo mkdir -p /etc/systemd/system/user@.service.d
           printf '[Service]\nDelegate=\nDelegate=%s\n' "$controllers" | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
           sudo systemctl daemon-reload
@@ -92,10 +95,12 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo apt-get update -q
           sudo apt-get install -y -q uidmap dbus-user-session
-          sudo apt-get install -y -q docker-ce-rootless-extras || {
-            curl -fsSL https://get.docker.com/rootless | FORCE_ROOTLESS_INSTALL=1 SKIP_IPTABLES=1 sh
-            echo "$HOME/bin" >> "$GITHUB_PATH"
-          }
+          if [ "${{ matrix.mode }}" != podman-rootless ]; then
+            sudo apt-get install -y -q docker-ce-rootless-extras || {
+              curl -fsSL https://get.docker.com/rootless | FORCE_ROOTLESS_INSTALL=1 SKIP_IPTABLES=1 sh
+              echo "$HOME/bin" >> "$GITHUB_PATH"
+            }
+          fi
           sudo loginctl enable-linger "$(id -un)"
           sudo systemctl restart "user@$(id -u).service"
           echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
@@ -123,6 +128,15 @@ jobs:
           for _ in $(seq 30); do [ -S /run/podman-ci.sock ] && break; sleep 1; done
           sudo chmod 666 /run/podman-ci.sock
           echo "DOCKER_HOST=unix:///run/podman-ci.sock" >> "$GITHUB_ENV"
+      - name: Start rootless Podman's Docker API
+        if: matrix.mode == 'podman-rootless'
+        run: |
+          set -euo pipefail
+          podman --version
+          podman info --format '{{.Host.Security.Rootless}} {{.Host.CgroupsVersion}} {{.Host.OCIRuntime.Name}}'
+          nohup podman system service --time=0 "unix://$XDG_RUNTIME_DIR/podman-ci.sock" > /tmp/podman-service.log 2>&1 &
+          for _ in $(seq 30); do [ -S "$XDG_RUNTIME_DIR/podman-ci.sock" ] && break; sleep 1; done
+          echo "DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman-ci.sock" >> "$GITHUB_ENV"
       - name: Start Colima
         if: matrix.mode == 'colima'
         run: |
@@ -141,14 +155,39 @@ jobs:
         run: |
           if [ "${{ matrix.mode }}" = podman ]; then
             sudo podman build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
+          elif [ "${{ matrix.mode }}" = podman-rootless ]; then
+            podman build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
           else
             docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
           fi
       - name: Self-test
-        if: matrix.mode != 'refused'
+        if: matrix.mode != 'refused' && matrix.mode != 'podman-rootless'
         run: python -m orkexa.dynamic.docker --self-test --json
+      - name: Rootless Podman is refused (rlimits, AppArmor)
+        if: matrix.mode == 'podman-rootless'
+        run: |
+          set -euo pipefail
+          if python -m orkexa.dynamic.docker --self-test --json | tee /tmp/self-test.json; then
+            echo "the self-test must refuse rootless Podman while it does not apply the limits"; exit 1
+          fi
+          grep -q '"reason": "self-test"' /tmp/self-test.json
+      - name: Mount table of a sandbox container (evidence for the allow list)
+        if: always() && (matrix.mode == 'podman' || matrix.mode == 'podman-rootless')
+        run: |
+          # The mount table a container of run_args()' shape gets on this engine, and what check_mount_table()
+          # says about it: compare with tests/fixtures/docker/mountinfo/podman-*.txt.
+          python - <<'PY'
+          import subprocess
+          from orkexa.dynamic.docker import ContainerLimits, run_args
+          from orkexa.dynamic.docker._self_test import check_mount_table
+          args = run_args("docker", "orkexa-sandbox-mountinfo", "orkexa-sandbox", ContainerLimits(256, 1.0, 64))
+          text = subprocess.run([*args, "cat", "/proc/self/mountinfo"], stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True, timeout=120, check=True).stdout
+          print(text)
+          print("check_mount_table:", check_mount_table(text) or "no problems")
+          PY
       - name: Real-container tests
-        if: matrix.mode != 'refused'
+        if: matrix.mode != 'refused' && matrix.mode != 'podman-rootless'
         run: pytest -v -rs -m docker tests/test_docker_sandbox.py tests/anthropic/test_dynamic_sandbox.py
       - name: The daemon without delegation is refused
         if: matrix.mode == 'refused'
