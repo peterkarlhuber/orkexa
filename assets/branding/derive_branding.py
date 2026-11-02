@@ -35,9 +35,10 @@ from __future__ import annotations
 
 import argparse
 import colorsys
+import itertools
 import json
-import sys
 from pathlib import Path
+import sys
 
 import numpy as np
 from PIL import Image
@@ -71,7 +72,7 @@ def to_image(arr: np.ndarray) -> Image.Image:
 def split_column(arr: np.ndarray) -> int:
     """First x of the wordmark: the start of the first wide transparent column gap."""
     cols = np.where((arr[..., 3] > 0).any(axis=0))[0]
-    for left, right in zip(cols, cols[1:]):
+    for left, right in itertools.pairwise(cols):
         if right - left > SPLIT_GAP:
             return int(left + right) // 2
     raise SystemExit("could not find the gap between symbol and wordmark")
@@ -117,7 +118,7 @@ def lift_dark_tones(arr: np.ndarray, x1: int, floor: float) -> np.ndarray:
     """Raise the HLS lightness of dark symbol pixels left of ``x1`` (hue, saturation kept)."""
     out = arr.copy()
     ys, xs = np.where(out[:, :x1, 3] > 0)
-    for y, x in zip(ys, xs):
+    for y, x in zip(ys, xs, strict=False):
         r, g, b = (out[y, x, :3] / 255.0).tolist()
         h, light, s = colorsys.rgb_to_hls(r, g, b)
         if light >= floor:
@@ -153,7 +154,7 @@ def square(mark: Image.Image, size: int, fill: float, tile=None, radius: float =
     resized = mark.resize((w, h), Image.LANCZOS, reducing_gap=3.0)
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     if tile is not None:
-        bg = Image.new("RGBA", (size, size), tuple(tile) + (255,))
+        bg = Image.new("RGBA", (size, size), (*tuple(tile), 255))
         if radius:
             mask = Image.new("L", (size * 4, size * 4), 0)
             from PIL import ImageDraw
@@ -173,7 +174,7 @@ def lockup(img: Image.Image, width: int) -> Image.Image:
 
 
 def flatten(img: Image.Image, color=(255, 255, 255)) -> Image.Image:
-    bg = Image.new("RGBA", img.size, tuple(color) + (255,))
+    bg = Image.new("RGBA", img.size, (*tuple(color), 255))
     bg.alpha_composite(img)
     return bg.convert("RGB")
 
@@ -267,7 +268,7 @@ def build_desktop(product: str, v: dict[str, Image.Image], out: Path) -> list[Pa
     frames[-1].save(ico, sizes=[f.size for f in frames], append_images=frames[:-1])
     icns = out / "icon.icns"
     app(1024).save(icns)
-    return files + [ico, icns]
+    return [*files, ico, icns]
 
 
 def check(product: str, masters: Path) -> list[str]:

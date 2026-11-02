@@ -121,8 +121,7 @@ show_missing = true
 [tool.ruff]
 line-length = 110
 target-version = "py310"
-# derive_branding.py is vendored unchanged from the shared brand kit.
-extend-exclude = ["docs/examples.md", "assets/branding/derive_branding.py"]
+extend-exclude = ["docs/examples.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
