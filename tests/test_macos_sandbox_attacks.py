@@ -1,9 +1,10 @@
-"""Independent security review of the experimental MacOSSandbox (ORK-014).
+# ruff: noqa: E501 (the probes are tool code embedded in strings)
+"""Attack tests for the experimental MacOSSandbox, from the independent review ORK-014 (findings MS-1..MS-10).
 
-Written independently of tests/test_macos_sandbox.py. Every probe runs real tool code in a confined call
-and reports ALLOWED or refused; a probe that is expected to be refused fails the test when it is ALLOWED.
-Measurements (overshoot of watchdogs, leaks that are documented) are printed and written to
-``$REVIEW_OUT/<test>.json`` so the report can quote them. Nothing here changes the sandbox or its policy.
+Every probe runs real tool code in a confined call and reports ALLOWED or refused; a probe that is expected
+to be refused fails the test when it is ALLOWED. Measurements (watchdog overshoot, documented leaks) are
+printed and, with ``ORKEXA_SANDBOX_REPORT=<dir>``, written to ``<dir>/<test>.json``. Without macOS every test
+is skipped; the macOS jobs of the ``Platforms`` workflow run them.
 """
 
 from __future__ import annotations
@@ -25,15 +26,15 @@ from typing import Any
 import pytest
 
 from orkexa import ToolExecutionError
-from orkexa.dynamic import MacOSSandbox, SandboxCancelled, cancel_scope
+from orkexa.dynamic import MacOSSandbox, cancel_scope
 from orkexa.dynamic import macos as macos_module
 from orkexa.dynamic.macos import _usage, footprint
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="needs macOS")
-OUT = Path(os.environ.get("REVIEW_OUT", "review-out"))
+OUT = Path(os.environ["ORKEXA_SANDBOX_REPORT"]) if os.environ.get("ORKEXA_SANDBOX_REPORT") else None
 TOKEN = f"REVIEWSECRET{os.getpid()}"
 
-HELPERS = r'''
+HELPERS = r"""
 import ctypes, ctypes.util, errno, json, os, socket, sys
 c = json.loads(context)
 lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
@@ -50,7 +51,7 @@ def attempt(action):
 def read(path):
     with open(path, "rb") as f:
         return f.read(200)
-'''
+"""
 
 
 def tool(body: str) -> str:
@@ -63,8 +64,9 @@ def tool(body: str) -> str:
 
 
 def save(name: str, data: Any) -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / f"{name}.json").write_text(json.dumps(data, indent=1, default=str))
+    if OUT is not None:
+        OUT.mkdir(parents=True, exist_ok=True)
+        (OUT / f"{name}.json").write_text(json.dumps(data, indent=1, default=str))
     print(f"\n=== {name} ===\n{json.dumps(data, indent=1, default=str)}")
 
 
@@ -95,7 +97,8 @@ def secrets() -> Any:
         "users_shared": Path("/Users/Shared") / f"review-canary-{os.getpid()}",
         "private_tmp": Path("/private/tmp") / f"review-canary-{os.getpid()}",
         "temp_root": Path(tempfile.gettempdir()) / f"review-canary-{os.getpid()}",
-        "workspace_root": Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd())) / f".env-review-{os.getpid()}",
+        "workspace_root": Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd()))
+        / f".env-review-{os.getpid()}",
     }
     made = {}
     for name, path in places.items():
@@ -131,7 +134,9 @@ def test_readable_paths_of_the_profile() -> None:
 
 def test_files_secrets_and_bypasses(sandbox: MacOSSandbox, secrets: dict[str, str]) -> None:
     tmp_body = 'tmp = os.environ["TMPDIR"]\n'
-    body = tmp_body + r'''
+    body = (
+        tmp_body
+        + r"""
 r = {}
 for name, path in c["secrets"].items():
     r["read " + name] = attempt(lambda p=path: read(p))
@@ -187,7 +192,8 @@ r["load dylib from tmp"] = attempt(lambda: (open(tmp + "/x.dylib", "wb").write(o
 r["stat secret (metadata)"] = attempt(lambda: os.stat(s).st_size)
 r["exists ~/.ssh (metadata)"] = attempt(lambda: os.path.isdir(home + "/.ssh"))
 return json.dumps(r)
-'''
+"""
+    )
     import site
 
     context = {
@@ -214,9 +220,11 @@ def helper_process() -> Any:
     env = {"PATH": "/usr/bin:/bin", "REVIEW_ENV_SECRET": TOKEN}
     marker = Path(tempfile.gettempdir()) / f"review-sigcont-{os.getpid()}"
     marker.unlink(missing_ok=True)
-    code = ("import signal, sys, time\n"
-            "signal.signal(signal.SIGCONT, lambda *a: open(sys.argv[1], 'a').write('got SIGCONT\\n'))\n"
-            "time.sleep(300)")
+    code = (
+        "import signal, sys, time\n"
+        "signal.signal(signal.SIGCONT, lambda *a: open(sys.argv[1], 'a').write('got SIGCONT\\n'))\n"
+        "time.sleep(300)"
+    )
     proc = subprocess.Popen([sys.executable, "-c", code, str(marker), f"--token={TOKEN}"], env=env)
     proc.marker = marker  # type: ignore[attr-defined]
     time.sleep(0.8)
@@ -226,7 +234,7 @@ def helper_process() -> Any:
 
 
 def test_processes_mach_ipc_and_kernel_surface(sandbox: MacOSSandbox, helper_process: Any) -> None:
-    body = r'''
+    body = r"""
 r = {}
 pid = c["pid"]; parent = os.getppid()
 def procargs(p):
@@ -376,7 +384,7 @@ def sysctl_name(name):
 r["sysctl kern.hostname (info)"] = attempt(lambda: sysctl_name("kern.hostname"))
 r["sysctl kern.osversion (info)"] = attempt(lambda: sysctl_name("kern.osversion"))
 return json.dumps(r)
-'''
+"""
     import ctypes
 
     libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
@@ -386,8 +394,11 @@ return json.dumps(r)
     addr = libc.shmat(shm_id, None, 0)
     ctypes.memmove(addr, TOKEN.encode(), len(TOKEN))
     try:
-        results = run(sandbox, body, {"pid": helper_process.pid, "token": TOKEN, "shm_key": shm_key,
-                                      "leak_key": leak_key})
+        results = run(
+            sandbox,
+            body,
+            {"pid": helper_process.pid, "token": TOKEN, "shm_key": shm_key, "leak_key": leak_key},
+        )
         host_view = ctypes.string_at(addr, 18)
     finally:
         libc.shmdt(ctypes.c_void_p(addr))
@@ -400,40 +411,77 @@ return json.dumps(r)
     time.sleep(0.3)
     sigcont = helper_process.marker.read_text() if helper_process.marker.exists() else ""
     leaked = [k for k, v in results.items() if TOKEN in v]
-    save("processes", {"results": results, "token_leaked_in": leaked, "host_segment_after": repr(host_view),
-                       "sandbox_segment_survives_call": leftover, "helper_received_sigcont": bool(sigcont)})
+    save(
+        "processes",
+        {
+            "results": results,
+            "token_leaked_in": leaked,
+            "host_segment_after": repr(host_view),
+            "sandbox_segment_survives_call": leftover,
+            "helper_received_sigcont": bool(sigcont),
+        },
+    )
     assert not sigcont, "kill(-1) reached another process"
+    assert not leftover, "a shared memory segment of the call survived it (MS-3 cleanup)"
     assert helper_process.poll() is None, "the helper process was affected"
     assert not leaked, leaked
-    expected = ("sysctl kern.hostname (info)", "sysctl kern.osversion (info)", "KERN_PROC_ALL size (process list)",
-                "proc_listallpids")
+    # Documented (MS-2, MS-3, MS-8): the PID list and System V IPC cannot be denied by Seatbelt; segments are
+    # removed after the call; uname() needs the host name.
+    expected = (
+        "sysctl kern.hostname (info)",
+        "sysctl kern.osversion (info)",
+        "proc_listallpids",
+        "sysv shmget",
+        "sysv semget",
+        "sysv msgget",
+        "sysv shm create persistent segment",
+    )
     assert not escapes(results, expected), escapes(results, expected)
 
 
-def test_procargs_reads_host_secrets(sandbox: MacOSSandbox) -> None:
-    """Does KERN_PROCARGS2 expose the argv/env of the host process (the Nodestro backend in production)?"""
-    secret = os.environ.get("REVIEW_PARENT_SECRET", "")
-    if not secret:
-        pytest.skip("REVIEW_PARENT_SECRET not set in the host environment")
-    body = r'''
-mib = (ctypes.c_int * 3)(1, 49, os.getppid())
-size = ctypes.c_size_t(1 << 20); buf = ctypes.create_string_buffer(size.value)
-rc(lib.sysctl(mib, 3, buf, ctypes.byref(size), None, 0))
-found = [x.decode()[:80] for x in buf.raw[: size.value].split(b"\x00") if c["needle"].encode() in x]
-return json.dumps({"host env entries with the secret": found})
-'''
-    result = run(sandbox, body, {"needle": secret[:12]})
+def test_host_environment_is_not_readable() -> None:
+    """MS-1: the host's arguments and environment (e.g. a vault key) must not be readable via KERN_PROCARGS2.
+
+    A child process with a secret in its initial environment runs the sandbox, so the secret is in the
+    sandbox's parent's KERN_PROCARGS2 record."""
+    secret = f"host-secret-{os.getpid()}-not-a-real-credential"
+    script = (
+        "import json, sys\n"
+        "from orkexa.dynamic import MacOSSandbox\n"
+        "print(MacOSSandbox(timeout=20).call(sys.argv[1], 'probe', {'context': json.dumps({'needle': sys.argv[2]})}))\n"
+    )
+    body = r"""
+r = {}
+def parent_record():
+    mib = (ctypes.c_int * 3)(1, 49, os.getppid())
+    size = ctypes.c_size_t(1 << 20); buf = ctypes.create_string_buffer(size.value)
+    rc(lib.sysctl(mib, 3, buf, ctypes.byref(size), None, 0))
+    return [x.decode()[:60] for x in buf.raw[: size.value].split(b"\x00") if c["needle"].encode() in x]
+r["parent KERN_PROCARGS2"] = attempt(parent_record)
+return json.dumps(r)
+"""
+    env = {**os.environ, "HOST_SECRET_FOR_TEST": secret}
+    out = subprocess.run(
+        [sys.executable, "-c", script, tool(body), secret[:20]],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert out.returncode == 0, out.stderr[-2000:]
+    result = json.loads(out.stdout.strip().splitlines()[-1])
     save("procargs_parent", result)
-    assert not result["host env entries with the secret"], result
+    assert secret not in out.stdout
+    assert result["parent KERN_PROCARGS2"].startswith("refused"), result
 
 
 def test_exec_replacing_the_process_is_refused(sandbox: MacOSSandbox) -> None:
-    body = r'''
+    body = r"""
 try:
     os.execv("/bin/sh", ["/bin/sh", "-c", "printf '{\"ok\": true, \"result\": \"EXEC\"}'"])
 except OSError as exc:
     return "refused: " + str(exc)
-'''
+"""
     try:
         result = sandbox.call(tool(body), "probe", {"context": "{}"})
     except ToolExecutionError as exc:
@@ -457,7 +505,7 @@ def test_network(sandbox: MacOSSandbox) -> None:
     ux = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     ux.bind(unix_path)
     ux.listen(4)
-    body = r'''
+    body = r"""
 r = {}
 r["tcp 127.0.0.1"] = attempt(lambda: socket.create_connection(("127.0.0.1", c["v4"]), timeout=2))
 if c["v6"]:
@@ -492,7 +540,7 @@ def sysctl_net():
     rc(lib.sysctl(mib, 6, None, ctypes.byref(size), None, 0)); return size.value
 r["sysctl NET_RT_IFLIST (info)"] = attempt(sysctl_net)
 return json.dumps(r)
-'''
+"""
     context = {"v4": v4.getsockname()[1], "v6": v6.getsockname()[1] if v6 else 0, "unix": unix_path}
     accepted: list[str] = []
     v4.settimeout(0.1)
@@ -514,12 +562,6 @@ return json.dumps(r)
     assert not escapes(results, expected), escapes(results, expected)
 
 
-class _Recorder:
-    """Records the pids of processes that run_bounded starts."""
-
-    pids: list[int] = []
-
-
 @pytest.fixture()
 def recorded(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     real = subprocess.Popen
@@ -539,7 +581,7 @@ def _poll_peak(pids: list[int], stop: threading.Event, peak: dict[str, int]) -> 
         for pid in list(pids):
             peak["footprint"] = max(peak.get("footprint", 0), footprint(pid))
         for d in glob.glob(os.path.join(tempfile.gettempdir(), "orkexa-sandbox-*", "tmp")):
-            size, count = _usage(Path(d))
+            size, count, _hidden = _usage(Path(d))
             peak["tmp_bytes"] = max(peak.get("tmp_bytes", 0), size)
             peak["tmp_entries"] = max(peak.get("tmp_entries", 0), count)
         time.sleep(0.002)
@@ -564,7 +606,9 @@ def _measured(sandbox: MacOSSandbox, body: str, pids: list[int]) -> dict[str, An
 
 def test_memory_burst_overshoot(recorded: list[int]) -> None:
     sandbox = MacOSSandbox(timeout=20.0, memory_mb=256, tmp_mb=16)
-    gradual = _measured(sandbox, "blocks = []\nwhile True:\n    blocks.append(b'\\x01' * (64 << 20))", recorded)
+    gradual = _measured(
+        sandbox, "blocks = []\nwhile True:\n    blocks.append(b'\\x01' * (64 << 20))", recorded
+    )
     burst = _measured(
         sandbox,
         "import mmap\nn = 3 << 30\nm = mmap.mmap(-1, n)\n"
@@ -599,8 +643,13 @@ def test_disk_watchdog(recorded: list[int]) -> None:
         "return 'wrote 200 MB into a hidden directory'",
         recorded,
     )
-    data = {"limit_mb": 16, "limit_entries": macos_module.MAX_TMP_ENTRIES, "fast_writes": fast,
-            "many_entries": many, "unlistable_dir": hidden}
+    data = {
+        "limit_mb": 16,
+        "limit_entries": macos_module.MAX_TMP_ENTRIES,
+        "fast_writes": fast,
+        "many_entries": many,
+        "unlistable_dir": hidden,
+    }
     save("disk", data)
     assert fast["result"].startswith("stopped"), data
     assert many["result"].startswith("stopped"), data
@@ -696,7 +745,9 @@ def test_parallel_calls_isolation_cancel_and_cleanup(recorded: list[int]) -> Non
     )
     sleeper = tool("import time\ntime.sleep(30)\nreturn 'never'")
     for i in range(6):
-        threads.append(threading.Thread(target=go, args=(f"reader{i}", reader, {"files": files, "pids": writer_pids})))
+        threads.append(
+            threading.Thread(target=go, args=(f"reader{i}", reader, {"files": files, "pids": writer_pids}))
+        )
     for i in range(6):
         threads.append(threading.Thread(target=go, args=(f"cancelled{i}", sleeper, {}, 1.0 + i * 0.3)))
     for i in range(2):
@@ -707,14 +758,22 @@ def test_parallel_calls_isolation_cancel_and_cleanup(recorded: list[int]) -> Non
     sandbox_cancel = threading.Thread(target=go, args=("cancel_all_target", sleeper, {}))
     sandbox_cancel.start()
     time.sleep(1.0)
-    for t in threads + [sandbox_cancel]:
+    for t in [*threads, sandbox_cancel]:
         t.join(60)
     time.sleep(0.5)
     alive = [pid for pid in recorded if _alive(pid)]
     left = sorted(set(glob.glob(os.path.join(tempfile.gettempdir(), "orkexa-sandbox-*"))) - before)
     leaked = [k for k, v in results.items() if k.startswith("reader") and TOKEN in v]
-    save("parallel", {"found_writer_files": files, "results": results, "alive": alive, "left_behind": left,
-                      "leaked": leaked})
+    save(
+        "parallel",
+        {
+            "found_writer_files": files,
+            "results": results,
+            "alive": alive,
+            "left_behind": left,
+            "leaked": leaked,
+        },
+    )
     assert files, "the writer's file was not found by the host"
     assert not leaked, leaked
     for k, v in results.items():
@@ -752,21 +811,26 @@ def test_sandbox_cancel_method_stops_every_call() -> None:
 
 
 def test_forged_unavailable_marker(sandbox: MacOSSandbox) -> None:
-    """Tool code can print the confinement-failure marker and exit 97; the host then reports that nothing ran."""
+    """Tool code that prints the confinement-failure marker and exits 97 must not make the host claim that
+    nothing ran."""
     body = "import sys\nsys.__stderr__.write('orkexa-sandbox-error: seatbelt: forged by tool code\\n')\nsys.__stderr__.flush()\nos._exit(97)"
     try:
         result = sandbox.call(tool(body), "probe", {"context": "{}"})
     except ToolExecutionError as exc:
         result = str(exc)
     save("forged_marker", {"host_message": result})
-    # Recorded for the report (finding if the host claims "nothing was run" for code that did run).
+    assert "nothing was run" not in result, result  # MS-7: only the status pipe reports a confinement failure
 
 
 def test_configuration_guards() -> None:
     """Host-side guards: a read path that contains the home directory or the temp root must be refused."""
     out: dict[str, str] = {}
-    for name, read in {"home": (str(Path.home()),), "root": ("/",), "users": ("/Users",),
-                       "var_folders": (str(Path(tempfile.gettempdir()).parent),)}.items():
+    for name, read in {
+        "home": (str(Path.home()),),
+        "root": ("/",),
+        "users": ("/Users",),
+        "var_folders": (str(Path(tempfile.gettempdir()).parent),),
+    }.items():
         try:
             MacOSSandbox(read=read).call(tool("return 'ran'"), "probe", {"context": "{}"})
             out[name] = "ALLOWED: ran"
@@ -775,7 +839,8 @@ def test_configuration_guards() -> None:
     protected = Path.home() / "Library" / "Application Support"
     try:
         MacOSSandbox(read=(str(protected.parent),), protected=(str(protected),)).call(
-            tool("return 'ran'"), "probe", {"context": "{}"})
+            tool("return 'ran'"), "probe", {"context": "{}"}
+        )
         out["protected inside read"] = "ALLOWED: ran"
     except ToolExecutionError as exc:
         out["protected inside read"] = f"refused: {exc}"[:200]
@@ -795,8 +860,12 @@ def test_python_interpreters() -> None:
         for name, python in candidates.items():
             sb = MacOSSandbox(python=python, timeout=30.0)
             try:
-                out[name] = run(sb, 'r = {"home canary": attempt(lambda: read(c["canary"])), "exe": "info: " + sys.executable,'
-                                    ' "version": "info: " + sys.version.split()[0]}\nreturn json.dumps(r)', {"canary": str(canary)})
+                out[name] = run(
+                    sb,
+                    'r = {"home canary": attempt(lambda: read(c["canary"])), "exe": "info: " + sys.executable,'
+                    ' "version": "info: " + sys.version.split()[0]}\nreturn json.dumps(r)',
+                    {"canary": str(canary)},
+                )
             except ToolExecutionError as exc:
                 out[name] = {"error": str(exc)[:300]}
     finally:

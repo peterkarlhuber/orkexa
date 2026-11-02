@@ -351,6 +351,7 @@ def run_bounded(
     new_session: bool = False,
     popen: Callable[..., Any] | None = None,
     watch: Callable[[Any], str | None] | None = None,
+    pass_fds: tuple[int, ...] = (),
 ) -> tuple[int, BoundedOutput]:
     """Run ``args`` with ``data`` on stdin under a wall-clock ``timeout`` and :func:`communicate_bounded`.
 
@@ -361,12 +362,15 @@ def run_bounded(
     process in its own session on POSIX, so killing it also kills every process it started. ``watch(process)``
     is called every 50 ms; a message it returns stops the run with that message (e.g. a memory watchdog).
     ``popen`` replaces :class:`subprocess.Popen` (a backend that starts processes its own way).
+    ``pass_fds`` are file descriptors the process inherits (all others are closed).
     Raises :class:`OSError` when the program cannot be started.
     """
     check = cancel if cancel is not None else current_cancel()
     kwargs: dict[str, Any] = {}
     if new_session and os.name == "posix":
         kwargs["start_new_session"] = True
+    if pass_fds:
+        kwargs["pass_fds"] = pass_fds
     process = (popen or subprocess.Popen)(
         args,
         stdin=subprocess.PIPE,
@@ -378,7 +382,7 @@ def run_bounded(
     )
 
     def kill() -> None:
-        _kill_tree(process, group=bool(kwargs))
+        _kill_tree(process, group=bool(kwargs.get("start_new_session")))
 
     result: dict[str, BoundedOutput] = {}
     reader = threading.Thread(

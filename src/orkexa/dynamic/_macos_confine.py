@@ -13,14 +13,17 @@ It uses only the standard library. In this order it:
    contains, a forbidden path (the home directory, the temp root, paths the host protects);
 4. applies a deny-by-default Seatbelt profile with ``sandbox_init``: read access only to the interpreter,
    the system libraries and the call's directory, write access only below its ``tmp``; no network (also
-   no localhost and no UNIX sockets), no new processes or programs, no IPC or Mach services, signals only
-   to itself;
+   no localhost and no UNIX sockets), no new processes or programs, no POSIX IPC or Mach services, signals
+   and process information only for itself, and only a short list of ``sysctl`` names
+   (:data:`SYSCTL_NAMES`). System V IPC cannot be denied by Seatbelt; the host removes what a call leaves;
 5. verifies the confinement from the inside (a file outside the call, a connection to localhost, a new
-   process and a write outside ``tmp`` must all be refused) and only then runs Orkexa's sandbox runner,
-   which reads the request from stdin.
+   process, a write outside ``tmp`` and the arguments of the parent process must all be refused) and only
+   then runs Orkexa's sandbox runner, which reads the request from stdin.
 
-If a step fails, the process prints ``orkexa-sandbox-error: <code>: <detail>`` on stderr and exits with
-:data:`EXIT_UNAVAILABLE` before any tool code is read.
+It reports the outcome on the status pipe the host passes (``status_fd``): ``ok`` once the confinement is
+verified, or ``orkexa-sandbox-error: <code>: <detail>`` (then it exits with :data:`EXIT_UNAVAILABLE` before
+any tool code is read). The pipe is closed before tool code runs, so tool code cannot forge the report
+(finding MS-7); text on stderr is never taken as a confinement failure.
 
 ``sandbox_init`` is deprecated by Apple without a replacement for this use; Chromium, Codex CLI and
 Microsoft's MXC use it on macOS. Metadata of files outside the allowed paths (``stat``, existence) stays
@@ -40,6 +43,42 @@ EXIT_UNAVAILABLE = 97
 MARKER = "orkexa-sandbox-error:"
 
 #: System locations the interpreter and compiled packages may read. None of them holds user data.
+#: The only sysctl names the code may read. A blanket ``(allow sysctl-read)`` would also allow
+#: ``KERN_PROCARGS2`` (the arguments and environment of any process of the same user, e.g. the host's
+#: secrets) and ``KERN_PROC_ALL`` (the process list); see ORK-014 finding MS-1.
+SYSCTL_NAMES = (
+    "hw.activecpu",
+    "hw.byteorder",
+    "hw.cachelinesize",
+    "hw.machine",
+    "hw.memsize",
+    "hw.ncpu",
+    "hw.pagesize",
+    "kern.argmax",
+    "kern.hostname",  # uname(); the host name is visible to any local program anyway
+    "kern.maxfilesperproc",
+    "kern.osproductversion",
+    "kern.osrelease",
+    "kern.osrevision",
+    "kern.ostype",
+    "kern.osversion",
+    "kern.usrstack64",
+    "kern.version",
+    "machdep.cpu.brand_string",
+    "sysctl.proc_cputype",
+    "sysctl.proc_native",
+    "sysctl.proc_translated",
+)
+SYSCTL_PREFIXES = (
+    "hw.optional.",
+    "hw.perflevel",
+    "hw.logicalcpu",
+    "hw.physicalcpu",
+    "hw.l1",
+    "hw.l2",
+    "hw.l3",
+)
+
 SYSTEM_READ = (
     "/usr/lib",
     "/usr/share/zoneinfo",
@@ -98,9 +137,15 @@ def profile(read: list[str], write: list[str]) -> str:
         "(deny default)",
         # Path lookups (stat, realpath, the import system's directory checks). Contents stay unreadable.
         "(allow file-read-metadata)",
-        "(allow sysctl-read)",
+        "(allow sysctl-read "
+        + " ".join(f"(sysctl-name {_quote(n)})" for n in SYSCTL_NAMES)
+        + " "
+        + " ".join(f"(sysctl-name-prefix {_quote(n)})" for n in SYSCTL_PREFIXES)
+        + ")",
         "(allow signal (target self))",
         "(allow process-info* (target self))",
+        # Without this, proc_pidpath and proc_pidinfo still answer for other processes (finding MS-2).
+        "(deny process-info* (target others))",
         '(allow file-write-data (literal "/dev/null"))',
         '(allow file-ioctl (literal "/dev/null"))',
     ]
@@ -149,6 +194,15 @@ def _apply(text: str) -> None:
         raise Unavailable("seatbelt", f"cannot apply the profile: {message}")
 
 
+def _procargs_readable(pid: int) -> bool:
+    """Whether ``sysctl(KERN_PROCARGS2)`` returns another process's arguments and environment."""
+    lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+    mib = (ctypes.c_int * 3)(1, 49, pid)  # CTL_KERN, KERN_PROCARGS2
+    size = ctypes.c_size_t(1 << 16)
+    buffer = ctypes.create_string_buffer(size.value)
+    return lib.sysctl(mib, 3, buffer, ctypes.byref(size), None, 0) == 0 and size.value > 0
+
+
 def _verify(config: dict[str, object]) -> None:
     """Prove from the inside that the confinement holds, so a run never counts as sandboxed when it is not."""
     try:
@@ -175,6 +229,8 @@ def _verify(config: dict[str, object]) -> None:
             raise Unavailable("verify", f"localhost was not refused by the sandbox: {exc}") from exc
         else:
             raise Unavailable("verify", "a connection to localhost is still possible")
+    if _procargs_readable(os.getppid()):
+        raise Unavailable("verify", "the arguments and environment of the host process are readable")
     try:
         child = os.fork()
     except OSError:
@@ -206,16 +262,30 @@ def confine(config: dict[str, object]) -> None:
     _verify(config)
 
 
+def _report(fd: int, text: str) -> None:
+    """Write the outcome to the host's status pipe and close it (tool code must never reach it)."""
+    if fd < 0:
+        print(text, file=sys.stderr, flush=True)
+        return
+    try:
+        os.write(fd, text.encode("utf-8", "replace")[:4000])
+    finally:
+        os.close(fd)
+
+
 def main(argv: list[str]) -> int:
+    status_fd = -1
     try:
         config = json.loads(argv[1])
+        status_fd = int(config.get("status_fd", -1))
         confine(config)
     except Unavailable as exc:
-        print(f"{MARKER} {exc.code}: {exc}", file=sys.stderr, flush=True)
+        _report(status_fd, f"{MARKER} {exc.code}: {exc}")
         return EXIT_UNAVAILABLE
     except Exception as exc:
-        print(f"{MARKER} internal: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+        _report(status_fd, f"{MARKER} internal: {type(exc).__name__}: {exc}")
         return EXIT_UNAVAILABLE
+    _report(status_fd, "ok")
     sys.argv = [str(config["runner"])]
     runpy.run_path(str(config["runner"]), run_name="__main__")
     return 0

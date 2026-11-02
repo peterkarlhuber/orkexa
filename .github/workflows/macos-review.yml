@@ -34,11 +34,12 @@ jobs:
           python -c "import platform, sys; print(sys.executable, platform.machine(), platform.platform())"
       - name: Review tests
         env:
-          REVIEW_OUT: ${{ runner.temp }}/review-out
+          ORKEXA_SANDBOX_REPORT: ${{ runner.temp }}/review-out
+          ORKEXA_REQUIRE_NATIVE_SANDBOX: "1"
           REVIEW_PARENT_SECRET: review-parent-secret-not-a-real-credential-${{ github.run_id }}
         run: |
           cd "$RUNNER_TEMP"
-          python -m pytest -v -s -p no:cacheprovider "$GITHUB_WORKSPACE/review/" \
+          python -m pytest -v -s -p no:cacheprovider "$GITHUB_WORKSPACE/tests/test_macos_sandbox_attacks.py" "$GITHUB_WORKSPACE/tests/test_macos_sandbox.py" \
             --rootdir "$RUNNER_TEMP" 2>&1 | tee "$RUNNER_TEMP/review-out-log.txt"
           exit ${PIPESTATUS[0]}
       - name: Results

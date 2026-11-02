@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 import platform
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -39,7 +40,6 @@ __all__ = ["MacOSSandbox"]
 _HERE = Path(__file__).resolve().parent
 _RUNNER = _HERE / "_sandbox_runner.py"
 _CONFINE = _HERE / "_macos_confine.py"
-_EXIT_UNAVAILABLE = 97
 _MARKER = "orkexa-sandbox-error:"
 #: Variables every sandbox process gets; nothing is inherited from the host.
 BASE_ENV = {
@@ -52,6 +52,8 @@ BASE_ENV = {
 }
 #: Most files and folders a call may create in its ``tmp``.
 MAX_TMP_ENTRIES = 10_000
+#: Seconds between two checks of a call's memory and temporary files.
+GUARD_INTERVAL = 0.01
 
 _PING = (
     "def ping(text: str) -> str:\n"
@@ -162,9 +164,10 @@ class MacOSSandbox(Sandbox):
             architectures=("arm64", "x86_64"),
             notes=(
                 "Uses sandbox_init (Seatbelt), which Apple has deprecated without a replacement.",
-                "Memory is limited by a watchdog that polls every 50 ms, so a short peak can pass.",
+                "Memory and temporary files are checked by a watchdog every 10 ms; a short peak can pass.",
                 "File metadata outside the allowed paths (existence, size) stays visible.",
-                "Not independently security-reviewed.",
+                "System V IPC cannot be denied; shared memory segments a call leaves are removed afterwards.",
+                "Not released: the independent review (ORK-014) found issues; use the VM sandbox instead.",
             ),
         )
 
@@ -183,6 +186,7 @@ class MacOSSandbox(Sandbox):
         probe = workdir.parent / f"{workdir.name}.probe"
         probe.write_bytes(b"outside")
         listener = _listener()
+        status_read, status_write = os.pipe()
         config = {
             "runner": str(_RUNNER),
             "read": [str(_RUNNER.parents[1]), *self.read],
@@ -190,22 +194,32 @@ class MacOSSandbox(Sandbox):
             "forbidden": [str(Path.home()), tempfile.gettempdir(), *self.protected],
             "probe_file": str(probe),
             "probe_port": listener.getsockname()[1] if listener is not None else 0,
+            "status_fd": status_write,
             "limits": {"cpu_seconds": int(self.timeout) + 1, "file_bytes": self.tmp_mb * 1024 * 1024},
         }
         env = {**self.env, "TMPDIR": str(tmp), "HOME": str(tmp)}
-        memory = self.memory_mb * 1024 * 1024
-        tmp_limit = self.tmp_mb * 1024 * 1024
+        guard = _Guard(
+            tmp,
+            memory=self.memory_mb * 1024 * 1024,
+            memory_mb=self.memory_mb,
+            tmp_limit=self.tmp_mb * 1024 * 1024,
+            tmp_mb=self.tmp_mb,
+        )
 
-        def watch(process: Any) -> str | None:
-            if footprint(process.pid) > memory:
-                return f"The call used more than {self.memory_mb} MB of memory and was stopped"
-            size, entries = _usage(tmp)
-            if size > tmp_limit:
-                return f"The temporary files exceeded the limit of {self.tmp_mb} MB"
-            if entries > MAX_TMP_ENTRIES:
-                return f"The temporary files exceeded the limit of {MAX_TMP_ENTRIES} files"
-            return None
+        write_open = [True]
 
+        def close_write() -> None:
+            if write_open[0]:
+                write_open[0] = False
+                os.close(status_write)
+
+        def popen(*args: Any, **kwargs: Any) -> Any:
+            process = subprocess.Popen(*args, **kwargs)
+            close_write()  # only the child keeps the write end
+            guard.start(process)
+            return process
+
+        status = b""
         try:
             with self._call_scope() as stop:
                 code, output = run_bounded(
@@ -217,24 +231,132 @@ class MacOSSandbox(Sandbox):
                     cwd=workdir,
                     stop=stop,
                     new_session=True,
-                    watch=watch,
+                    watch=lambda _process: guard.problem,
+                    pass_fds=(status_write,),
+                    popen=popen,
                 )
         except OSError as exc:
             raise SandboxError(f"Cannot start the sandbox interpreter {self.python}: {exc}") from exc
         finally:
+            close_write()
+            guard.stop()
+            with contextlib.suppress(OSError):
+                status = _read_all(status_read)
+            os.close(status_read)
             probe.unlink(missing_ok=True)
             if listener is not None:
                 listener.close()
+            guard.remove_ipc()
+        if guard.problem:
+            raise SandboxError(guard.problem)
+        report = status.decode("utf-8", "replace").strip()
+        if report != "ok":
+            # Only the confinement step writes to the status pipe, before any tool code runs: no "ok" means
+            # the code was never run.
+            detail = report.split(_MARKER, 1)[1].strip() if _MARKER in report else "no confirmation"
+            raise SandboxError(f"The macOS sandbox could not confine the run, nothing was run ({detail})")
         stdout = output.stdout.decode("utf-8", "replace")
         stderr = output.stderr.decode("utf-8", "replace")
-        if code == _EXIT_UNAVAILABLE and _MARKER in stderr:
-            detail = stderr.split(_MARKER, 1)[1].strip().splitlines()[0]
-            raise SandboxError(f"The macOS sandbox could not confine the run, nothing was run ({detail})")
         if code < 0 and not stdout.strip():
             raise SandboxError(f"Sandbox process was killed by signal {-code}")
         if not stdout.strip():
             raise SandboxError(f"Sandbox exited with code {code}: {stderr[-1000:]}")
         return stdout
+
+
+def _read_all(fd: int) -> bytes:
+    chunks: list[bytes] = []
+    while True:
+        chunk = os.read(fd, 4096)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
+class _Guard:
+    """Polls one call every :data:`GUARD_INTERVAL` seconds and kills its process group on a violation.
+
+    Watches the physical memory footprint, the size and entry count of ``tmp`` (a directory the host cannot
+    list counts as a violation, finding MS-4) and records the System V IPC segments the call creates so
+    that they can be removed afterwards (Seatbelt cannot deny System V IPC, finding MS-3).
+    """
+
+    def __init__(self, tmp: Path, *, memory: int, memory_mb: int, tmp_limit: int, tmp_mb: int) -> None:
+        self.tmp = tmp
+        self.memory = memory
+        self.memory_mb = memory_mb
+        self.tmp_limit = tmp_limit
+        self.tmp_mb = tmp_mb
+        self.problem: str | None = None
+        self.pid = 0
+        self._done = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self, process: Any) -> None:
+        self.pid = process.pid
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._done.set()
+        if self._thread is not None:
+            self._thread.join(5)
+
+    def _check(self) -> str | None:
+        if footprint(self.pid) > self.memory:
+            return f"The call used more than {self.memory_mb} MB of memory and was stopped"
+        size, entries, hidden = _usage(self.tmp)
+        if hidden:
+            return "The call made part of its temporary files unreadable and was stopped"
+        if size > self.tmp_limit:
+            return f"The temporary files exceeded the limit of {self.tmp_mb} MB"
+        if entries > MAX_TMP_ENTRIES:
+            return f"The temporary files exceeded the limit of {MAX_TMP_ENTRIES} files"
+        return None
+
+    def _run(self) -> None:
+        while not self._done.wait(GUARD_INTERVAL):
+            problem = self._check()
+            if problem:
+                self.problem = problem
+                with contextlib.suppress(OSError):
+                    os.killpg(self.pid, 9)
+                return
+
+    def remove_ipc(self) -> None:
+        """Remove the System V shared memory segments the call created (matched by creator pid)."""
+        if self.pid:
+            _remove_shm_of(self.pid)
+
+
+def _remove_shm_of(pid: int) -> int:
+    """Remove System V shared memory segments created by ``pid``; returns how many were removed."""
+    if sys.platform != "darwin":
+        return 0
+    try:
+        listing = subprocess.run(
+            ["/usr/bin/ipcs", "-m", "-p"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env={"PATH": "/usr/bin:/bin"},
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    removed = 0
+    for line in listing.splitlines():
+        fields = line.split()
+        # "m <id> <key> <mode> <owner> <group> <cpid> <lpid>"
+        if len(fields) >= 8 and fields[0] == "m" and fields[6] == str(pid):
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                subprocess.run(
+                    ["/usr/bin/ipcrm", "-m", fields[1]],
+                    capture_output=True,
+                    timeout=5,
+                    env={"PATH": "/usr/bin:/bin"},
+                )
+                removed += 1
+    return removed
 
 
 def _listener() -> socket.socket | None:
@@ -248,13 +370,16 @@ def _listener() -> socket.socket | None:
         return None
 
 
-def _usage(directory: Path) -> tuple[int, int]:
-    """Total size (allocated blocks) and number of entries below ``directory``, without following links."""
+def _usage(directory: Path) -> tuple[int, int, bool]:
+    """Total size (allocated blocks), number of entries below ``directory`` and whether a directory below it
+    could not be listed (its contents are then unknown), without following links."""
     total = count = 0
+    hidden = False
     stack = [str(directory)]
     while stack:
+        path = stack.pop()
         try:
-            with os.scandir(stack.pop()) as entries:
+            with os.scandir(path) as entries:
                 for entry in entries:
                     count += 1
                     with contextlib.suppress(OSError):
@@ -262,9 +387,11 @@ def _usage(directory: Path) -> tuple[int, int]:
                             stack.append(entry.path)
                         else:
                             total += getattr(entry.stat(follow_symlinks=False), "st_blocks", 0) * 512
+        except FileNotFoundError:
+            continue  # removed by the call in the meantime
         except OSError:
-            continue
-    return total, count
+            hidden = True
+    return total, count, hidden
 
 
 def _check() -> SandboxProbe:
