@@ -31,7 +31,15 @@ from ._container import (
     runner_fingerprint,
     stop_container,
 )
-from ._host import DockerHost, DockerProbeError, Engine, host_fingerprint, inspect_host, preflight
+from ._host import (
+    DockerHost,
+    DockerProbeError,
+    Engine,
+    host_fingerprint,
+    inspect_host,
+    preflight,
+    redact_docker_output,
+)
 from ._image import ImageInfo, inspect_image, pin_base, resolve_image_id
 from ._self_test import ALLOWED_ENVIRONMENT, SAFE_IMAGE_VARIABLES, SELF_TEST_SCRIPT, evaluate_self_test
 
@@ -59,6 +67,7 @@ __all__ = [
     "pin_base",
     "preflight",
     "reap",
+    "redact_docker_output",
     "resolve_image_id",
     "run_args",
     "runner_files",

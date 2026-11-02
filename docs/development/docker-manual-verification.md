@@ -41,8 +41,12 @@ a computer before relying on it, after a Docker or OS update, and before a relea
     ```
 
     A refusal with reason `self-test` lists every check that failed (for example
-    `Seccomp is 0, not 2`, `memory.max is max`, `the container is not on cgroup v2`).
-    Do not work around it: report the host and the output.
+    `Seccomp is 0, not 2`, `memory.max is max`, `the container is not on cgroup v2`,
+    `unexpected writable mount at /data` for a volume from the engine's defaults,
+    `the seccomp profile allows move_pages` for a permissive custom profile, or
+    `the host reports AppArmor, but the container is not confined`). The fact
+    `apparmor_label` shows the container's AppArmor profile (`not available` without
+    AppArmor). Do not work around it: report the host and the output.
 
 4. **Real-container tests.** They must all pass, none may be skipped:
 

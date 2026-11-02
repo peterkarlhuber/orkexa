@@ -16,6 +16,32 @@ First release of Orkexa.
   (`orkexa-logo-original.png`) and its derivatives, including `orkexa-mark.png`, are
   removed.
 
+### Changed: the Docker self-test checks mounts, seccomp and AppArmor (security review DS-8, DS-9, DS-10)
+
+* `DockerSandbox.self_test()` reads the container's whole mount table (`/proc/self/mountinfo`) and refuses any
+  mount Docker or Podman does not add themselves, read-only or not, e.g. a volume from `daemon.json` or Podman's
+  `containers.conf`/`mounts.conf` (`unexpected ... mount at <path>`). Allowed: the read-only root, `/proc` with its
+  read-only and masked paths, `/dev`, `/dev/pts`, `/dev/mqueue`, rootless device nodes, a read-only `/sys` and
+  `/sys/fs/cgroup`, the sandbox's tmpfs file systems, `/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf`,
+  `/run/.containerenv` and a read-only `--init` binary.
+* The self-test calls `add_key`, `bpf`, `perf_event_open`, `userfaultfd` and `move_pages`, which the default
+  seccomp profiles of Docker and Podman block, and refuses the host if any succeeds (a permissive custom profile
+  passed the old `Seccomp: 2` check). The probes exist for x86-64 and arm64; other architectures are refused.
+* Where the host reports AppArmor, the container must run under an enforcing profile (not `unconfined` or
+  `complain`); otherwise the label is reported as the new fact `apparmor_label`. A stack of the engine's container
+  profile (`docker-default`, `containers-default-<version>`) with the OCI runtime's unconfined helper profile
+  (`crun`, `runc`; Ubuntu 24.04 Podman reports `containers-default-0.57.4-apparmor1//&crun (mixed)`) counts as
+  enforcing, because every member of a stack confines the process; any other member or order is refused.
+  `evaluate_self_test()` has the new keyword `apparmor`; the report format is version 2.
+* `run_args()` adds root-owned, empty `noexec` tmpfs file systems on `/run` and `/var/tmp` (1 MiB): Podman mounted
+  writable, executable tmpfs file systems there for every read-only container.
+* `DockerProbeError` details and `docker ps` errors are redacted (`redact_docker_output()`, exported from
+  `orkexa.dynamic.docker`): no URL user info or passwords, no non-standard socket paths, no user names from home
+  directories, no tokens in query strings or `Authorization` values. Redaction happens before the 500-character cut.
+* `docker/sandbox.Dockerfile` pins `python:3.12-slim` by the digest of its multi-arch index and installs the new
+  `docker/sandbox-requirements.txt` (exact versions, sha256 per wheel, x86-64 and arm64) with `--require-hashes`;
+  `tests/test_dockerfiles.py` refuses a shipped Dockerfile with an unpinned `FROM` or an unhashed `pip install`.
+
 ### Added: pausing a turn before a model request; adjustable budgets
 
 * `RequestSuspended(reason, ref)` (exported from `orkexa`): a usage tracker may raise it

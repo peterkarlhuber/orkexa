@@ -1,0 +1,27 @@
+1450 1180 0:333 / / ro,relatime master:150 - overlay overlay rw,lowerdir=/var/lib/desktop-containerd/daemon/io.containerd.snapshotter.v1.overlayfs/snapshots/212/fs:/var/lib/desktop-containerd/daemon/io.containerd.snapshotter.v1.overlayfs/snapshots/211/fs,upperdir=/var/lib/desktop-containerd/daemon/io.containerd.snapshotter.v1.overlayfs/snapshots/215/fs,workdir=/var/lib/desktop-containerd/daemon/io.containerd.snapshotter.v1.overlayfs/snapshots/215/work
+1451 1450 0:336 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
+1452 1450 0:337 / /dev rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755
+1453 1452 0:338 / /dev/pts rw,nosuid,noexec,relatime - devpts devpts rw,gid=5,mode=620,ptmxmode=666
+1454 1450 0:339 / /sys ro,nosuid,nodev,noexec,relatime - sysfs sysfs ro
+1455 1454 0:30 / /sys/fs/cgroup ro,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw
+1456 1452 0:335 / /dev/mqueue rw,nosuid,nodev,noexec,relatime - mqueue mqueue rw
+1457 1452 0:340 / /dev/shm rw,nosuid,nodev,noexec,relatime - tmpfs shm rw,size=16384k
+1458 1450 0:341 / /run rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=1024k,mode=755
+1459 1450 0:342 / /tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=16384k
+1460 1450 0:343 / /var/tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=1024k,mode=755
+1461 1450 0:344 / /work rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=16384k,mode=1777
+1462 1450 254:1 /docker/containers/9f2c4e1d7a8b3c6d5e4f30a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5/resolv.conf /etc/resolv.conf rw,relatime - ext4 /dev/vda1 rw,discard
+1463 1450 254:1 /docker/containers/9f2c4e1d7a8b3c6d5e4f30a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5/hostname /etc/hostname rw,relatime - ext4 /dev/vda1 rw,discard
+1464 1450 254:1 /docker/containers/9f2c4e1d7a8b3c6d5e4f30a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5/hosts /etc/hosts rw,relatime - ext4 /dev/vda1 rw,discard
+1181 1451 0:336 /bus /proc/bus ro,nosuid,nodev,noexec,relatime - proc proc rw
+1182 1451 0:336 /fs /proc/fs ro,nosuid,nodev,noexec,relatime - proc proc rw
+1183 1451 0:336 /irq /proc/irq ro,nosuid,nodev,noexec,relatime - proc proc rw
+1184 1451 0:336 /sys /proc/sys ro,nosuid,nodev,noexec,relatime - proc proc rw
+1185 1451 0:336 /sysrq-trigger /proc/sysrq-trigger ro,nosuid,nodev,noexec,relatime - proc proc rw
+1186 1451 0:345 / /proc/acpi ro,relatime - tmpfs tmpfs ro
+1187 1451 0:337 /null /proc/interrupts rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755
+1188 1451 0:337 /null /proc/kcore rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755
+1189 1451 0:337 /null /proc/keys rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755
+1190 1451 0:337 /null /proc/timer_list rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755
+1191 1451 0:346 / /proc/scsi ro,relatime - tmpfs tmpfs ro
+1192 1454 0:347 / /sys/firmware ro,relatime - tmpfs tmpfs ro

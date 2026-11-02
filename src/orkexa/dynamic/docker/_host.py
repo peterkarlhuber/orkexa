@@ -13,19 +13,84 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import re
 import subprocess
 from typing import Any, Literal
 
 from ..capabilities import SandboxProbe
 
-__all__ = ["DockerHost", "DockerProbeError", "Engine", "host_fingerprint", "inspect_host", "preflight"]
+__all__ = [
+    "DockerHost",
+    "DockerProbeError",
+    "Engine",
+    "host_fingerprint",
+    "inspect_host",
+    "preflight",
+    "redact_docker_output",
+]
 
 #: The engine behind the CLI, as far as it can be told; informational only, never a reason to trust a host.
 Engine = Literal["docker", "docker-desktop", "podman", "colima", "orbstack", "unknown"]
 
 
+#: How many characters of the CLI's error output a :class:`DockerProbeError` keeps (the end, after redaction).
+_ERROR_TAIL = 500
+#: Sockets every installation has at the same place; naming them tells nothing about the host.
+_PUBLIC_SOCKETS = frozenset(
+    {"/var/run/docker.sock", "/run/docker.sock", "/run/podman/podman.sock", "/var/run/podman/podman.sock"}
+)
+
+
+def _socket(match: re.Match[str]) -> str:
+    path = match.group(0)
+    return path if path in _PUBLIC_SOCKETS else "<socket>"
+
+
+def _address(match: re.Match[str]) -> str:
+    scheme, path = match.group(1), match.group(2)
+    stripped = path.rstrip(".,;:)")  # the end of a sentence is not part of the address
+    trailer = path[len(stripped) :]
+    return (
+        f"{scheme}://{stripped}{trailer}"
+        if stripped in _PUBLIC_SOCKETS
+        else f"{scheme}://<redacted>{trailer}"
+    )
+
+
+_REDACTIONS: tuple[tuple[re.Pattern[str], Any], ...] = (
+    # user:password@ (or a token as user name) in any URL: tcp://, ssh://, http(s)://
+    (re.compile(r"\b([A-Za-z][A-Za-z0-9+.-]*://)[^\s/]+@"), r"\1<redacted>@"),
+    # unix:// and npipe:// addresses name local paths (home directories, user ids, custom sockets)
+    (re.compile(r"\b(unix|npipe)://([^\s\"']+)"), _address),
+    # bare socket paths, e.g. "dial unix /run/user/1000/docker.sock: connect: ..."
+    (re.compile(r"(?<![\w<:/])/[^\s\"':]*\.sock\b"), _socket),
+    # home directories (user names) in any other path
+    (re.compile(r"/(home|Users)/[^\s/\"':]+"), r"/\1/<user>"),
+    # credentials in query strings and headers
+    (re.compile(r"(?i)([?&;][^=&\s]*(?:token|key|secret|pass|auth|sig)[^=&\s]*=)[^&\s]+"), r"\1<redacted>"),
+    (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"), r"\1 <redacted>"),
+)
+
+
+def redact_docker_output(text: str, limit: int | None = _ERROR_TAIL) -> str:
+    """``text`` (output of the ``docker`` CLI) without what identifies or unlocks the host, and at most
+    ``limit`` characters of its end (``None``: all of it).
+
+    Removes the user info of URLs (``tcp://user:password@host`` -> ``tcp://<redacted>@host``), ``unix://`` and
+    ``npipe://`` addresses and socket paths (except the standard ``/var/run/docker.sock`` and Podman's
+    ``/run/podman/podman.sock``), user names in home directory paths, and credentials in query strings and
+    ``Authorization`` values. Redaction happens before the text is cut, so a cut never exposes a part of
+    a secret. :class:`DockerProbeError` details are always redacted this way."""
+    for pattern, replacement in _REDACTIONS:
+        text = pattern.sub(replacement, text)
+    return text if limit is None else text[-limit:]
+
+
 class DockerProbeError(Exception):
-    """The daemon could not be inspected. ``reason`` is a :class:`SandboxProbe` reason code."""
+    """The daemon could not be inspected. ``reason`` is a :class:`SandboxProbe` reason code.
+
+    ``detail`` is redacted with :func:`redact_docker_output` (no socket paths, URL credentials or user
+    names), so it can be logged and shown."""
 
     def __init__(self, reason: str, detail: str) -> None:
         super().__init__(f"{reason}: {detail}")
@@ -94,7 +159,9 @@ def _run_json(docker: str, args: list[str], env: Mapping[str, str] | None, timeo
     except FileNotFoundError as exc:
         raise DockerProbeError("missing", f"The {docker} command is not installed: {exc}") from exc
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise DockerProbeError("unreachable", f"{docker} {args[0]} failed: {exc}") from exc
+        raise DockerProbeError(
+            "unreachable", f"{docker} {args[0]} failed: {redact_docker_output(str(exc))}"
+        ) from exc
     text = completed.stdout.decode("utf-8", "replace").strip()
     data: Any = None
     if text:
@@ -107,7 +174,8 @@ def _run_json(docker: str, args: list[str], env: Mapping[str, str] | None, timeo
         errors = data.get("ServerErrors") if isinstance(data, dict) else None
         message = "; ".join(map(str, errors)) if errors else stderr
         raise DockerProbeError(
-            "unreachable", f"{docker} {args[0]} exited with {completed.returncode}: {message[-500:]}"
+            "unreachable",
+            f"{docker} {args[0]} exited with {completed.returncode}: {redact_docker_output(message)}",
         )
     if not isinstance(data, dict):
         raise DockerProbeError("malformed", f"{docker} {args[0]} did not print a JSON object")
@@ -231,7 +299,8 @@ def inspect_host(
     errors = info.get("ServerErrors")
     if errors:
         raise DockerProbeError(
-            "unreachable", f"The daemon is not reachable: {'; '.join(map(str, errors))[:500]}"
+            "unreachable",
+            f"The daemon is not reachable: {redact_docker_output('; '.join(map(str, errors)))}",
         )
     if not info.get("OSType"):
         raise DockerProbeError("malformed", "docker info did not report the daemon's OSType")

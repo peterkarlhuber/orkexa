@@ -64,13 +64,24 @@ Keep stores in a directory with suitable ACLs.
   daemon without cgroup delegation), has no or an unconfined seccomp default (`seccomp`)
   or is rootless on cgroup v1 (`rootless-cgroup`). A self-test container of exactly the
   sandbox's shape then checks user 65534, no capabilities, `NoNewPrivs`, a seccomp
-  filter, only the loopback interface, a read-only root, `noexec` `/tmp` and `/work`,
-  the cgroup v2 memory, swap, process and CPU limits, the open-file and file-size limits
-  and the environment (reason `self-test`). The engine's name (Docker Desktop, Colima,
+  filter that blocks system calls every default profile blocks (`add_key`, `bpf`,
+  `perf_event_open`, `userfaultfd`, `move_pages`; so a permissive custom profile is
+  refused), an enforcing AppArmor profile where the host reports AppArmor, only the
+  loopback interface, a read-only root, `noexec` `/tmp` and `/work`, root-owned `noexec`
+  `/run` and `/var/tmp`, no mount but the engine's own (a volume or bind mount from engine
+  defaults such as Podman's `containers.conf` is refused), the cgroup v2 memory, swap,
+  process and CPU limits, the open-file and file-size limits and the environment (reason
+  `self-test`). The seccomp probes have system call numbers for x86-64 and arm64 only;
+  other architectures are refused. The engine's name (Docker Desktop, Colima,
   Podman, OrbStack) is never trusted. Containers run the checked image by its id, get
   code and payload on stdin (nothing is mounted, no variable is passed) and carry owner
   and deadline labels for `orkexa.dynamic.docker.reap`. Check a computer with
-  `python -m orkexa.dynamic.docker --self-test`.
+  `python -m orkexa.dynamic.docker --self-test`. Errors from the `docker` CLI are
+  redacted before they reach a probe or an exception (`redact_docker_output`: no URL
+  credentials, socket paths or user names).
+* **The sandbox image is pinned.** `docker/sandbox.Dockerfile` names its base image by
+  digest and installs `docker/sandbox-requirements.txt` with `--require-hashes`; a test
+  refuses a shipped Dockerfile with an unpinned `FROM` or an unhashed `pip install`.
 * **`SubprocessSandbox` is an explicit, unsafe opt-in.** It runs code in a separate
   process with an empty environment, a private temporary directory (`0700`), a timeout
   and resource limits, but **it is not a security boundary**: the process can reach

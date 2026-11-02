@@ -8,7 +8,14 @@ from pathlib import Path
 import pytest
 
 from orkexa.dynamic import DockerSandbox, SandboxError
-from orkexa.dynamic.docker import DockerHost, DockerProbeError, host_fingerprint, inspect_host, preflight
+from orkexa.dynamic.docker import (
+    DockerHost,
+    DockerProbeError,
+    host_fingerprint,
+    inspect_host,
+    preflight,
+    redact_docker_output,
+)
 
 from .docker_fakes import HOSTS, FakeDocker, fake_docker, needs_posix
 
@@ -198,6 +205,66 @@ def test_a_failing_info_is_unreachable_even_with_json(tmp_path: Path) -> None:
     with pytest.raises(DockerProbeError, match="daemon down") as caught:
         inspect_host(str(fake))
     assert caught.value.reason == "unreachable"
+
+
+@pytest.mark.parametrize(
+    ("text", "kept", "removed"),
+    [
+        (
+            "error during connect: Get tcp://admin:s3cr3t@10.0.0.5:2376/v1.47/info: x509",
+            "tcp://<redacted>@10.0.0.5:2376",
+            "s3cr3t",
+        ),
+        ("dial ssh://deploy@build-host.internal: exit status 255", "ssh://<redacted>@build-host", "deploy"),
+        ("https://user:p@ss@registry.example/v2/", "https://<redacted>@registry.example", "p@ss"),
+        (
+            "Cannot connect to the Docker daemon at unix:///home/alice/.colima/default/docker.sock.",
+            "unix://<redacted>",
+            "alice",
+        ),
+        (
+            "dial unix /run/user/1001/docker.sock: connect: permission denied",
+            "dial unix <socket>: connect",
+            "/run/user/1001",
+        ),
+        ("open /Users/bob/.docker/config.json: denied", "/Users/<user>/.docker/config.json", "bob"),
+        ("GET /info?access_token=abc123&x=1 failed", "access_token=<redacted>&x=1", "abc123"),
+        ("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload", "Bearer <redacted>", "eyJhbGci"),
+    ],
+)
+def test_redact_docker_output(text: str, kept: str, removed: str) -> None:
+    redacted = redact_docker_output(text)
+    assert kept in redacted and removed not in redacted
+
+
+def test_redaction_keeps_standard_sockets_and_cuts_after_redacting() -> None:
+    text = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+    assert redact_docker_output(text) == text
+    assert "/run/podman/podman.sock" in redact_docker_output("dial unix /run/podman/podman.sock: refused")
+    secret = "x" * 600 + " tcp://admin:" + "s" * 40 + "@host:2376 end"
+    cut = redact_docker_output(secret)
+    assert len(cut) == 500 and cut.endswith("tcp://<redacted>@host:2376 end") and "sss" not in cut
+    assert redact_docker_output(secret, limit=None).startswith("x" * 600)
+
+
+def test_probe_errors_are_redacted(tmp_path: Path) -> None:
+    fake = tmp_path / "docker"
+    fake.write_text(
+        "#!/bin/sh\necho 'error during connect: tcp://ci:hunter2@10.1.2.3:2376 and "
+        "unix:///home/carol/.docker/run/docker.sock' >&2\nexit 1\n"
+    )
+    fake.chmod(0o755)
+    with pytest.raises(DockerProbeError) as caught:
+        inspect_host(str(fake))
+    detail = caught.value.detail
+    assert "hunter2" not in detail and "carol" not in detail and "ci:" not in detail
+    assert "tcp://<redacted>@10.1.2.3:2376" in detail and "unix://<redacted>" in detail
+    fake.write_text(
+        '#!/bin/sh\necho \'{"OSType": "linux", "ServerErrors": ["dial tcp://u:pw123@daemon:2376"]}\'\n'
+    )
+    with pytest.raises(DockerProbeError) as errors:
+        inspect_host(str(fake))
+    assert "pw123" not in errors.value.detail and "<redacted>@daemon" in errors.value.detail
 
 
 def test_unreported_cpu_limits_are_left_to_the_self_test_only_on_cgroup_v2(fake_docker: FakeDocker) -> None:

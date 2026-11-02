@@ -88,5 +88,10 @@ cannot enforce a limit the sandbox needs, or a test container showed that a sett
 not applied. `python -m orkexa.dynamic.docker --self-test` prints the reason and the
 daemon's facts. A rootless Docker or Podman needs the `cpu`, `memory` and `pids` cgroup
 controllers delegated to the user (systemd `Delegate=`) and cgroup v2; a daemon with an
-unconfined seccomp default is refused. See
+unconfined seccomp default is refused. `unexpected ... mount at <path>` means the engine
+adds a volume or bind mount to every container (Docker `daemon.json`, Podman
+`containers.conf` `volumes` or `mounts.conf`): remove it for the sandbox's engine.
+`the seccomp profile allows ...` means the daemon's default seccomp profile is more
+permissive than Docker's and Podman's own (`seccomp-profile` in `daemon.json`,
+`seccomp_profile` in `containers.conf`). See
 [Docker manual verification](development/docker-manual-verification.md).

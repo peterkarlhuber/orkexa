@@ -12,7 +12,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 6 |
-| P3 Low | 9 |
+| P3 Low | 10 |
 | P4 Optional | 7 |
 
 **Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
@@ -173,6 +173,25 @@ None known.
 - **Next step:** Watch the first CI runs of the new matrix (the rootless, Podman and Colima jobs are new and were not
   run before the push); Docker Desktop on macOS arm64, Windows/WSL2, Colima and OrbStack need the manual checklist
   ([Docker manual verification](development/docker-manual-verification.md)).
+
+### ORK-023 · Self-test hardening: mount table, seccomp probes, AppArmor (DS-8/9/10)
+
+- **Priority:** P3 Low · **Status:** In progress (branch `fix-ds10`) · **Refs:** security review DS-8, DS-9, DS-10
+- **What:** The self-test checked only a few mount points (not that no other mount exists), seccomp only as mode 2
+  (not the profile) and reported AppArmor without checking it; probe errors kept raw CLI stderr; the sandbox image
+  was not pinned.
+- **Done in the branch:** the self-test reads `/proc/self/mountinfo` and refuses every mount outside an allow list
+  recorded from Docker (rootful, rootless, Desktop) and Podman (rootful, rootless); `run_args()` mounts root-owned
+  `noexec` tmpfs on `/run` and `/var/tmp` (Podman's `--read-only-tmpfs` default left them writable and executable);
+  probes `add_key`, `bpf`, `perf_event_open`, `userfaultfd` and `move_pages` (blocked by the default profiles of both
+  engines) on x86-64 and arm64 and refuses other architectures; requires an enforcing AppArmor profile when the host
+  reports AppArmor (`apparmor_label` fact otherwise); `redact_docker_output()` for probe errors; base image pinned by
+  digest, requirements installed with `--require-hashes`, a test refuses unpinned `FROM`s.
+- **Next step:** Watch the Docker CI matrix (rootful, rootless, Podman, arm64, Colima): the mount allow list and the
+  probes are built from recorded mount tables and the engines' published seccomp profiles, not yet from a run on
+  each engine. Hosts with Podman `mounts.conf` entries (RHEL subscription secrets), a `--init` default other than
+  Docker's or Podman's, OrbStack (reports AppArmor) and 32-bit or other architectures may be refused and need the
+  manual checklist. Refresh the base image digest and the hashed requirements with each Python patch release.
 
 ## Platform coverage
 

@@ -2,7 +2,8 @@
 
 Every sandbox container is started with :func:`run_args`: no network, read-only root file system, no
 capabilities, no new privileges, user ``nobody``, private IPC, memory (without swap), CPU, process,
-open-file, file-size and core limits, no logging, small ``noexec`` temporary file systems, never pulled, no
+open-file, file-size and core limits, no logging, small ``noexec`` temporary file systems (``/tmp`` and
+``/work`` writable, ``/run`` and ``/var/tmp`` root-owned), never pulled, no
 bind mount and no environment variable from the host. Code and payload reach it on stdin
 (:data:`BOOTSTRAP`), together with the few Orkexa modules the runner needs (:func:`runner_files`). Each
 container carries the labels ``org.orkexa.sandbox=<owner>`` and ``org.orkexa.deadline=<epoch seconds>``,
@@ -24,7 +25,7 @@ import time
 from typing import Any
 
 from ..errors import SandboxError
-from ._host import _dict
+from ._host import _dict, redact_docker_output
 
 __all__ = [
     "BOOTSTRAP",
@@ -51,6 +52,8 @@ DEADLINE_LABEL = "org.orkexa.deadline"
 SANDBOX_USER = "65534:65534"
 _OWNER = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
 _LABEL_KEY = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,127}$")
+#: Options of the tmpfs file systems the sandbox user cannot write to (``/run``, ``/var/tmp``).
+_SEALED_TMPFS = "rw,noexec,nosuid,nodev,size=1m,mode=755"
 
 
 @dataclass(frozen=True)
@@ -165,6 +168,13 @@ def run_args(
         # mode=1777 rather than uid=/gid=: Podman 4 rejects those tmpfs options. Every process in the
         # container runs as the sandbox user, so no other user exists there to read or replace the files.
         f"/work:{tmpfs},mode=1777",
+        # Podman mounts a writable tmpfs without noexec on /run and /var/tmp of a read-only container (its
+        # --read-only-tmpfs default, also through the Docker API). Empty root-owned noexec tmpfs file systems
+        # replace them there, and Docker gets the same shape; the sandbox user cannot write to them.
+        "--tmpfs",
+        f"/run:{_SEALED_TMPFS}",
+        "--tmpfs",
+        f"/var/tmp:{_SEALED_TMPFS}",
         "-w",
         "/work",
         "--label",
@@ -298,7 +308,9 @@ def list_sandbox_containers(
         timeout,
     )
     if listed.returncode != 0:
-        raise SandboxError(f"{docker} ps failed: {listed.stderr.decode('utf-8', 'replace')[-500:]}")
+        raise SandboxError(
+            f"{docker} ps failed: {redact_docker_output(listed.stderr.decode('utf-8', 'replace'))}"
+        )
     ids = [line.strip() for line in listed.stdout.decode("utf-8", "replace").splitlines() if line.strip()]
     if not ids:
         return []

@@ -77,6 +77,8 @@ def test_run_args_shape() -> None:
         ("--cpus", "0.5"),
         ("--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=16m"),
         ("--tmpfs", "/work:rw,noexec,nosuid,nodev,size=16m,mode=1777"),
+        ("--tmpfs", "/run:rw,noexec,nosuid,nodev,size=1m,mode=755"),
+        ("--tmpfs", "/var/tmp:rw,noexec,nosuid,nodev,size=1m,mode=755"),
         ("-w", "/work"),
         ("--label", f"{OWNER_LABEL}=nodestro"),
         ("--label", f"{DEADLINE_LABEL}=1700000001"),

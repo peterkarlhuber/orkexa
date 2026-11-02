@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import platform
+import struct
 import subprocess
 import sys
 from typing import Any
@@ -21,6 +24,14 @@ from orkexa.dynamic.docker import (
     resolve_image_id,
 )
 from orkexa.dynamic.docker._cli import main
+from orkexa.dynamic.docker._self_test import (
+    SECCOMP_PROBES,
+    SELF_TEST_SCRIPT,
+    check_apparmor,
+    check_mount_table,
+    check_seccomp_probes,
+    parse_mountinfo,
+)
 
 from .docker_fakes import IMAGE_ID, PYTHON_ENV, FakeDocker, fake_docker, needs_posix
 
@@ -71,7 +82,7 @@ def test_self_test_is_remembered_per_host_image_and_shape(fake_docker: FakeDocke
 @pytest.mark.parametrize(
     ("changes", "problem"),
     [
-        ({"version": 2}, "unknown version"),
+        ({"version": 1}, "unknown version"),
         ({"uid": 0}, "uid 0"),
         ({"status": {"Uid": "65534\t0\t65534\t65534"}}, "ids are not all 65534"),
         ({"status": {"CapEff": "00000000a80425fb"}}, "CapEff is 00000000a80425fb"),
@@ -97,6 +108,15 @@ def test_self_test_is_remembered_per_host_image_and_shape(fake_docker: FakeDocke
         ({"rlimits": {"RLIMIT_CORE": [-1, -1]}}, "RLIMIT_CORE"),
         ({"env": ["HOME", "HOSTNAME", "PATH", "AWS_SECRET_ACCESS_KEY"]}, "unexpected environment variables"),
         ({"env": None}, "environment is not reported"),
+        ({"mountinfo": None}, "mount table is not reported"),
+        ({"mountinfo": "garbage"}, "mount table cannot be read"),
+        ({"write_sealed": {"/run": "allowed"}}, "can write to /run"),
+        ({"write_sealed": None}, "can write to /var/tmp"),
+        ({"seccomp_probes": {"move_pages": "allowed"}}, "seccomp profile allows move_pages"),
+        ({"seccomp_probes": {"unsupported": "riscv64/64-bit"}}, "architecture riscv64"),
+        ({"seccomp_probes": None}, "seccomp probes are not reported"),
+        ({"apparmor": "unconfined"}, "not confined by an enforcing profile (unconfined)"),
+        ({"apparmor": None}, "(no label)"),
     ],
 )
 def test_self_test_refuses_what_the_engine_did_not_apply(
@@ -111,6 +131,28 @@ def test_self_test_refuses_what_the_engine_did_not_apply(
         box.call(CODE, "one", {})
     assert fake_docker.runs() == []  # no tool code ran
     assert not DockerSandbox.available(str(fake_docker.path))
+
+
+def test_a_permissive_daemon_fails_every_probe(fake_docker: FakeDocker) -> None:
+    """A daemon whose seccomp filter lets the probes through (a custom profile) is refused by name."""
+    fake_docker.self_test(seccomp_probes=dict.fromkeys(SECCOMP_PROBES, "allowed"))
+    probe = sandbox(fake_docker).self_test()
+    assert not probe.available
+    assert "allows add_key, bpf, perf_event_open, userfaultfd, move_pages" in probe.detail
+
+
+def test_apparmor_is_reported_without_failing_where_the_host_has_none(fake_docker: FakeDocker) -> None:
+    fake_docker.host("docker-desktop")  # no AppArmor on the host: the label is reported only
+    fake_docker.self_test(apparmor="unconfined")
+    probe = sandbox(fake_docker).self_test()
+    assert probe.available and dict(probe.facts)["apparmor_label"] == "unconfined"
+    fake_docker.self_test(apparmor=None)
+    DockerSandbox.clear_self_test_cache()
+    assert dict(sandbox(fake_docker).self_test().facts)["apparmor_label"] == "not available"
+    fake_docker.host("rootful-cgroup2")  # AppArmor on the host: the label must be an enforcing profile
+    fake_docker.self_test()
+    probe = sandbox(fake_docker).self_test()
+    assert probe.available and dict(probe.facts)["apparmor_label"] == "docker-default (enforce)"
 
 
 def test_a_failed_self_test_is_not_remembered(fake_docker: FakeDocker) -> None:
@@ -193,6 +235,194 @@ def test_evaluate_self_test_directly() -> None:
     limits = ContainerLimits(memory_mb=128, cpus=0.25, pids=8)
     assert evaluate_self_test({"version": 1}, limits)  # an empty report fails every check
     assert evaluate_self_test({}, limits) == ["the self-test report has an unknown version"]
+
+
+# ---- the mount table ----------------------------------------------------------------------------------
+
+MOUNTINFO = Path(__file__).parent / "fixtures" / "docker" / "mountinfo"
+SAMPLES = sorted(path.stem for path in MOUNTINFO.glob("*.txt"))
+
+
+def sample(name: str = "docker-rootful", *, add: str = "", drop: str = "") -> str:
+    lines = (MOUNTINFO / f"{name}.txt").read_text().splitlines()
+    if drop:
+        lines = [line for line in lines if line.split()[4] != drop]
+    return "\n".join([*lines, *([add] if add else [])]) + "\n"
+
+
+def test_the_recorded_engines_have_the_samples() -> None:
+    assert SAMPLES == [
+        "docker-desktop",
+        "docker-rootful",
+        "docker-rootless",
+        "podman-rootful",
+        "podman-rootless",
+    ]
+
+
+@pytest.mark.parametrize("name", SAMPLES)
+def test_recorded_mount_tables_pass(name: str) -> None:
+    """What Docker (rootful, rootless, Desktop) and Podman (rootful, rootless) mount for run_args()."""
+    assert check_mount_table(sample(name)) == []
+
+
+_EXT4 = "rw,relatime - ext4 /dev/root rw,discard"
+
+
+@pytest.mark.parametrize(
+    ("add", "problem"),
+    [
+        # a volume from containers.conf / a daemon default: host-backed and writable
+        (f"900 612 8:1 /srv/shared /data {_EXT4}", "unexpected writable mount at /data (ext4 /dev/root"),
+        # Podman's mounts.conf (RHEL subscription secrets): host-backed, even read-only
+        (
+            "901 612 8:1 /usr/share/rhel/secrets /run/secrets ro,relatime - ext4 /dev/root rw",
+            "unexpected read-only mount at /run/secrets",
+        ),
+        ("902 612 0:70 / /scratch rw,nosuid,nodev - tmpfs tmpfs rw,size=64k", "writable mount at /scratch"),
+        ("903 612 0:71 / /scratch ro,nosuid,nodev - tmpfs tmpfs ro", "read-only mount at /scratch"),
+        # the host's /proc (another pid namespace) bound somewhere, also below /proc
+        ("904 612 0:22 / /hostproc ro,nosuid - proc proc rw", "mount at /hostproc"),
+        ("905 613 0:22 / /proc/driver ro,nosuid - proc proc rw", "mount at /proc/driver"),
+        ("906 613 0:55 /sys /proc/sys/kernel rw,nosuid - proc proc rw", "writable mount at /proc/sys/kernel"),
+        ("907 616 0:7 / /sys/kernel/security rw,nosuid - securityfs securityfs rw", "/sys/kernel/security"),
+        ("908 616 8:1 /home/user /sys/kernel/debug ro,relatime - ext4 /dev/root rw", "/sys/kernel/debug"),
+        ("909 614 0:5 /sda /dev/sda rw,nosuid - devtmpfs udev rw", "mount at /dev/sda"),
+        ("910 614 0:5 /zero /dev/null rw,nosuid - devtmpfs udev rw", "mount at /dev/null"),
+        (f"911 612 8:1 / /etc/hosts {_EXT4}", "mount at /etc/hosts"),  # a whole file system, not a file
+        ("912 612 8:1 /usr/bin/tini /sbin/docker-init rw,relatime - ext4 /dev/root rw", "/sbin/docker-init"),
+        (f"913 612 8:1 /home/user/project /work {_EXT4}", "/work is ext4, not a tmpfs"),  # under the tmpfs
+        (r"914 612 8:1 /srv /my\040data rw,relatime - ext4 /dev/root rw", "mount at /my data"),
+        ("915 612 0:72 / /proc/acpi rw,relatime - tmpfs tmpfs rw", "writable mount at /proc/acpi"),
+    ],
+)
+def test_unexpected_mounts_are_refused(add: str, problem: str) -> None:
+    problems = check_mount_table(sample(add=add))
+    assert any(problem in found for found in problems), problems
+
+
+@pytest.mark.parametrize(
+    ("replace", "by", "problem"),
+    [
+        (
+            "/run rw,nosuid,nodev,noexec,relatime",
+            "/run rw,nosuid,nodev,relatime",
+            "/run is mounted without noexec",
+        ),  # Podman's own --read-only-tmpfs /run, had run_args() not replaced it
+        (
+            "/sys ro,nosuid,nodev,noexec,relatime - sysfs sysfs ro",
+            "/sys rw,nosuid,nodev,noexec,relatime - sysfs sysfs rw",
+            "/sys is writable",
+        ),
+        ("/sys/fs/cgroup ro,", "/sys/fs/cgroup rw,", "/sys/fs/cgroup is writable"),
+        ("/proc/sys ro,", "/proc/sys rw,", "writable mount at /proc/sys"),
+        ("/dev rw,nosuid - tmpfs", "/dev rw - tmpfs", "/dev is mounted without nosuid"),
+        ("/dev/pts rw,nosuid,noexec,relatime - devpts", "/dev/pts rw,nosuid - tmpfs", "mount at /dev/pts"),
+        ("/tmp rw,nosuid,nodev,noexec,relatime - tmpfs", "/tmp rw,nosuid - ext4", "/tmp is ext4"),
+        ("/var/tmp rw,nosuid,nodev,noexec,relatime - tmpfs", "/var/tmp rw - overlay", "/var/tmp is overlay"),
+    ],
+)
+def test_wrong_engine_mounts_are_refused(replace: str, by: str, problem: str) -> None:
+    text = sample()
+    assert replace in text
+    problems = check_mount_table(text.replace(replace, by))
+    assert any(problem in found for found in problems), problems
+
+
+@pytest.mark.parametrize("point", ["/proc", "/dev", "/sys", "/tmp", "/work", "/dev/shm", "/run", "/var/tmp"])
+def test_missing_mounts_are_refused(point: str) -> None:
+    assert f"nothing is mounted at {point}" in check_mount_table(sample("podman-rootful", drop=point))
+
+
+def test_init_binaries_and_masks_are_allowed() -> None:
+    init = "920 612 8:1 /usr/bin/docker-init /sbin/docker-init ro,relatime - ext4 /dev/root rw"
+    podman_init = "921 612 8:1 /usr/libexec/podman/catatonit /run/podman-init ro,relatime - ext4 /dev/root rw"
+    mask = "922 616 0:56 /null /sys/kernel/notes rw,nosuid - tmpfs tmpfs rw,size=65536k"
+    ro_view = "923 616 0:7 / /sys/kernel/security ro,nosuid - securityfs securityfs rw"
+    text = sample(add=init) + podman_init + "\n" + mask + "\n" + ro_view + "\n"
+    assert check_mount_table(text) == []
+
+
+def test_parse_mountinfo() -> None:
+    entries = parse_mountinfo(sample("podman-rootless"))
+    root = entries[0]
+    assert root.point == "/" and root.read_only and root.fstype == "overlay" and "-" not in root.options
+    escaped = parse_mountinfo(r"1 0 8:1 /a\040b /x\011y rw shared:1 master:2 - ext4 /dev/s\134d rw" + "\n")
+    assert escaped[0].root == "/a b" and escaped[0].point == "/x\ty" and escaped[0].source == "/dev/s\\d"
+    assert not escaped[0].read_only
+    for bad in ("1 0 8:1 / / rw", "1 0 8:1 / / rw - ext4"):
+        with pytest.raises(ValueError):
+            parse_mountinfo(bad)
+
+
+# ---- seccomp and AppArmor -------------------------------------------------------------------------------
+
+
+def test_check_seccomp_probes() -> None:
+    blocked = dict.fromkeys(SECCOMP_PROBES, "errno:1")
+    assert check_seccomp_probes(blocked) == []
+    assert check_seccomp_probes({**blocked, "bpf": "errno:38", "add_key": "errno:22"}) == []
+    assert "allows perf_event_open" in check_seccomp_probes({**blocked, "perf_event_open": "allowed"})[0]
+    assert "not reported: userfaultfd" in check_seccomp_probes({**blocked, "userfaultfd": None})[0]
+    assert "failed: ImportError" in check_seccomp_probes({"error": "ImportError: no ctypes"})[0]
+    assert check_seccomp_probes([]) == ["the seccomp probes are not reported"]
+
+
+@pytest.mark.parametrize(
+    ("label", "ok"),
+    [
+        ("docker-default (enforce)", True),
+        ("containers-default-0.57.4 (enforce)", True),
+        ("orkexa-strict (kill)", True),
+        ("docker-default (complain)", False),
+        ("docker-default (unconfined)", False),
+        ("unconfined", False),
+        # Ubuntu 24.04 Podman: the container profile stacked with crun's unconfined helper profile.
+        ("containers-default-0.57.4-apparmor1//&crun (mixed)", True),
+        ("docker-default//&runc (mixed)", True),
+        ("crun//&containers-default-0.57.4 (mixed)", False),
+        ("containers-default-0.57.4//&evil (mixed)", False),
+        ("unconfined//&crun (mixed)", False),
+        ("docker-default (mixed)", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_check_apparmor(label: str | None, ok: bool) -> None:
+    assert (check_apparmor(label, required=True) == []) is ok
+    assert check_apparmor(label, required=False) == []
+
+
+def _probe_code() -> str:
+    start, end = SELF_TEST_SCRIPT.index("def probe_syscalls"), SELF_TEST_SCRIPT.index("def write_in")
+    return "import os\n" + SELF_TEST_SCRIPT[start:end]
+
+
+def test_the_self_test_script_compiles() -> None:
+    compile(SELF_TEST_SCRIPT, "<self-test>", "exec")
+    for name in SECCOMP_PROBES:
+        assert f"'{name}':" in SELF_TEST_SCRIPT
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux" or platform.machine() not in ("x86_64", "aarch64") or struct.calcsize("P") != 8,
+    reason="the seccomp probes have system call numbers for 64-bit x86 and arm Linux",
+)
+def test_the_seccomp_probes_run_here() -> None:
+    """The probes run in this (unconfined or confined) process and report each call; outside a container the
+    kernel usually lets add_key, userfaultfd or move_pages through, which is what they are meant to see."""
+    namespace: dict[str, Any] = {}
+    exec(_probe_code(), namespace)  # the self-test's own code
+    results = namespace["seccomp_probes"]()
+    assert set(results) == set(SECCOMP_PROBES), results
+    assert all(value == "allowed" or value.startswith("errno:") for value in results.values())
+
+
+def test_unsupported_architectures_report_themselves(monkeypatch: pytest.MonkeyPatch) -> None:
+    namespace: dict[str, Any] = {}
+    exec(_probe_code(), namespace)
+    monkeypatch.setattr(os, "uname", lambda: os.uname_result(("Linux", "h", "6", "1", "riscv64")))
+    assert namespace["seccomp_probes"]() == {"unsupported": "riscv64/64-bit"}
 
 
 # ---- image identity ------------------------------------------------------------------------------------

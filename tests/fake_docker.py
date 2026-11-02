@@ -144,10 +144,27 @@ def _merge(base: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+_MOUNTINFO = Path(__file__).parent / "fixtures" / "docker" / "mountinfo"
+_TMPFS_POINTS = ("/tmp", "/work", "/run", "/var/tmp")
+
+
+def _mountinfo(info: dict[str, Any], version: dict[str, Any], tmpfs: dict[str, dict[str, str]]) -> str:
+    """A recorded mount table of the engine, with only the tmpfs file systems the run asked for."""
+    components = {c.get("Name") for c in (version.get("Server") or {}).get("Components") or []}
+    engine = "podman" if "Podman Engine" in components else "docker"
+    rootless = "name=rootless" in json.dumps(info.get("SecurityOptions"))
+    text = (_MOUNTINFO / f"{engine}-{'rootless' if rootless else 'rootful'}.txt").read_text()
+    points = [(line, line.split()[4]) for line in text.splitlines()]
+    lines = [line for line, point in points if point not in _TMPFS_POINTS or point in tmpfs]
+    return "\n".join(lines) + "\n"
+
+
 def _self_test_report(values: dict[str, list[str]], flags: set[str], image: dict[str, Any]) -> dict[str, Any]:
-    info = _load("host.json", {}).get("info") or {}
+    host = _load("host.json", {})
+    info = host.get("info") or {}
     security = " ".join(values.get("--security-opt", []))
     seccomp = "0" if "profile=unconfined" in json.dumps(info.get("SecurityOptions")) else "2"
+    apparmor = "name=apparmor" in json.dumps(info.get("SecurityOptions"))
     tmpfs = _tmpfs(values)
     user = values.get("--user", ["0:0"])[0]
     uid, gid = (int(part) for part in user.split(":"))
@@ -170,7 +187,7 @@ def _self_test_report(values: dict[str, list[str]], flags: set[str], image: dict
     env = [entry.split("=", 1)[0] for entry in (image.get("Config") or {}).get("Env") or []]
     cgroup_version = str(info.get("CgroupVersion") or "2")
     report: dict[str, Any] = {
-        "version": 1,
+        "version": 2,
         "status": {
             "Uid": f"{uid}\t{uid}\t{uid}\t{uid}",
             "Gid": f"{gid}\t{gid}\t{gid}\t{gid}",
@@ -207,6 +224,16 @@ def _self_test_report(values: dict[str, list[str]], flags: set[str], image: dict
             "RLIMIT_CORE": rlimit("core"),
         },
         "env": sorted({*env, "HOME", "HOSTNAME"}),
+        "mountinfo": _mountinfo(info, host.get("version") or {}, tmpfs),
+        "write_sealed": {
+            point: "PermissionError:13" if tmpfs.get(point, {}).get("mode") == "755" else "allowed"
+            for point in ("/run", "/var/tmp")
+        },
+        "apparmor": "docker-default (enforce)" if apparmor else None,
+        "seccomp_probes": {
+            name: "errno:1" if seccomp == "2" else "allowed"
+            for name in ("add_key", "bpf", "perf_event_open", "userfaultfd", "move_pages")
+        },
     }
     if cgroup_version == "2":
         report["cgroup"].update(
