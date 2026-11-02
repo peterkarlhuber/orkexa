@@ -1,10 +1,11 @@
 # Docker manual verification
 
 The `docker` jobs of the `Platforms` workflow check rootful and rootless Docker, rootful
-Podman, Linux arm64 and (non-blocking) rootless Podman and Colima on macOS x86-64 on every
-push. Docker Desktop has never run in CI: hosted runners cannot run it on Apple Silicon
-(no nested virtualization), Linux containers on Windows (x64 or ARM64), OrbStack or
-`podman machine`, so these hosts are **unverified in CI** (see the
+Podman, Linux arm64 and (non-blocking) Colima on macOS x86-64 on every push, and that
+rootless Podman 4.9.3 is refused (it does not apply the `--ulimit` limits). Docker
+Desktop has never run in CI: hosted runners cannot run it on Apple Silicon (no nested
+virtualization), Linux containers on Windows (x64 or ARM64), OrbStack or `podman
+machine`, so these hosts are **unverified in CI** (see the
 [feature matrix](../feature-matrix.md#docker-sandbox-hosts)). Use this checklist on such
 a computer before relying on it, after a Docker or OS update, and before a release.
 

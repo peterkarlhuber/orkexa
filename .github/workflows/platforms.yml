@@ -65,7 +65,9 @@ jobs:
           - { name: rootless, os: ubuntu-24.04, mode: rootless, experimental: false }
           - { name: rootless without cpu delegation is refused, os: ubuntu-24.04, mode: refused, experimental: false }
           - { name: podman, os: ubuntu-24.04, mode: podman, experimental: false }
-          - { name: podman rootless, os: ubuntu-24.04, mode: podman-rootless, experimental: true }
+          # Rootless Podman 4.9.3 (Ubuntu 24.04) does not apply the --ulimit limits and runs crun unconfined by
+          # AppArmor: the self-test must refuse it (its mount table passes; it is printed below).
+          - { name: podman rootless is refused, os: ubuntu-24.04, mode: podman-rootless, experimental: true }
           - { name: rootful arm64, os: ubuntu-24.04-arm, mode: rootful, experimental: false }
           - { name: colima macOS x86-64, os: macos-15-intel, mode: colima, experimental: true }
     env:
@@ -159,8 +161,16 @@ jobs:
             docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
           fi
       - name: Self-test
-        if: matrix.mode != 'refused'
+        if: matrix.mode != 'refused' && matrix.mode != 'podman-rootless'
         run: python -m orkexa.dynamic.docker --self-test --json
+      - name: Rootless Podman is refused (rlimits, AppArmor)
+        if: matrix.mode == 'podman-rootless'
+        run: |
+          set -euo pipefail
+          if python -m orkexa.dynamic.docker --self-test --json | tee /tmp/self-test.json; then
+            echo "the self-test must refuse rootless Podman while it does not apply the limits"; exit 1
+          fi
+          grep -q '"reason": "self-test"' /tmp/self-test.json
       - name: Mount table of a sandbox container (evidence for the allow list)
         if: always() && (matrix.mode == 'podman' || matrix.mode == 'podman-rootless')
         run: |
@@ -177,7 +187,7 @@ jobs:
           print("check_mount_table:", check_mount_table(text) or "no problems")
           PY
       - name: Real-container tests
-        if: matrix.mode != 'refused'
+        if: matrix.mode != 'refused' && matrix.mode != 'podman-rootless'
         run: pytest -v -rs -m docker tests/test_docker_sandbox.py tests/anthropic/test_dynamic_sandbox.py
       - name: The daemon without delegation is refused
         if: matrix.mode == 'refused'

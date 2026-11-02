@@ -79,7 +79,7 @@ runner can run it, so it is checked with the
 | Docker Engine, rootless, Linux x86-64 | CI | needs cpu, memory and pids delegated to the user |
 | Docker Engine, rootless without cpu delegation | CI: refused | reason `limits` |
 | Podman, rootful (`podman system service`, Docker API) | CI | Podman 4.9.3 with crun 1.14.1 on ubuntu-24.04 x86-64 |
-| Podman, rootless (`podman system service`, Docker API) | CI, non-blocking | new job (added 2026-11-02); until it has passed, only the mount table fixture `tests/fixtures/docker/mountinfo/podman-rootless.txt` (not taken from a CI run) covers it; needs cgroup v2 and cpu, memory and pids delegated to the user |
+| Podman, rootless (`podman system service`, Docker API) | CI, non-blocking: refused | Podman 4.9.3 with crun 1.14.1 on ubuntu-24.04: the mount table passes (recorded in `tests/fixtures/docker/mountinfo/podman-rootless.txt`), but the self-test refuses it (`self-test`): the `--ulimit` limits are not applied (`RLIMIT_NOFILE` 65536, `RLIMIT_FSIZE` unlimited, core hard limit unlimited) and crun runs unconfined by AppArmor. Newer Podman versions are untested |
 | Podman with `mounts.conf` entries (RHEL subscription secrets on `/run/secrets`) or a containers.conf `volumes` or `tz` default (a mount at `/etc/localtime`) | refused | the self-test refuses every host-backed mount, by design |
 | Colima, macOS x86-64 (macos-15-intel) | CI, non-blocking | nested virtualization on hosted runners is not guaranteed |
 | Docker Desktop, macOS arm64 (Apple silicon) | unverified in CI | never run in CI; refused if it reports an unconfined seccomp default |

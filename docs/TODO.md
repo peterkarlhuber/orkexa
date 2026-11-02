@@ -198,17 +198,20 @@ None known.
 - **What:** The preflight and the self-test have run in CI only on Docker Engine (rootful x86-64 and arm64, rootless
   x86-64), rootful Podman 4.9.3 (crun 1.14.1, Ubuntu 24.04) and, non-blocking, Colima on macOS x86-64. **Docker
   Desktop has never run in CI** (macOS Apple silicon and Intel, Windows x64 and ARM64), nor have OrbStack, Colima on
-  Apple silicon, `podman machine` or rootless Podman: their `docker info` outputs and the rootless Podman mount table
-  in the unit tests are fixtures, not CI runs. The mount allow list was reviewed against what rootless Podman with
-  crun adds (`/run/.containerenv`, `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf` from its state directory,
+  Apple silicon or `podman machine`: their `docker info` outputs in the unit tests are fixtures, not CI runs.
+  Rootless Podman 4.9.3 (crun 1.14.1, Ubuntu 24.04) ran once in CI on 2026-11-02 (non-blocking job): its mount table
+  passes `check_mount_table()` (now the recorded fixture `podman-rootless.txt`), but the self-test rightly refuses it:
+  the `--ulimit` limits do not reach the container (`RLIMIT_NOFILE` 65536, `RLIMIT_FSIZE` unlimited, core hard limit
+  unlimited) and crun runs unconfined by AppArmor (`crun (unconfined)`). The mount allow list was reviewed against
+  what rootless Podman with crun adds (`/run/.containerenv`, `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf` from its state directory,
   `/dev/shm`, a read-only `cgroup2`, device nodes bound from the host's `/dev`, `/dev/null` and empty read-only tmpfs
   masks, read-only `/proc` views, `/run/podman-init`): every one is allowed, so no gap was found and nothing was
   widened. Refused by design (host-backed mounts): `mounts.conf` entries such as RHEL's subscription secrets on
   `/run/secrets`, containers.conf `volumes`, a `tz` default (`/etc/localtime`), and a generated `/etc/passwd` or
   `/etc/group` (Podman adds them only when the image lacks the sandbox user 65534, which the sandbox images have).
-- **Next step:** Watch the new non-blocking `podman rootless` job of the `Platforms` workflow; once it passes, compare
-  its printed mount table with `tests/fixtures/docker/mountinfo/podman-rootless.txt` and make the job blocking. Run the
-  manual checklist on Docker Desktop (macOS arm64 and x86-64, Windows x64 and ARM64), OrbStack and `podman machine`
+- **Next step:** Find out whether a newer rootless Podman (5.x, or containers.conf `default_ulimits`) applies the
+  limits and an AppArmor profile; until then the non-blocking job `podman rootless is refused` asserts the refusal
+  (the checks are not relaxed). Run the manual checklist on Docker Desktop (macOS arm64 and x86-64, Windows x64 and ARM64), OrbStack and `podman machine`
   and record the results in the feature matrix.
 
 ### ORK-012 · Real providers are not exercised
