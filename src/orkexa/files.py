@@ -86,6 +86,18 @@ class StoredFile(BaseModel):
         return f"{self.id} | {self.name} | {self.media_type} | {_format_size(self.size)}{description}"
 
 
+# Python's mimetypes reads the registry on Windows, which may not know Office files; these are named here so a
+# Word file is reported as unsupported on every operating system rather than as an unknown type.
+_OFFICE_TYPES = {
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+
 def _format_size(size: int) -> str:
     if size < 1024:
         return f"{size}B"
@@ -96,7 +108,8 @@ def _format_size(size: int) -> str:
 def _media_type(name: str, media_type: str | None) -> str:
     if media_type:
         return media_type
-    guessed = mimetypes.guess_type(name)[0] or _EXTRA_TEXT_TYPES.get(Path(name).suffix.lower())
+    suffix = Path(name).suffix.lower()
+    guessed = mimetypes.guess_type(name)[0] or _EXTRA_TEXT_TYPES.get(suffix) or _OFFICE_TYPES.get(suffix)
     if guessed is None:
         raise ValueError(f"Cannot tell the media type of {name!r}; pass media_type")
     return guessed
