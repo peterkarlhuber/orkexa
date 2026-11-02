@@ -79,7 +79,7 @@ def escapes(results: dict[str, str], expected_allowed: tuple[str, ...] = ()) -> 
 @pytest.fixture(scope="module")
 def sandbox() -> MacOSSandbox:
     probe = MacOSSandbox.probe(refresh=True)
-    save("probe", {"probe": probe.as_dict(), "uname": os.uname()._asdict(), "python": sys.version})
+    save("probe", {"probe": probe.as_dict(), "uname": list(os.uname()), "python": sys.version})
     assert probe.available, probe
     return MacOSSandbox(timeout=20.0, memory_mb=512, tmp_mb=16)
 
@@ -703,10 +703,8 @@ def test_python_interpreters() -> None:
     """The sandbox with other interpreters a Mac may have: a venv in the home directory and /usr/bin/python3."""
     out: dict[str, Any] = {}
     venv = Path.home() / f"review-venv-{os.getpid()}"
-    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    subprocess.run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)], check=True)
     candidates = {"venv_in_home": str(venv / "bin" / "python")}
-    if Path("/usr/bin/python3").exists() and Path("/Library/Developer/CommandLineTools").exists():
-        candidates["usr_bin_python3"] = "/usr/bin/python3"
     canary = Path.home() / f".review-interp-{os.getpid()}"
     canary.write_text(TOKEN)
     try:
