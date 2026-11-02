@@ -63,15 +63,19 @@ return json.dumps({
     "network": attempt(lambda: socket.create_connection(("1.1.1.1", 443), timeout=3)),
     "write root": attempt(lambda: open("/work/escape.txt", "w").write("x")),
     "user": os.getuid(),
-    "env": sorted(k for k in os.environ if "KEY" in k or "TOKEN" in k),
+    "secret": "seen" if "ORKEXA_TEST_SECRET" in os.environ else "absent",
 })
 """
     )
-    results = json.loads(sandbox.call(code, "probe", {"context": ""}))
+    os.environ["ORKEXA_TEST_SECRET"] = "s3cr3t"
+    try:
+        results = json.loads(sandbox.call(code, "probe", {"context": ""}))
+    finally:
+        os.environ.pop("ORKEXA_TEST_SECRET", None)
     assert results["network"].startswith("refused")
     assert results["write root"].startswith("refused")
     assert results["user"] == 65534
-    assert results["env"] == []
+    assert results["secret"] == "absent"
 
 
 def test_cancel_removes_the_container(sandbox: DockerSandbox) -> None:

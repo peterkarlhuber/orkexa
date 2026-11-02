@@ -101,14 +101,21 @@ def test_private_files_secrets_network_and_processes_are_refused(
     server = socket.socket()
     server.bind(("127.0.0.1", 0))
     server.listen(1)
-    context = json.dumps({"canary": str(canary), "port": server.getsockname()[1], "outside": str(tmp_path)})
+    context = json.dumps(
+        {
+            "canary": str(canary),
+            "home": str(Path.home()),
+            "port": server.getsockname()[1],
+            "outside": str(tmp_path),
+        }
+    )
     code = tool(
         ATTEMPT
         + """
 import os, socket, subprocess
 results = {
     "home file": attempt(lambda: open(c["canary"]).read()),
-    "home listing": attempt(lambda: os.listdir(os.path.expanduser("~" + os.environ.get("USER", "")))),
+    "home listing": attempt(lambda: os.listdir(c["home"])),
     "write outside": attempt(lambda: open(c["outside"] + "/escape.txt", "w").write("x")),
     "localhost": attempt(lambda: socket.create_connection(("127.0.0.1", c["port"]), timeout=2)),
     "internet": attempt(lambda: socket.create_connection(("1.1.1.1", 443), timeout=2)),
