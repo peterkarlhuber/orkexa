@@ -38,7 +38,7 @@ jobs:
           REVIEW_PARENT_SECRET: review-parent-secret-not-a-real-credential-${{ github.run_id }}
         run: |
           cd "$RUNNER_TEMP"
-          python -m pytest -v -s -p no:cacheprovider "$GITHUB_WORKSPACE/review/test_review_macos_sandbox.py" \
+          python -m pytest -v -s -p no:cacheprovider "$GITHUB_WORKSPACE/review/" \
             --rootdir "$RUNNER_TEMP" 2>&1 | tee "$RUNNER_TEMP/review-out-log.txt"
           exit ${PIPESTATUS[0]}
       - name: Results
