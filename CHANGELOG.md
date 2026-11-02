@@ -69,6 +69,14 @@ First release of Orkexa.
   `orkexa.evaluation`): the text `refine()` gives a judge, for applications that run their
   own (for example resumable) ask-evaluate-revise loop.
 
+### Python 3.11 minimum
+
+* Python 3.11 is now the minimum (3.10 reached end of life in October 2026): `requires-python`, classifiers, ruff
+  `py311`, mypy 3.11; CI tests 3.11 to 3.13, the lowest-versions job runs on 3.11. The docs extra needs
+  `mkdocstrings>=1.0.7` and allows `pymdown-extensions` up to 12.
+* The modules the Docker sandbox runner imports (`orkexa.dynamic.docker.RUNNER_MODULES`) stay importable on
+  Python 3.10, because they run with the Python of the user's sandbox image (ruff `UP` is off for them).
+
 ### Removed: native macOS sandbox (Docker-first, ADR 0012)
 
 * The experimental Seatbelt `MacOSSandbox` (ORK-014) is removed; `DockerSandbox` is the sandbox for untrusted

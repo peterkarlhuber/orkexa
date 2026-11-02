@@ -575,7 +575,8 @@ _BIND_RUNNER = "/opt/orkexa/orkexa/dynamic/_sandbox_runner.py"
 class DockerSandbox(Sandbox):
     """Throwaway Docker container: no network, read-only FS, no capabilities, nobody user.
 
-    The image needs Python 3.10+ with ``pydantic`` and ``typing-extensions`` installed;
+    The image needs Python 3.10+ (the runner modules stay compatible with it, below Orkexa's own minimum)
+    with ``pydantic`` and ``typing-extensions`` installed;
     ``docker/sandbox.Dockerfile`` in the repository builds a suitable one::
 
         docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .

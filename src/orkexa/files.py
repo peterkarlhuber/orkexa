@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import hashlib
 import json
 import mimetypes
@@ -234,7 +234,7 @@ class FileStore(ABC):
                     media_type=kind,
                     size=len(data),
                     sha256=digest,
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                     description=description,
                     metadata=dict(metadata or {}),
                 )

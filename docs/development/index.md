@@ -31,7 +31,7 @@ pip install -e ".[docs]" && mkdocs serve              # docs at http://127.0.0.1
 
 `.github/workflows/ci.yml` runs on every push to the default branch and every pull
 request, with read-only repository permissions: lint, format and type checks and the
-test suite on Python 3.10 to 3.13, the suite with the lowest supported dependency
+test suite on Python 3.11 to 3.13, the suite with the lowest supported dependency
 versions, building both distributions and installing them into fresh virtual
 environments, a strict docs build, and `pip-audit` over all runtime dependencies.
 Dependabot proposes grouped dependency and GitHub Actions updates.

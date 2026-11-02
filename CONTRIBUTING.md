@@ -6,7 +6,7 @@ to follow the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Setup
 
-Python 3.10 or newer. From a clone:
+Python 3.11 or newer. From a clone:
 
 ```bash
 python -m venv .venv && . .venv/bin/activate

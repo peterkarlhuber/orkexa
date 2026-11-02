@@ -9,7 +9,7 @@ a computer before relying on it, after a Docker or OS update, and before a relea
 
 ## What you need
 
-* Python 3.10+ with Orkexa installed (`pip install -e ".[dev]"` in a checkout).
+* Python 3.11+ with Orkexa installed (`pip install -e ".[dev]"` in a checkout).
 * The engine under test running, with the `docker` CLI pointing at it (`docker context
   ls`, or `DOCKER_HOST`).
 * The sandbox image: `docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`

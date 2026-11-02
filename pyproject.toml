@@ -9,7 +9,7 @@ description = "Provider-independent Python agents and multi-agent systems: one r
 dynamic = ["readme"]
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Peter Karlhuber" }]
 keywords = ["llm", "agent", "multi-agent", "tool-use", "anthropic", "claude", "openai", "gemini", "bedrock", "aws", "ollama", "vllm", "pydantic", "rag", "evaluation"]
 classifiers = [
@@ -18,7 +18,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -43,11 +42,10 @@ vector = ["sqlite-vec>=0.1.6"]
 docs = [
     "mkdocs>=1.6,<2",  # MkDocs 2 drops the plugin system that Material and mkdocstrings use
     "mkdocs-material>=9.5",
-    "mkdocstrings[python]>=0.27",
-    # 11.0.1 fixes PYSEC-2026-3609/3654; 12 needs mkdocstrings 1.0.7+, which needs Python 3.11+.
-    "mkdocstrings>=1.0.7; python_version >= '3.11'",
-    "pymdown-extensions>=11.0.1,<12; python_version < '3.11'",
-    "pymdown-extensions>=11.0.1,<13; python_version >= '3.11'",
+    # 1.0.7+ is needed by pymdown-extensions 12.
+    "mkdocstrings[python]>=1.0.7",
+    # 11.0.1 fixes PYSEC-2026-3609/3654.
+    "pymdown-extensions>=11.0.1,<13",
 ]
 dev = [
     "anthropic>=2.0,<3",
@@ -120,7 +118,7 @@ show_missing = true
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py311"
 extend-exclude = ["docs/examples.md"]
 
 [tool.ruff.lint]
@@ -131,10 +129,15 @@ force-sort-within-sections = true
 known-first-party = ["orkexa"]
 
 [tool.ruff.lint.per-file-ignores]
+# The modules the Docker sandbox runner imports (orkexa.dynamic.docker.RUNNER_MODULES) run with the Python of the
+# user's sandbox image, which may be older than Orkexa's own minimum: they stay importable on Python 3.10.
+"src/orkexa/{content,errors,tools}.py" = ["UP"]
+"src/orkexa/core/{__init__,types}.py" = ["UP"]
+"src/orkexa/dynamic/_sandbox_runner.py" = ["UP"]
 "tests/anthropic/*" = ["RUF", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 strict = true
 packages = ["orkexa"]
 mypy_path = "src"

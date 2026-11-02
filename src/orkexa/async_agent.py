@@ -224,5 +224,5 @@ class AsyncAgent(AgentCore[OutputT]):
             return await tool.aexecute(part.arguments), False
         try:
             return await asyncio.wait_for(tool.aexecute(part.arguments), self.tool_timeout), False
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise self._timeout_error(call) from None

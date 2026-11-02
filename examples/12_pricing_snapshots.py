@@ -9,7 +9,7 @@ Nothing here calls a model API.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from orkexa import Agent, UsageTracker
@@ -26,7 +26,7 @@ from orkexa.pricing import (
 )
 from orkexa.providers.fake import FakeModel, text
 
-CHECKED = datetime(2026, 10, 30, tzinfo=timezone.utc)
+CHECKED = datetime(2026, 10, 30, tzinfo=UTC)
 
 
 def contract_snapshot(version: str, input_rate: str) -> str:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 import re
 from typing import Any, Literal, cast, get_args
@@ -108,7 +108,7 @@ def _aware(value: Any, name: str) -> datetime | None:
         raise PricingError(f"{name} must be a datetime, not {type(value).__name__}")
     if value.tzinfo is None or value.utcoffset() is None:
         raise PricingError(f"{name} must be timezone-aware (e.g. datetime(..., tzinfo=timezone.utc))")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def _set(obj: object, name: str, value: Any) -> None:
@@ -578,8 +578,8 @@ class ModelPrice:
         return cls(**values)
 
 
-_MIN = datetime.min.replace(tzinfo=timezone.utc)
-_MAX = datetime.max.replace(tzinfo=timezone.utc)
+_MIN = datetime.min.replace(tzinfo=UTC)
+_MAX = datetime.max.replace(tzinfo=UTC)
 
 
 def _only(data: Mapping[str, Any], allowed: Iterable[str], what: str) -> None:
