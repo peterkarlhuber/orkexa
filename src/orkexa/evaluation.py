@@ -47,6 +47,7 @@ __all__ = [
     "Evaluator",
     "Refinement",
     "refine",
+    "tool_results_of_last_turn",
 ]
 
 OutputT = TypeVar("OutputT", default=str)

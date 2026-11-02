@@ -23,6 +23,9 @@ First release of Orkexa.
   only keeps working.
 * `BudgetTracker.set_limit(limit_usd)` changes the limit thread-safely, returns the
   previous one and wakes requests that wait for budget.
+* `tool_results_of_last_turn(agent)` is public (exported from `orkexa` and
+  `orkexa.evaluation`): the text `refine()` gives a judge, for applications that run their
+  own (for example resumable) ask-evaluate-revise loop.
 
 ### Removed: native macOS sandbox (Docker-first, ADR 0012)
 

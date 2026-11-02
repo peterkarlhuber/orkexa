@@ -92,6 +92,7 @@ from .evaluation import (
     Evaluator,
     Refinement,
     refine,
+    tool_results_of_last_turn,
 )
 from .files import FileStore, LocalFileStore, SQLiteFileStore, StoredFile
 from .memory import EphemeralMemory, FileMemory, MemoryBackend, SQLiteMemory
@@ -220,5 +221,6 @@ __all__ = [
     "resolve_pricing",
     "retrieval_sources",
     "split_text",
+    "tool_results_of_last_turn",
     "uploaded_file",
 ]
