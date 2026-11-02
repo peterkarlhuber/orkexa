@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,9 @@ import sys
 from typing import Any
 
 import pytest
+
+from orkexa.dynamic import DockerSandbox
+from orkexa.dynamic.docker import SELF_TEST_SCRIPT
 
 HOSTS: dict[str, dict[str, Any]] = json.loads(
     (Path(__file__).parent / "fixtures" / "docker" / "hosts.json").read_text(encoding="utf-8")
@@ -80,14 +84,20 @@ class FakeDocker:
         return [json.loads(line) for line in path.read_text().splitlines()]
 
     def runs(self) -> list[list[str]]:
-        return [call for call in self.calls() if call[:1] == ["run"]]
+        """The ``docker run`` calls of tool code (self-tests left out)."""
+        return [call for call in self.calls() if call[:1] == ["run"] and SELF_TEST_SCRIPT not in call]
+
+    def self_tests(self) -> list[list[str]]:
+        return [call for call in self.calls() if call[:1] == ["run"] and SELF_TEST_SCRIPT in call]
 
     def containers(self) -> list[dict[str, Any]]:
         return list(self.read("containers.json", []))
 
 
 @pytest.fixture
-def fake_docker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeDocker:
+def fake_docker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeDocker]:
     fake = FakeDocker(tmp_path / "fake-docker")
     monkeypatch.setenv("FAKE_DOCKER_DIR", str(fake.directory))
-    return fake
+    DockerSandbox.clear_self_test_cache()
+    yield fake
+    DockerSandbox.clear_self_test_cache()

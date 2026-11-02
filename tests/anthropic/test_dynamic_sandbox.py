@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -220,18 +221,14 @@ def test_docker_command_is_locked_down(tmp_path: Path, transport: str) -> None: 
     assert "-e" not in command and "--env" not in command
 
 
-def _docker_image_ready(image: str = "orkexa-sandbox") -> bool:  # Orkexa: renamed image
-    if not DockerSandbox.available():
-        return False
-    completed = subprocess.run(["docker", "image", "inspect", image], capture_output=True, check=False)
-    return completed.returncode == 0
-
-
-@pytest.mark.skipif(
-    not _docker_image_ready(),
-    reason="needs Docker and the image from docker/sandbox.Dockerfile",
-)
+@pytest.mark.docker
 def test_docker_sandbox_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:  # pragma: no cover
+    # Orkexa: renamed image; preflight and self-test included; ORKEXA_REQUIRE_DOCKER=1 fails, never skips.
+    probe = DockerSandbox.probe()
+    if not probe.available:
+        if os.environ.get("ORKEXA_REQUIRE_DOCKER") == "1":
+            pytest.fail(f"ORKEXA_REQUIRE_DOCKER=1 but the Docker sandbox is not ready: {probe.as_dict()}")
+        pytest.skip("needs Docker and the image from docker/sandbox.Dockerfile")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
     sandbox = DockerSandbox()
     result = sandbox.validate(MARGIN_CODE, MARGIN_TESTS, "calculate_operating_margin")
@@ -248,7 +245,7 @@ def test_docker_sandbox_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:  # 
         "    except OSError:\n"
         "        net = 'offline'\n"
         "    try:\n"
-        "        open('/work/x', 'w')\n"
+        "        open('/x', 'w')\n"  # Orkexa: /work is the call's private tmpfs; the root is read-only
         "        fs = 'writable'\n"
         "    except OSError:\n"
         "        fs = 'read-only'\n"

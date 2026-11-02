@@ -11,7 +11,7 @@
 |---|---|
 | P0 Critical | 0 |
 | P1 High | 0 |
-| P2 Medium | 3 |
+| P2 Medium | 6 |
 | P3 Low | 9 |
 | P4 Optional | 6 |
 
@@ -129,6 +129,40 @@ None known.
 - **Done:** The `docker` job of the `Platforms` workflow builds the image and runs the Docker tests with
   `ORKEXA_REQUIRE_DOCKER=1` (a missing daemon or image fails the job instead of skipping).
 
+### ORK-019 · Docker preflight: the daemon's limits were not checked
+
+- **Priority:** P2 Medium · **Status:** In progress (branch `docker-unify`, not yet pushed) · **Refs:** Docker-first
+  sandbox plan 2026-11-02 (O1)
+- **What:** `DockerSandbox.probe()` only ran `docker info`. A daemon that cannot enforce memory, process or CPU limits
+  (rootless without cgroup delegation, cgroup v1 rootless), an unconfined seccomp default or Windows containers would
+  have run code without those limits.
+- **Done in the branch:** `orkexa.dynamic.docker.inspect_host()`/`preflight()` with the reason codes `os-type`,
+  `limits`, `seccomp`, `rootless-cgroup`; recorded `docker info` outputs of rootful/rootless cgroup v1/v2, Podman,
+  Docker Desktop, Colima, OrbStack, unconfined seccomp and Windows in the unit tests.
+- **Next step:** Merge after the MacOSSandbox removal; runtime R1/R2 adopt it.
+
+### ORK-020 · One container shape, stdin transport, cancel and reaper
+
+- **Priority:** P2 Medium · **Status:** In progress (branch `docker-unify`) · **Refs:** plan O2
+- **What:** Orkexa and the runtime used different `docker run` shapes; Orkexa bind-mounted the host's run directory
+  and package (a remote daemon could not see them); a crashed host process left containers running.
+- **Done in the branch:** `ContainerLimits`/`run_args()` (no `-v`, no `-e`, `--pull never`, private IPC, ulimits,
+  no logging, `noexec` tmpfs `/tmp` and `/work`, owner and deadline labels); `transport="stdin"` default
+  (`"bind"` deprecated); cancel and timeout kill the container by name; `list_sandbox_containers()`/`reap()`.
+- **Next step:** Runtime R1 replaces its own `sandbox_run_args`/`StreamedSandbox` with these.
+
+### ORK-021 · In-container self-test before the first run
+
+- **Priority:** P2 Medium · **Status:** In progress (branch `docker-unify`) · **Refs:** plan O3
+- **What:** A daemon can accept a flag and not apply it; nothing proved that the limits reached the container.
+- **Done in the branch:** `DockerSandbox.self_test()` (uid, capabilities, `NoNewPrivs`, seccomp, interfaces, read-only
+  root, `noexec`, cgroup v2 limits, rlimits, environment), remembered per host fingerprint, image id and shape;
+  images run by id; `pin_base()`; `python -m orkexa.dynamic.docker --self-test`; CI matrix (rootful, rootless, refused
+  rootless, Podman, arm64, Colima non-blocking) with real-container tests that fail instead of skipping.
+- **Next step:** Watch the first CI runs of the new matrix (the rootless, Podman and Colima jobs are new and were not
+  run before the push); Docker Desktop on macOS arm64, Windows/WSL2, Colima and OrbStack need the manual checklist
+  ([Docker manual verification](development/docker-manual-verification.md)).
+
 ## Platform coverage
 
 ### ORK-012 · Real providers are not exercised
@@ -232,6 +266,7 @@ None known.
 | ORK-002 | nodestro-runtime | #57 (registry refresh workaround) | Runtime can drop its workaround after ORK-002 |
 | ORK-005 | nodestro-runtime | `require_session` guard | Runtime already enforces it; ORK-005 would add a second layer |
 | ORK-007 | nodestro-runtime | RT-022 (supported Python versions) | One platform decision, held in runtime; runtime depends on Orkexa |
+| ORK-019 to ORK-021 | nodestro-runtime | R1/R2 (adopt Orkexa's container shape, re-probed sandbox status) | Runtime builds on the Orkexa API after the pin update |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `544ef92`) | Changes reach Nodestro only through a coordinated pin cascade |
 
 ## Maintaining this file

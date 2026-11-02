@@ -31,6 +31,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 import contextlib
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -48,10 +49,16 @@ from ..errors import ToolExecutionError
 from .capabilities import SandboxCapabilities, SandboxProbe
 from .docker import (
     BOOTSTRAP,
+    SELF_TEST_SCRIPT,
     ContainerLimits,
+    DockerHost,
     DockerProbeError,
+    ImageInfo,
     envelope,
+    evaluate_self_test,
+    host_fingerprint,
     inspect_host,
+    inspect_image,
     preflight,
     reap,
     run_args,
@@ -553,6 +560,13 @@ _DOCKER_HINT = (
 )
 #: Seconds a container may outlive its call's timeout before :func:`~orkexa.dynamic.docker.reap` removes it.
 _DEADLINE_GRACE = 60.0
+#: Seconds a passed preflight and self-test are trusted before a sandbox inspects the daemon again.
+_READY_SECONDS = 60.0
+#: Least time a self-test container gets (the first start of an image can be slow).
+_SELF_TEST_TIMEOUT = 60.0
+#: Passed self-tests by (host fingerprint, image id, shape hash).
+_SELF_TESTS: dict[tuple[str, str, str], SandboxProbe] = {}
+_SELF_TESTS_LOCK = threading.Lock()
 #: Where the deprecated bind transport mounts the orkexa package.
 _BIND_RUNNER = "/opt/orkexa/orkexa/dynamic/_sandbox_runner.py"
 
@@ -572,8 +586,9 @@ class DockerSandbox(Sandbox):
     mounted, so the daemon may run on another host or in a VM. The containers are labelled with ``owner`` and
     a deadline, so :func:`orkexa.dynamic.docker.reap` can remove what a crashed process left behind.
 
-    A run starts only when the daemon passes :func:`orkexa.dynamic.docker.preflight` and the image exists;
-    otherwise it fails with a :class:`SandboxError` and no code is executed.
+    A run starts only when the daemon passes :func:`orkexa.dynamic.docker.preflight`, the image exists and
+    :meth:`self_test` passed for this daemon, image and shape; otherwise it fails with a
+    :class:`SandboxError` and no code is executed. Calls run the image by its id.
 
     Args:
         transport: ``"stdin"`` (default) or the deprecated ``"bind"``, which mounts the run directory and the
@@ -613,6 +628,9 @@ class DockerSandbox(Sandbox):
         self.docker = docker
         self.transport: Literal["stdin", "bind"] = transport
         self.owner = owner
+        #: (monotonic time, image id) of the last passed preflight and self-test.
+        self._ready: tuple[float, str] | None = None
+        self._ready_lock = threading.Lock()
         # Validates the limits and the owner now, not at the first call.
         run_args(docker, "orkexa-check", image or "unset", self.limits(), owner=owner)
 
@@ -659,46 +677,137 @@ class DockerSandbox(Sandbox):
 
     @classmethod
     def probe(cls, docker: str = "docker", image: str = "orkexa-sandbox") -> SandboxProbe:
-        """Whether the Docker CLI, a reachable daemon that passes :func:`~orkexa.dynamic.docker.preflight`
-        and the sandbox image are present. The daemon is judged by what it enforces, never by its name."""
+        """Whether this sandbox can run here: the Docker CLI, a reachable daemon that passes
+        :func:`~orkexa.dynamic.docker.preflight`, the image, and a passed :meth:`self_test` (a container of
+        exactly the sandbox's shape, run once per daemon, image and shape). The daemon is judged by what it
+        enforces, never by its name; no tool code runs."""
         return cls(docker=docker, image=image)._readiness()
 
     @staticmethod
-    def available(docker: str = "docker") -> bool:
-        """Whether a Docker daemon is reachable and passes the preflight (it can enforce the limits)."""
-        if shutil.which(docker) is None:
-            return False
-        try:
-            return preflight(inspect_host(docker)).available
-        except DockerProbeError:
-            return False
+    def available(docker: str = "docker", image: str = "orkexa-sandbox") -> bool:
+        """Whether :meth:`probe` passes: preflight and self-test included."""
+        return DockerSandbox.probe(docker, image).available
 
-    def _readiness(self) -> SandboxProbe:
-        """The checks every run depends on: CLI, daemon, preflight, image."""
+    @classmethod
+    def clear_self_test_cache(cls) -> None:
+        """Forget every passed self-test, e.g. after the daemon's configuration was changed in place."""
+        with _SELF_TESTS_LOCK:
+            _SELF_TESTS.clear()
+
+    def _host_and_image(self, image: str | None) -> tuple[SandboxProbe, DockerHost | None, ImageInfo | None]:
+        """CLI, daemon, preflight and image: the checks before any container starts."""
+        ref = image or self.image
         if shutil.which(self.docker) is None:
-            return SandboxProbe("docker", False, "missing", f"The {self.docker} command is not installed")
+            return (
+                SandboxProbe("docker", False, "missing", f"The {self.docker} command is not installed"),
+                None,
+                None,
+            )
         try:
             host = inspect_host(self.docker)
         except DockerProbeError as exc:
-            return SandboxProbe("docker", False, exc.reason, exc.detail)
+            return SandboxProbe("docker", False, exc.reason, exc.detail), None, None
         checked = preflight(host)
         if not checked.available:
-            return checked
+            return checked, host, None
         try:
-            found = subprocess.run(
-                [self.docker, "image", "inspect", self.image], capture_output=True, timeout=10, check=False
+            info = inspect_image(self.docker, ref)
+        except (SandboxError, ValueError) as exc:
+            return (
+                SandboxProbe(
+                    "docker", False, "image", f"Cannot inspect the image {ref}: {exc}", checked.facts
+                ),
+                host,
+                None,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return SandboxProbe("docker", False, "image", f"Cannot inspect the image {self.image}: {exc}")
-        if found.returncode != 0:
-            return SandboxProbe("docker", False, "image", f"The sandbox image {self.image} is not built")
-        return checked
+        if info is None:
+            return (
+                SandboxProbe(
+                    "docker", False, "image", f"The sandbox image {ref} is not built", checked.facts
+                ),
+                host,
+                None,
+            )
+        return checked, host, info
+
+    def self_test(self, *, image: str | None = None) -> SandboxProbe:
+        """Run one container with exactly this sandbox's :func:`~orkexa.dynamic.docker.run_args` and check
+        inside it what the daemon applied: user 65534, no capabilities, ``NoNewPrivs``, a seccomp filter,
+        only the loopback interface, a read-only root, ``noexec`` ``/tmp`` and ``/work``, the cgroup v2
+        memory, swap, process and CPU limits, the open-file, file-size and core limits, and no environment
+        variable but the engine's and the image's own (:func:`~orkexa.dynamic.docker.evaluate_self_test`).
+
+        ``image`` defaults to :attr:`image`; the container runs the image by its id. A passed self-test is
+        remembered per daemon (:func:`~orkexa.dynamic.docker.host_fingerprint`), image id and shape. Reason
+        ``self-test`` when the container shows a problem (cgroup v1 included)."""
+        checked, host, info = self._host_and_image(image)
+        if host is None or info is None:
+            return checked
+        limits = self.limits()
+        shape = run_args("docker", "orkexa-self-test", info.id, limits, owner=self.owner, deadline=0)
+        key = (
+            host_fingerprint(host),
+            info.id,
+            hashlib.sha256(json.dumps([*shape, info.env_names]).encode("utf-8")).hexdigest(),
+        )
+        facts = (*checked.facts, ("image_id", info.id), ("host_fingerprint", key[0]))
+        with _SELF_TESTS_LOCK:
+            remembered = _SELF_TESTS.get(key)
+        if remembered is not None:
+            return remembered
+        name = f"orkexa-selftest-{uuid.uuid4().hex[:12]}"
+        args = [*run_args(self.docker, name, info.id, limits, owner=self.owner), "python", "-I", "-B", "-c"]
+
+        def refuse(detail: str) -> SandboxProbe:
+            return SandboxProbe("docker", False, "self-test", detail, facts)
+
+        try:
+            with self._call_scope() as stop:
+                code, output = run_bounded(
+                    [*args, SELF_TEST_SCRIPT],
+                    b"",
+                    timeout=max(self.timeout, _SELF_TEST_TIMEOUT),
+                    max_stdout=1024 * 1024,
+                    on_abort=lambda: stop_container(self.docker, name),
+                    stop=stop,
+                )
+        except SandboxCancelled:
+            raise
+        except (OSError, SandboxError) as exc:
+            return refuse(f"The self-test container did not run: {exc}")
+        lines = output.stdout.decode("utf-8", "replace").strip().splitlines()
+        try:
+            report: Any = json.loads(lines[-1]) if code == 0 and lines else None
+        except ValueError:
+            report = None
+        if not isinstance(report, dict):
+            stderr = output.stderr.decode("utf-8", "replace")[-500:]
+            return refuse(f"The self-test container exited with code {code} without a report: {stderr}")
+        problems = evaluate_self_test(report, limits, info.env_names)
+        if problems:
+            return refuse("; ".join(problems))
+        passed = SandboxProbe("docker", True, facts=(*facts, ("self_test", "passed")))
+        with _SELF_TESTS_LOCK:
+            _SELF_TESTS[key] = passed
+        return passed
+
+    def _readiness(self) -> SandboxProbe:
+        """Preflight and self-test (the self-test includes the CLI, daemon and image checks)."""
+        return self.self_test()
 
     def _require_ready(self) -> str:
-        """The image to run; raises :class:`SandboxError` unless :meth:`_readiness` passes."""
+        """The id of the image to run; raises :class:`SandboxError` unless preflight and self-test pass.
+
+        The result is reused for :data:`_READY_SECONDS`; after that the daemon is inspected again."""
+        with self._ready_lock:
+            if self._ready is not None and time.monotonic() - self._ready[0] < _READY_SECONDS:
+                return self._ready[1]
         ready = self._readiness()
         if ready.available:
-            return self.image
+            image_id = dict(ready.facts)["image_id"]
+            with self._ready_lock:
+                self._ready = (time.monotonic(), image_id)
+            return image_id
         if ready.reason == "missing":
             raise SandboxError(f"Cannot start docker: {ready.detail}. {_DOCKER_HINT}")
         raise SandboxError(
@@ -744,6 +853,8 @@ class DockerSandbox(Sandbox):
             raise SandboxError(f"Cannot start docker: {exc}. {_DOCKER_HINT}") from exc
         stdout = output.stdout.decode("utf-8", "replace")
         if not stdout.strip():
+            with self._ready_lock:
+                self._ready = None  # check the daemon and the image again before the next call
             stderr = output.stderr.decode("utf-8", "replace")
             raise SandboxError(
                 f"Container exited with code {code}: {stderr[-1000:]}"

@@ -18,6 +18,7 @@ from pathlib import Path
 import signal
 import sys
 import tempfile
+import time
 from typing import Any
 import uuid
 
@@ -253,6 +254,11 @@ def _run(argv: list[str]) -> int:
     script = command[4]
     if "ORKEXA_SELF_TEST" in script:
         sys.stdin.read()
+        time.sleep(float(_load("selftest_sleep.json", 0)))
+        raw = _state() / "selftest_raw.txt"
+        if raw.exists():
+            print(raw.read_text())
+            return 0
         print(json.dumps(_self_test_report(values, flags, image)))
         return int(_load("selftest_exit.json", 0))
     work = tempfile.mkdtemp(prefix="fake-docker-work-")

@@ -207,11 +207,16 @@ def test_stdin_transport_end_to_end(fake_docker: FakeDocker) -> None:
     assert result.name == "square" and result.input_schema is not None
     assert sandbox.call(CODE, "square", {"x": 7}) == "49"
     runs = fake_docker.runs()
-    assert len(runs) == 2
-    for run in runs:
+    assert (
+        len(runs) == 2 and len(fake_docker.self_tests()) == 1
+    )  # the self-test ran once, before the first call
+    for run in [*runs, *fake_docker.self_tests()]:
+        assert IMAGE_ID in run and "orkexa-sandbox" not in run  # run by id, not by tag
+
         assert "-v" not in run and "-e" not in run
         assert ("--label", f"{OWNER_LABEL}=unit-test") in _pairs(run)
-        assert run[-5:-1] == ["python", "-I", "-B", "-c"] and run[-1] == BOOTSTRAP
+        assert run[-5:-1] == ["python", "-I", "-B", "-c"]
+    assert all(run[-1] == BOOTSTRAP for run in runs)
 
 
 @needs_posix
@@ -229,7 +234,6 @@ def test_tool_errors_and_silent_containers(fake_docker: FakeDocker) -> None:
     sandbox = DockerSandbox(docker=str(fake_docker.path))
     with pytest.raises(ToolExecutionError, match="square"):
         sandbox.call(CODE.replace("x * x", "1 / 0"), "square", {"x": 1})
-    fake_docker.image("orkexa-sandbox", image_id="sha256:" + "cd" * 32)
     fake_docker.fail("run", 125)
     with pytest.raises(SandboxError, match=r"(?s)code 125.*isolated sandbox"):
         sandbox.validate(CODE, TESTS, "square")
