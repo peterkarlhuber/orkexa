@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, macos-15, macos-14, macos-15-intel, windows-latest, windows-11-arm]
+        os: [macos-latest, macos-15-intel, windows-latest, windows-11-arm]
     defaults:
       run:
         shell: bash
@@ -49,7 +49,7 @@ jobs:
         run: python -c "import platform, sys; print(sys.platform, platform.machine(), platform.platform())"
       - name: Native sandbox probe
         run: python -c "import json, orkexa.dynamic as d; print(json.dumps(d.MacOSSandbox.probe().as_dict()))"
-      - run: pytest -v -s tests/test_macos_sandbox.py tests/test_macos_sandbox_attacks.py tests/test_sandbox_lifecycle.py
+      - run: pytest -v -s tests/test_macos_sandbox.py tests/test_sandbox_lifecycle.py
       - run: pytest -q
 
   docker:
