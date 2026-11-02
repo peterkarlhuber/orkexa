@@ -16,13 +16,19 @@ Two backends share one interface:
   :class:`~orkexa.dynamic.UnsafeOptInWarning`.
 
 Other backends (gVisor, Firecracker, a hosted sandbox) only need to implement
-:meth:`Sandbox._execute`.
+:meth:`Sandbox._execute`; they should also describe what they enforce
+(:meth:`Sandbox.capabilities`) and whether they can run here (:meth:`Sandbox.probe`).
+The operating system sandbox :class:`~orkexa.dynamic.MacOSSandbox` is experimental.
+
+Every call can be cancelled: by its caller (:func:`orkexa.dynamic.cancel_scope`)
+or for all callers at once (:meth:`Sandbox.cancel`). The call's process (and
+container) is killed, its directory removed, and :class:`SandboxCancelled` raised.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
 import contextlib
 from dataclasses import dataclass
 import json
@@ -33,12 +39,15 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from typing import IO, Any, ClassVar
 import uuid
 import warnings
 
 from ..errors import ToolExecutionError
+from .capabilities import SandboxCapabilities, SandboxProbe
 from .errors import SandboxError, UnsafeOptInWarning
+from .lifecycle import CancelCheck, SandboxCancelled, cancel_requested, current_cancel
 from .static_check import TOOL_MODULE
 
 __all__ = ["DockerSandbox", "Sandbox", "SandboxTestResult", "SubprocessSandbox", "ValidationResult"]
@@ -102,11 +111,58 @@ class Sandbox(ABC):
         self.timeout = timeout
         self.memory_mb = memory_mb
         self.max_output_chars = max_output_chars
+        #: Stop events of the calls running now (:meth:`cancel`).
+        self._running: set[threading.Event] = set()
+        self._running_lock = threading.Lock()
 
-    #: Whether the backend is meant as a security boundary for untrusted code.
+    #: Whether the backend is meant as a security boundary for untrusted code. What it actually enforces is
+    #: :meth:`capabilities`; whether that suffices for a kind of code is the application's decision.
     isolated: ClassVar[bool] = False
     #: Whether the run directory must be readable for another (container) user.
     _shared_workdir: ClassVar[bool] = False
+
+    def capabilities(self) -> SandboxCapabilities:
+        """What this backend enforces. Subclasses describe themselves; this default claims nothing."""
+        return SandboxCapabilities(
+            backend=type(self).__name__,
+            isolation="none",
+            filesystem="host",
+            network="host",
+            processes="allowed",
+            clean_environment=False,
+            limits=frozenset({"output"}),
+            memory="none",
+            cancellable=False,
+            maturity="experimental",
+            notes=("A custom backend that does not describe its guarantees.",),
+        )
+
+    @classmethod
+    def probe(cls) -> SandboxProbe:
+        """Whether this backend can run on this computer now (cheap checks; no tool code is run)."""
+        return SandboxProbe(backend=cls.__name__, available=True)
+
+    def cancel(self) -> None:
+        """Stop every call this sandbox is running now, of every caller.
+
+        Each stopped call raises :class:`SandboxCancelled`.
+
+        To stop only one caller's call, bind a cancel check with :func:`orkexa.dynamic.cancel_scope`."""
+        with self._running_lock:
+            for stop in self._running:
+                stop.set()
+
+    @contextlib.contextmanager
+    def _call_scope(self) -> Iterator[threading.Event]:
+        """A stop event for one call, set by :meth:`cancel`; backends pass it to :func:`run_bounded`."""
+        stop = threading.Event()
+        with self._running_lock:
+            self._running.add(stop)
+        try:
+            yield stop
+        finally:
+            with self._running_lock:
+                self._running.discard(stop)
 
     @abstractmethod
     def _execute(self, workdir: Path, request: str) -> str:
@@ -290,40 +346,97 @@ def run_bounded(
     env: Mapping[str, str] | None = None,
     cwd: Path | None = None,
     on_abort: Any = None,
+    cancel: CancelCheck | None = None,
+    stop: threading.Event | None = None,
+    new_session: bool = False,
+    popen: Callable[..., Any] | None = None,
+    watch: Callable[[Any], str | None] | None = None,
 ) -> tuple[int, BoundedOutput]:
     """Run ``args`` with ``data`` on stdin under a wall-clock ``timeout`` and :func:`communicate_bounded`.
 
     Returns the exit code and the output. Raises :class:`SandboxError` on a timeout or when stdout passes
-    ``max_stdout``; in both cases the process is killed and ``on_abort()`` runs (e.g. removing a container
-    that the killed client started). Raises :class:`OSError` when the program cannot be started.
+    ``max_stdout``, and :class:`SandboxCancelled` when ``cancel()`` returns ``True`` (default: the check bound
+    with :func:`orkexa.dynamic.cancel_scope`) or ``stop`` is set; in each case the process is killed and
+    ``on_abort()`` runs (e.g. removing a container that the killed client started). ``new_session`` starts the
+    process in its own session on POSIX, so killing it also kills every process it started. ``watch(process)``
+    is called every 50 ms; a message it returns stops the run with that message (e.g. a memory watchdog).
+    ``popen`` replaces :class:`subprocess.Popen` (a backend that starts processes its own way).
+    Raises :class:`OSError` when the program cannot be started.
     """
-    process = subprocess.Popen(
+    check = cancel if cancel is not None else current_cancel()
+    kwargs: dict[str, Any] = {}
+    if new_session and os.name == "posix":
+        kwargs["start_new_session"] = True
+    process = (popen or subprocess.Popen)(
         args,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=dict(env) if env is not None else None,
         cwd=cwd,
+        **kwargs,
     )
+
+    def kill() -> None:
+        _kill_tree(process, group=bool(kwargs))
+
     result: dict[str, BoundedOutput] = {}
     reader = threading.Thread(
-        target=lambda: result.setdefault("output", communicate_bounded(process, data, max_stdout=max_stdout)),
+        target=lambda: result.setdefault(
+            "output", communicate_bounded(process, data, max_stdout=max_stdout, on_overflow=kill)
+        ),
         daemon=True,
     )
     reader.start()
-    reader.join(timeout)
-    if reader.is_alive():
-        process.kill()
-        reader.join(10)
+    deadline = time.monotonic() + timeout
+    problem: SandboxError | None = None
+    try:
+        while reader.is_alive():
+            reader.join(0.05)
+            if not reader.is_alive():
+                break
+            if (stop is not None and stop.is_set()) or cancel_requested(check):
+                problem = SandboxCancelled("The call was cancelled; its process was stopped")
+            elif time.monotonic() > deadline:
+                problem = SandboxError(f"Timed out after {timeout:g} seconds")
+            elif watch is not None:
+                message = watch(process)
+                if message:
+                    problem = SandboxError(message)
+            if problem is not None:
+                kill()
+                reader.join(10)
+                break
+    finally:
+        if problem is not None or reader.is_alive():
+            kill()
+    if problem is not None:
         if on_abort is not None:
             on_abort()
-        raise SandboxError(f"Timed out after {timeout:g} seconds")
+        raise problem
     output = result["output"]
     if output.overflow:
         if on_abort is not None:
             on_abort()
         raise SandboxError(f"The sandbox wrote more than {max_stdout} bytes of output; the run was stopped")
     return process.returncode if process.returncode is not None else -1, output
+
+
+def _kill_tree(process: Any, *, group: bool) -> None:
+    """Kill ``process`` and, with ``group``, its whole session (POSIX); wait for it.
+
+    The group is only signalled while the leader is alive (not yet reaped), so its id cannot have been
+    reused."""
+    if group and process.poll() is None:
+        killpg = getattr(os, "killpg", None)
+        if killpg is not None:
+            with contextlib.suppress(OSError):
+                killpg(process.pid, 9)
+    if process.poll() is None:
+        with contextlib.suppress(OSError):
+            process.kill()
+    with contextlib.suppress(Exception):
+        process.wait(10)
 
 
 def _minimal_environment() -> dict[str, str]:
@@ -375,15 +488,41 @@ class SubprocessSandbox(Sandbox):
         self.python = python or sys.executable
         self.env = dict(env or {})
 
-    def _execute(self, workdir: Path, request: str) -> str:
-        code, output = run_bounded(
-            [self.python, "-I", "-B", str(_RUNNER)],
-            request.encode("utf-8"),
-            timeout=self.timeout,
-            max_stdout=response_limit(self.max_output_chars),
-            env={**self.env, **_minimal_environment()},
-            cwd=workdir,
+    def capabilities(self) -> SandboxCapabilities:
+        limits = {"wall_clock", "output"}
+        if os.name == "posix":
+            limits |= {"cpu", "file_size"}
+        if sys.platform.startswith("linux"):
+            limits.add("memory")
+        return SandboxCapabilities(
+            backend="subprocess",
+            isolation="none",
+            filesystem="host",
+            network="host",
+            processes="allowed",
+            clean_environment=True,
+            limits=frozenset(limits),
+            memory="kernel" if sys.platform.startswith("linux") else "none",
+            cancellable=True,
+            maturity="stable",
+            notes=(
+                "Not a security boundary: the code runs as the user and can read the user's files and reach "
+                "the network, including localhost.",
+            ),
         )
+
+    def _execute(self, workdir: Path, request: str) -> str:
+        with self._call_scope() as stop:
+            code, output = run_bounded(
+                [self.python, "-I", "-B", str(_RUNNER)],
+                request.encode("utf-8"),
+                timeout=self.timeout,
+                max_stdout=response_limit(self.max_output_chars),
+                env={**self.env, **_minimal_environment()},
+                cwd=workdir,
+                stop=stop,
+                new_session=True,
+            )
         stdout = output.stdout.decode("utf-8", "replace")
         if not stdout.strip():
             stderr = output.stderr.decode("utf-8", "replace")
@@ -430,6 +569,47 @@ class DockerSandbox(Sandbox):
         self.cpus = cpus
         self.pids_limit = pids_limit
         self.docker = docker
+
+    def capabilities(self) -> SandboxCapabilities:
+        return SandboxCapabilities(
+            backend="docker",
+            isolation="container",
+            filesystem="private",
+            network="none",
+            processes="limited",
+            clean_environment=True,
+            limits=frozenset(
+                {"wall_clock", "cpu", "memory", "processes", "output", "temp_size", "file_size"}
+            ),
+            memory="kernel",
+            cancellable=True,
+            maturity="stable",
+            notes=(
+                "Shares the kernel with the host (or with Docker Desktop's virtual machine).",
+                "Only as strong as the Docker installation: a misconfigured daemon may drop limits.",
+            ),
+        )
+
+    @classmethod
+    def probe(cls, docker: str = "docker", image: str = "orkexa-sandbox") -> SandboxProbe:
+        """Whether the Docker CLI, a reachable daemon and the sandbox image are present."""
+        if shutil.which(docker) is None:
+            return SandboxProbe("docker", False, "missing", "The docker command is not installed")
+        try:
+            info = subprocess.run([docker, "info"], capture_output=True, timeout=10, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return SandboxProbe("docker", False, "unreachable", f"docker info failed: {exc}")
+        if info.returncode != 0:
+            return SandboxProbe("docker", False, "unreachable", "The Docker daemon is not reachable")
+        try:
+            found = subprocess.run(
+                [docker, "image", "inspect", image], capture_output=True, timeout=10, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return SandboxProbe("docker", False, "image", f"Cannot inspect the image {image}: {exc}")
+        if found.returncode != 0:
+            return SandboxProbe("docker", False, "image", f"The sandbox image {image} is not built")
+        return SandboxProbe("docker", True)
 
     @staticmethod
     def available(docker: str = "docker") -> bool:
@@ -492,14 +672,16 @@ class DockerSandbox(Sandbox):
             subprocess.run([self.docker, "rm", "-f", name], capture_output=True, check=False)
 
         try:
-            code, output = run_bounded(
-                self.command(workdir, name),
-                request.encode("utf-8"),
-                timeout=self.timeout,
-                max_stdout=response_limit(self.max_output_chars),
-                env=None,  # the docker CLI's environment is never passed into the container
-                on_abort=remove,
-            )
+            with self._call_scope() as stop:
+                code, output = run_bounded(
+                    self.command(workdir, name),
+                    request.encode("utf-8"),
+                    timeout=self.timeout,
+                    max_stdout=response_limit(self.max_output_chars),
+                    env=None,  # the docker CLI's environment is never passed into the container
+                    on_abort=remove,
+                    stop=stop,
+                )
         except OSError as exc:
             raise SandboxError(f"Cannot start docker: {exc}. {_DOCKER_HINT}") from exc
         stdout = output.stdout.decode("utf-8", "replace")

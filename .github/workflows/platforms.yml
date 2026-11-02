@@ -1,0 +1,70 @@
+name: Platforms
+
+# ORK-013: the offline suite on macOS (arm64, x86-64) and Windows (x64, ARM64) as well as Linux, with the
+# experimental macOS sandbox required on the macOS runners (a sandbox that cannot start fails the job).
+# ORK-006: DockerSandbox against a real daemon and the image built from docker/sandbox.Dockerfile.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    name: offline suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel, windows-latest, windows-11-arm]
+    defaults:
+      run:
+        shell: bash
+    env:
+      ORKEXA_REQUIRE_NATIVE_SANDBOX: ${{ startsWith(matrix.os, 'macos') && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: |
+          # Windows ARM64: cryptography (google-auth) has win_arm64 wheels only up to 46.0.3, and sqlite-vec
+          # has none (its retrieval tests skip without it); the other dev tools are installed one by one.
+          if [ "$RUNNER_OS" = "Windows" ] && [ "$RUNNER_ARCH" = "ARM64" ]; then
+            echo "cryptography==46.0.3" > "$RUNNER_TEMP/constraints.txt"
+            export PIP_CONSTRAINT="$RUNNER_TEMP/constraints.txt"
+            pip install -e . "anthropic>=2.0,<3" "openai>=3.0,<4" "google-genai>=2.0,<3" "boto3>=1.43.80,<2" \
+              "pypdf>=4" "pytest>=8" "pytest-cov>=5"
+          else
+            pip install -e ".[dev]"
+          fi
+      - name: System
+        run: python -c "import platform, sys; print(sys.platform, platform.machine(), platform.platform())"
+      - name: Native sandbox probe
+        run: python -c "import json, orkexa.dynamic as d; print(json.dumps(d.MacOSSandbox.probe().as_dict()))"
+      - run: pytest -v -s tests/test_macos_sandbox.py tests/test_sandbox_lifecycle.py
+      - run: pytest -q
+
+  docker:
+    name: DockerSandbox (real daemon)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ORKEXA_REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]"
+      - run: docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
+      - run: pytest -v tests/test_docker_sandbox.py tests/anthropic/test_dynamic_sandbox.py

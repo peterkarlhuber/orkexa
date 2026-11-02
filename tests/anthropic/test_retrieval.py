@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import sqlite3
 from typing import Any
 
 import pytest
@@ -19,7 +20,10 @@ from orkexa.retrieval import _fts_query
 
 from .conftest import FakeClient, make_message
 
-HAS_VEC = importlib.util.find_spec("sqlite_vec") is not None
+# sqlite-vec is a loadable extension, which some Python builds (such as macOS runners') cannot load.
+HAS_VEC = importlib.util.find_spec("sqlite_vec") is not None and hasattr(
+    sqlite3.connect(":memory:"), "enable_load_extension"
+)
 HAS_PYPDF = importlib.util.find_spec("pypdf") is not None
 
 HANDBOOK = """# Warranty

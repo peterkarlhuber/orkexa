@@ -48,6 +48,7 @@ from .approval import (
     LLMApprover,
 )
 from .architect import AgentArchitect
+from .capabilities import SandboxCapabilities, SandboxProbe
 from .coding_agent import CodingAgent, ToolProposal
 from .errors import (
     ApprovalDeniedError,
@@ -65,6 +66,16 @@ from .errors import (
     UnsafeOptInWarning,
 )
 from .factory import AgentFactory
+from .lifecycle import (
+    CancelCheck,
+    SandboxCancelled,
+    bind_cancel,
+    cancel_requested,
+    cancel_scope,
+    current_cancel,
+    reset_cancel,
+)
+from .macos import MacOSSandbox
 from .orchestrator import Orchestrator
 from .output_registry import OutputFormatRegistry
 from .policy import (
@@ -109,6 +120,7 @@ __all__ = [
     "BudgetExceededError",
     "BudgetTracker",
     "CallbackApprover",
+    "CancelCheck",
     "CodingAgent",
     "ConsoleApprover",
     "DenyApprover",
@@ -116,6 +128,7 @@ __all__ = [
     "DynamicAgentError",
     "DynamicPolicy",
     "LLMApprover",
+    "MacOSSandbox",
     "Orchestrator",
     "OutputFormatRegistry",
     "OversizedPolicy",
@@ -125,7 +138,10 @@ __all__ = [
     "RecursionLimitError",
     "RegistryError",
     "Sandbox",
+    "SandboxCancelled",
+    "SandboxCapabilities",
     "SandboxError",
+    "SandboxProbe",
     "SandboxTestResult",
     "SandboxedTool",
     "StaticReport",
@@ -143,9 +159,14 @@ __all__ = [
     "UnreliablePriceWarning",
     "UnsafeOptInWarning",
     "ValidationResult",
+    "bind_cancel",
+    "cancel_requested",
+    "cancel_scope",
     "check_tool_source",
     "check_tool_tests",
     "communicate_bounded",
+    "current_cancel",
+    "reset_cancel",
     "response_limit",
     "review_agent",
     "review_tool",
