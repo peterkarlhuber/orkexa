@@ -75,6 +75,7 @@ def test_published_description_uses_only_absolute_urls(artifacts: dict[str, tupl
     logo = "https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/assets/branding/orkexa-logo.png"
     assert f'<img src="{logo}"' in description
     assert (ROOT / logo.split("/master/", 1)[1]).is_file()  # the URL names a committed file
+    assert "<source" not in description and "on-dark" not in description  # PyPI has no dark mode
     targets = re.findall(r'(?:src|href)="([^"]+)"|\]\(([^)\s]+)\)', description)
     relative = [t for pair in targets for t in pair if t and not re.match(r"(https?:|mailto:|#)", t)]
     assert relative == []

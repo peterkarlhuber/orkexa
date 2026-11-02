@@ -6,7 +6,7 @@ copyright: Copyright &copy; 2026 Peter Karlhuber – MIT License
 
 theme:
   name: material
-  logo: assets/branding/orkexa-mark.png
+  logo: assets/branding/orkexa-mark-on-dark-128.png  # the header bar is navy in both schemes
   favicon: assets/branding/favicon-32.png
   palette:
     - media: "(prefers-color-scheme: light)"
