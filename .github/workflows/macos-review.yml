@@ -1,0 +1,50 @@
+name: macOS sandbox review
+
+# ORK-014 independent review: runs review/test_review_macos_sandbox.py on real macOS runners.
+# Review branch only; it changes nothing in the sandbox or its policy.
+on:
+  push:
+    branches: [claude/project-thread-qz41p9]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: review (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel, macos-14, macos-26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install (non-editable, like a packaged app)
+        run: pip install . pytest
+      - name: System
+        run: |
+          sw_vers; uname -a; sysctl -n machdep.cpu.brand_string; id
+          python -c "import platform, sys; print(sys.executable, platform.machine(), platform.platform())"
+      - name: Review tests
+        env:
+          REVIEW_OUT: ${{ runner.temp }}/review-out
+        run: |
+          cd "$RUNNER_TEMP"
+          python -m pytest -v -s -p no:cacheprovider "$GITHUB_WORKSPACE/review/test_review_macos_sandbox.py" \
+            --rootdir "$RUNNER_TEMP" 2>&1 | tee "$RUNNER_TEMP/review-out-log.txt"
+          exit ${PIPESTATUS[0]}
+      - name: Results
+        if: always()
+        run: for f in "$RUNNER_TEMP"/review-out/*.json; do echo "== $f"; cat "$f"; done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: review-${{ matrix.os }}
+          path: ${{ runner.temp }}/review-out
