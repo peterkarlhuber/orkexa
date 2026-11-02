@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/branding/orkexa-logo.png" alt="Orkexa" width="280">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/branding/orkexa-logo-on-dark.png">
+    <img src="assets/branding/orkexa-logo.png" alt="Orkexa" width="400">
+  </picture>
 </p>
 
 <p align="center">

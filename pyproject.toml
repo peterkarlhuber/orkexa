@@ -78,6 +78,11 @@ content-type = "text/markdown"
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
 path = "README.md"
 
+# PyPI has no dark mode: drop the README hero's dark-scheme <source>, keep the light <img>.
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\s*<source media="\(prefers-color-scheme: dark\)"[^>]*>'
+replacement = ''
+
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '<img src="(?!https?:)([^"]+)"'
 replacement = '<img src="https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/\1"'

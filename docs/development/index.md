@@ -24,7 +24,7 @@ pip install -e ".[docs]" && mkdocs serve              # docs at http://127.0.0.1
 | `tests/` | Offline tests; `contract/` checks every adapter against the real SDK signatures; `anthropic/` drives the agents through a fake Anthropic client; `packaging/` builds and installs the distribution |
 | `examples/` | Runnable examples, each tested offline |
 | `docs/` | This documentation (MkDocs Material) |
-| `assets/branding/` | The official logo and its derivatives |
+| `assets/branding/` | The official logo masters, the derivation script and the derived files |
 | `docker/` | The image for `DockerSandbox` |
 
 ## Continuous integration

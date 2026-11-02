@@ -4,6 +4,18 @@
 
 First release of Orkexa.
 
+### Changed: new official logo
+
+* The README, the documentation site (header, landing page, favicon) and the social
+  preview use the new official Orkexa logo, with a white-wordmark variant on dark
+  surfaces (README in dark mode, docs in the dark scheme, the navy docs header). The
+  published PyPI description keeps the light logo only.
+* `assets/branding/` holds the two new masters (`orkexa-logo-transparent.png`,
+  `orkexa-logo-white.png`) and the shared derivation script `derive_branding.py`;
+  `build.py` regenerates every derived file from them. The old logo
+  (`orkexa-logo-original.png`) and its derivatives, including `orkexa-mark.png`, are
+  removed.
+
 ### Changed: the Docker self-test checks mounts, seccomp and AppArmor (security review DS-8, DS-9, DS-10)
 
 * `DockerSandbox.self_test()` reads the container's whole mount table (`/proc/self/mountinfo`) and refuses any

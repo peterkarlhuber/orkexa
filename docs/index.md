@@ -1,5 +1,6 @@
 <div class="orkexa-hero" markdown>
-![Orkexa](assets/branding/orkexa-logo.png)
+![](assets/branding/orkexa-logo.png#only-light)
+![](assets/branding/orkexa-logo-on-dark.png#only-dark)
 </div>
 
 # Orkexa
