@@ -364,8 +364,6 @@
    "CgroupDriver": "systemd",
    "CgroupVersion": "2",
    "Containers": 0,
-   "CpuCfsPeriod": true,
-   "CpuCfsQuota": true,
    "Debug": false,
    "Driver": "overlay2",
    "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",

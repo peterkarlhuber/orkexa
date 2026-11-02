@@ -48,8 +48,11 @@ class DockerHost:
     cgroup_driver: str | None
     memory_limit: bool
     pids_limit: bool
-    cpu_cfs_quota: bool
-    cpu_cfs_period: bool
+    #: ``None`` when the daemon's ``info`` does not report CPU quota support at all (Podman's
+    #: Docker-compatible API omits ``CpuCfsQuota``/``CpuCfsPeriod``). On cgroup v2 the self-test then
+    #: decides from ``cpu.max``.
+    cpu_cfs_quota: bool | None
+    cpu_cfs_period: bool | None
     #: ``builtin``/``default``/a profile path when seccomp filters system calls, ``unconfined`` when it is
     #: off, ``None`` when the daemon does not report seccomp at all.
     seccomp_profile: str | None
@@ -146,6 +149,11 @@ def _engine_of(info: Mapping[str, Any], version: Mapping[str, Any]) -> Engine:
     return "unknown"
 
 
+def _reported(info: Mapping[str, Any], key: str) -> bool | None:
+    """``info[key] is True``, or ``None`` when the daemon leaves the key out (it does not say)."""
+    return info.get(key) is True if key in info else None
+
+
 def _from_docker_info(info: Mapping[str, Any], version: Mapping[str, Any]) -> DockerHost:
     options = _security_options(info.get("SecurityOptions"))
     seccomp = options.get("seccomp")
@@ -161,8 +169,8 @@ def _from_docker_info(info: Mapping[str, Any], version: Mapping[str, Any]) -> Do
         cgroup_driver=str(info["CgroupDriver"]) if info.get("CgroupDriver") else None,
         memory_limit=info.get("MemoryLimit") is True,
         pids_limit=info.get("PidsLimit") is True,
-        cpu_cfs_quota=info.get("CpuCfsQuota") is True,
-        cpu_cfs_period=info.get("CpuCfsPeriod") is True,
+        cpu_cfs_quota=_reported(info, "CpuCfsQuota"),
+        cpu_cfs_period=_reported(info, "CpuCfsPeriod"),
         seccomp_profile=(seccomp.get("profile") or "default") if seccomp is not None else None,
         apparmor="apparmor" in options,
         selinux="selinux" in options,
@@ -244,6 +252,9 @@ def preflight(host: DockerHost) -> SandboxProbe:
         return refuse(
             "os-type", f"The daemon runs {host.os_type or 'unknown'} containers; Linux containers are needed"
         )
+    # A CPU flag the daemon does not report is left to the self-test, which reads the container's cgroup v2
+    # ``cpu.max`` and refuses unless the quota is in place; without cgroup v2 nothing verifies it: refuse.
+    deferred = host.cgroup_version == "2"
     missing = [
         flag
         for flag, ok in (
@@ -252,7 +263,7 @@ def preflight(host: DockerHost) -> SandboxProbe:
             ("CpuCfsQuota", host.cpu_cfs_quota),
             ("CpuCfsPeriod", host.cpu_cfs_period),
         )
-        if not ok
+        if not (ok or (ok is None and deferred))
     ]
     if host.rootless and host.cgroup_version == "1":
         return refuse("rootless-cgroup", "A rootless daemon on cgroup v1 cannot enforce resource limits")

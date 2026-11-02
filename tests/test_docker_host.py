@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -197,3 +198,15 @@ def test_a_failing_info_is_unreachable_even_with_json(tmp_path: Path) -> None:
     with pytest.raises(DockerProbeError, match="daemon down") as caught:
         inspect_host(str(fake))
     assert caught.value.reason == "unreachable"
+
+
+def test_unreported_cpu_limits_are_left_to_the_self_test_only_on_cgroup_v2(fake_docker: FakeDocker) -> None:
+    """Podman's Docker-compatible ``info`` omits ``CpuCfsQuota``/``CpuCfsPeriod`` (seen on Podman 4.9.3)."""
+    fake_docker.host("podman-compat")
+    host = inspect_host(str(fake_docker.path))
+    assert host.cpu_cfs_quota is None and host.cpu_cfs_period is None
+    assert preflight(host).available  # the self-test reads cpu.max and refuses without a quota
+    checked = preflight(replace(host, cgroup_version="1", rootless=False))
+    assert not checked.available and checked.reason == "limits" and "CpuCfsQuota" in checked.detail
+    reported_false = preflight(replace(host, cpu_cfs_quota=False))
+    assert not reported_false.available and reported_false.reason == "limits"
