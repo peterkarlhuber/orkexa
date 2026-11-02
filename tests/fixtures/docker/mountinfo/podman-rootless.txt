@@ -1,0 +1,35 @@
+880 842 0:61 / / ro,relatime - overlay overlay rw,lowerdir=/home/runner/.local/share/containers/storage/overlay/l/Q2W3E4R5T6:/home/runner/.local/share/containers/storage/overlay/l/Y7U8I9O0P1,upperdir=/home/runner/.local/share/containers/storage/overlay/0c3e/diff,workdir=/home/runner/.local/share/containers/storage/overlay/0c3e/work,userxattr
+881 880 0:64 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
+882 880 0:65 / /dev rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755,uid=1001,gid=118,inode64
+883 880 0:66 / /sys ro,nosuid,nodev,noexec,relatime - sysfs sysfs ro
+884 882 0:67 / /dev/pts rw,nosuid,noexec,relatime - devpts devpts rw,gid=100004,mode=620,ptmxmode=666
+885 882 0:63 / /dev/mqueue rw,nosuid,nodev,noexec,relatime - mqueue mqueue rw
+886 880 0:55 /containers/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629036k,nr_inodes=407259,mode=700,uid=1001,gid=118,inode64
+887 880 0:55 /containers/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629036k,nr_inodes=407259,mode=700,uid=1001,gid=118,inode64
+888 880 0:55 /containers/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/hosts /etc/hosts rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629036k,nr_inodes=407259,mode=700,uid=1001,gid=118,inode64
+889 882 0:60 / /dev/shm rw,nosuid,nodev,noexec,relatime - tmpfs shm rw,size=16384k,uid=1001,gid=118,inode64
+890 880 0:68 / /run rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=1024k,mode=755,uid=1001,gid=118,inode64
+891 880 0:69 / /tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=16384k,uid=1001,gid=118,inode64
+892 880 0:70 / /var/tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=1024k,mode=755,uid=1001,gid=118,inode64
+893 880 0:71 / /work rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=16384k,mode=1777,uid=1001,gid=118,inode64
+894 890 0:55 /containers/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/.containerenv /run/.containerenv rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629036k,nr_inodes=407259,mode=700,uid=1001,gid=118,inode64
+895 883 0:29 / /sys/fs/cgroup ro,nosuid,nodev,noexec,relatime - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+896 882 0:5 /null /dev/null rw,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+897 882 0:5 /zero /dev/zero rw,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+898 882 0:5 /full /dev/full rw,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+899 882 0:5 /tty /dev/tty rw,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+900 882 0:5 /random /dev/random rw,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+901 882 0:5 /urandom /dev/urandom rw,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+843 881 0:72 / /proc/acpi ro,relatime - tmpfs tmpfs ro,size=0k,uid=1001,gid=118,inode64
+844 881 0:5 /null /proc/kcore ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+845 881 0:5 /null /proc/keys ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+846 881 0:5 /null /proc/timer_list ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+847 881 0:73 / /proc/scsi ro,relatime - tmpfs tmpfs ro,size=0k,uid=1001,gid=118,inode64
+848 883 0:74 / /sys/firmware ro,relatime - tmpfs tmpfs ro,size=0k,uid=1001,gid=118,inode64
+849 883 0:75 / /sys/dev/block ro,relatime - tmpfs tmpfs ro,size=0k,uid=1001,gid=118,inode64
+850 881 0:5 /null /proc/interrupts ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+851 881 0:64 /bus /proc/bus ro,nosuid,nodev,noexec,relatime - proc proc rw
+852 881 0:64 /fs /proc/fs ro,nosuid,nodev,noexec,relatime - proc proc rw
+853 881 0:64 /irq /proc/irq ro,nosuid,nodev,noexec,relatime - proc proc rw
+854 881 0:64 /sys /proc/sys ro,nosuid,nodev,noexec,relatime - proc proc rw
+855 881 0:64 /sysrq-trigger /proc/sysrq-trigger ro,nosuid,nodev,noexec,relatime - proc proc rw

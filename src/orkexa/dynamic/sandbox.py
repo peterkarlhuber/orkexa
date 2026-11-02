@@ -745,9 +745,12 @@ class DockerSandbox(Sandbox):
     def self_test(self, *, image: str | None = None) -> SandboxProbe:
         """Run one container with exactly this sandbox's :func:`~orkexa.dynamic.docker.run_args` and check
         inside it what the daemon applied: user 65534, no capabilities, ``NoNewPrivs``, a seccomp filter,
-        only the loopback interface, a read-only root, ``noexec`` ``/tmp`` and ``/work``, the cgroup v2
-        memory, swap, process and CPU limits, the open-file, file-size and core limits, and no environment
-        variable but the engine's and the image's own (:func:`~orkexa.dynamic.docker.evaluate_self_test`).
+        only the loopback interface, a read-only root, ``noexec`` ``/tmp`` and ``/work``, no mount but the
+        engine's own (no volume from engine defaults), system calls that every default seccomp profile
+        blocks, an enforcing AppArmor profile where the host reports AppArmor (the label is reported as the
+        fact ``apparmor_label`` either way), the cgroup v2 memory, swap, process and CPU limits, the
+        open-file, file-size and core limits, and no environment variable but the engine's and the image's
+        own (:func:`~orkexa.dynamic.docker.evaluate_self_test`).
 
         ``image`` defaults to :attr:`image`; the container runs the image by its id. A passed self-test is
         remembered per daemon (:func:`~orkexa.dynamic.docker.host_fingerprint`), image id and shape. Reason
@@ -796,7 +799,9 @@ class DockerSandbox(Sandbox):
         if not isinstance(report, dict):
             stderr = output.stderr.decode("utf-8", "replace")[-500:]
             return refuse(f"The self-test container exited with code {code} without a report: {stderr}")
-        problems = evaluate_self_test(report, limits, info.env_names)
+        problems = evaluate_self_test(report, limits, info.env_names, apparmor=host.apparmor)
+        label = report.get("apparmor")
+        facts = (*facts, ("apparmor_label", label.strip() if isinstance(label, str) else "not available"))
         if problems:
             return refuse("; ".join(problems))
         passed = SandboxProbe("docker", True, facts=(*facts, ("self_test", "passed")))
@@ -833,7 +838,7 @@ class DockerSandbox(Sandbox):
         if self.transport == "stdin":
             return [*args, "python", "-I", "-B", "-c", BOOTSTRAP]
         # Deprecated: the run directory and the package are mounted from the host instead of a tmpfs /work.
-        index = args.index("--tmpfs", args.index("--tmpfs") + 1)
+        index = next(i for i, arg in enumerate(args) if arg.startswith("/work:")) - 1
         del args[index : index + 2]
         mounts = ["-v", f"{workdir}:/work:ro", "-v", f"{_PACKAGE_DIR}:/opt/orkexa/orkexa:ro"]
         return [*args[:-1], *mounts, args[-1], "python", "-I", "-B", _BIND_RUNNER]

@@ -3,19 +3,35 @@
 :data:`SELF_TEST_SCRIPT` runs (standard library only) as ``python -I -B -c`` in a container started with
 exactly :func:`~orkexa.dynamic.docker.run_args` and prints one JSON report; :func:`evaluate_self_test` checks
 it against the limits on the host. A daemon may accept a flag and not apply it (a missing cgroup controller,
-an unconfined seccomp default, a runtime that ignores ``noexec``); the self-test is what catches that.
+an unconfined seccomp default, a runtime that ignores ``noexec``), or add what nobody asked for (a volume from
+the engine's defaults, e.g. Podman's ``containers.conf``; a permissive custom seccomp profile); the self-test
+is what catches that. Besides the process status it reads the whole mount table (:func:`check_mount_table`),
+calls system calls that every default seccomp profile blocks (:func:`check_seccomp_probes`) and, where the
+host reports AppArmor, the container's AppArmor label (:func:`check_apparmor`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 import re
 from typing import Any
 
 from ._container import ContainerLimits
 from ._host import _dict
 
-__all__ = ["ALLOWED_ENVIRONMENT", "SAFE_IMAGE_VARIABLES", "SELF_TEST_SCRIPT", "evaluate_self_test"]
+__all__ = [
+    "ALLOWED_ENVIRONMENT",
+    "SAFE_IMAGE_VARIABLES",
+    "SECCOMP_PROBES",
+    "SELF_TEST_SCRIPT",
+    "MountEntry",
+    "check_apparmor",
+    "check_mount_table",
+    "check_seccomp_probes",
+    "evaluate_self_test",
+    "parse_mountinfo",
+]
 
 #: Variables the engine itself sets in a container (besides the image's own ``ENV``).
 ALLOWED_ENVIRONMENT = frozenset({"PATH", "HOME", "HOSTNAME", "TERM", "container"})
@@ -23,10 +39,17 @@ ALLOWED_ENVIRONMENT = frozenset({"PATH", "HOME", "HOSTNAME", "TERM", "container"
 SAFE_IMAGE_VARIABLES = frozenset({"GPG_KEY", "PYTHON_SHA256", "PYTHON_GET_PIP_SHA256"})
 _SECRET_LIKE = re.compile(r"KEY|TOKEN|SECRET|PASS|CRED|AUTH|COOKIE|SESSION|PRIVATE|CERT", re.IGNORECASE)
 _MIB = 1024 * 1024
+_VERSION = 2
 
+#: System calls the self-test makes and that must fail: the default seccomp profiles of Docker (Moby) and
+#: Podman (containers/common) both block them for a process without capabilities, while the kernel itself
+#: lets an unprivileged process make them (with common settings). One that succeeds proves a seccomp profile
+#: more permissive than the defaults. Not probed, because Podman's default allows them: ``unshare``,
+#: ``keyctl``, ``mount``, ``ptrace``; ``io_uring_setup`` is allowed by Docker before 25.
+SECCOMP_PROBES = ("add_key", "bpf", "perf_event_open", "userfaultfd", "move_pages")
 #: Runs in the container; prints one JSON object. The marker comment names it in logs (and in test fakes).
 SELF_TEST_SCRIPT = """\
-# ORKEXA_SELF_TEST v1
+# ORKEXA_SELF_TEST v2
 import json, os, resource, subprocess
 
 def read(path):
@@ -88,10 +111,71 @@ if cgroup['version'] == '2':
             for name in ('memory.max', 'memory.swap.max', 'pids.max', 'cpu.max'):
                 cgroup[name] = read(os.path.join(base, name))
             break
+def probe_syscalls():
+    import ctypes, struct
+    machine = os.uname().machine
+    names = ('add_key', 'bpf', 'perf_event_open', 'userfaultfd', 'move_pages')
+    numbers = {
+        'x86_64': dict(zip(names, (248, 321, 298, 323, 279))),
+        'aarch64': dict(zip(names, (217, 280, 241, 282, 239))),
+    }.get(machine)
+    if numbers is None or struct.calcsize('P') != 8:
+        return {'unsupported': '%s/%d-bit' % (machine, struct.calcsize('P') * 8)}
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.syscall.restype = ctypes.c_long
+    word = ctypes.c_long
+    # perf_event_attr (PERF_ATTR_SIZE_VER0): a software task clock of this process, user space only
+    # (type SOFTWARE, size, config TASK_CLOCK, flags disabled | exclude_kernel | exclude_hv)
+    perf = struct.pack('=IIQQQQQIIQ', 1, 64, 1, 0, 0, 0, 1 | 32 | 64, 0, 0, 0)
+    perf = ctypes.create_string_buffer(perf, 64)
+    # bpf_attr for BPF_MAP_CREATE: an array map with one 4-byte entry
+    bpf = ctypes.create_string_buffer(struct.pack('=IIIII', 2, 4, 4, 1, 0), 64)
+    calls = {
+        'add_key': (ctypes.c_char_p(b'user'), ctypes.c_char_p(b'orkexa-self-test'), ctypes.c_char_p(b'x'),
+                    ctypes.c_size_t(1), word(-2)),
+        'bpf': (word(0), bpf, word(64)),
+        'perf_event_open': (perf, word(0), word(-1), word(-1), word(8)),
+        'userfaultfd': (word(0o2000000 | 1),),
+        'move_pages': (word(0), word(0), ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p(), word(0)),
+    }
+    results = {}
+    for name, args in calls.items():
+        ctypes.set_errno(0)
+        value = libc.syscall(word(numbers[name]), *args)
+        if value < 0:
+            results[name] = 'errno:%d' % ctypes.get_errno()
+            continue
+        results[name] = 'allowed'
+        if name in ('bpf', 'perf_event_open', 'userfaultfd'):
+            try:
+                os.close(value)
+            except OSError:
+                pass
+    return results
+
+def seccomp_probes():
+    try:
+        return probe_syscalls()
+    except Exception as exc:
+        return {'error': '%s: %s' % (type(exc).__name__, exc)}
+
+def write_in(directory):
+    path = os.path.join(directory, '.orkexa-self-test')
+    try:
+        return attempt(lambda: open(path, 'w').close())
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+apparmor = read('/proc/self/attr/apparmor/current')
+if apparmor is None:
+    apparmor = read('/proc/self/attr/current')
 names = ('RLIMIT_NOFILE', 'RLIMIT_FSIZE', 'RLIMIT_CORE')
 fields = ('Uid', 'Gid', 'Groups', 'CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb', 'NoNewPrivs', 'Seccomp')
 report = {
-    'version': 1,
+    'version': 2,
     'status': {key: status.get(key) for key in fields},
     'uid': os.getuid(),
     'gid': os.getgid(),
@@ -104,7 +188,11 @@ report = {
     'cgroup': cgroup,
     'rlimits': {name: list(resource.getrlimit(getattr(resource, name))) for name in names},
     'env': sorted(os.environ),
+    'mountinfo': read('/proc/self/mountinfo'),
+    'write_sealed': {point: write_in(point) for point in ('/run', '/var/tmp')},
+    'apparmor': apparmor,
 }
+report['seccomp_probes'] = seccomp_probes()  # last: a call that gets through may change this process
 print(json.dumps(report))
 """
 
@@ -121,15 +209,21 @@ def _ids(value: Any) -> set[str]:
 
 
 def evaluate_self_test(
-    report: Mapping[str, Any], limits: ContainerLimits, image_variables: Iterable[str] = ()
+    report: Mapping[str, Any],
+    limits: ContainerLimits,
+    image_variables: Iterable[str] = (),
+    *,
+    apparmor: bool = False,
 ) -> list[str]:
     """What is wrong with a container, according to its :data:`SELF_TEST_SCRIPT` report (empty: nothing).
 
     ``image_variables`` are the names of the image's ``ENV``; they may appear in the container, every other
     name except :data:`ALLOWED_ENVIRONMENT` is refused, and so is an image variable whose name looks like a
-    secret (``*KEY*``, ``*TOKEN*``, ...) unless it is in :data:`SAFE_IMAGE_VARIABLES`."""
+    secret (``*KEY*``, ``*TOKEN*``, ...) unless it is in :data:`SAFE_IMAGE_VARIABLES`. ``apparmor``: the host
+    reports AppArmor (:attr:`~orkexa.dynamic.docker.DockerHost.apparmor`), so the container must be confined
+    by an enforcing profile; without it the label is only reported."""
     problems: list[str] = []
-    if report.get("version") != 1:
+    if report.get("version") != _VERSION:
         return ["the self-test report has an unknown version"]
     status = _dict(report.get("status"))
     if report.get("uid") != 65534 or report.get("gid") != 65534:
@@ -177,7 +271,221 @@ def evaluate_self_test(
         if rlimits.get(name) != expected:
             problems.append(f"{name} is {rlimits.get(name)}, expected {expected}")
     problems += _check_environment(report.get("env"), set(image_variables))
+    mountinfo = report.get("mountinfo")
+    if isinstance(mountinfo, str) and mountinfo.strip():
+        problems += check_mount_table(mountinfo)
+    else:
+        problems.append("the mount table is not reported")
+    sealed = _dict(report.get("write_sealed"))
+    for point in _SEALED:
+        if sealed.get(point) == "allowed" or point not in sealed:
+            problems.append(f"the sandbox user can write to {point}")
+    problems += check_seccomp_probes(report.get("seccomp_probes"))
+    problems += check_apparmor(report.get("apparmor"), required=apparmor)
     return problems
+
+
+# ---- the mount table -----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MountEntry:
+    """One line of ``/proc/self/mountinfo`` (``proc(5)``), with the escapes (``\\040``) decoded."""
+
+    device: str
+    root: str
+    point: str
+    options: frozenset[str]
+    fstype: str
+    source: str
+    super_options: frozenset[str]
+
+    @property
+    def read_only(self) -> bool:
+        """Read-only as a mount (per-mount ``ro``) or as a file system (super block ``ro``)."""
+        return "ro" in self.options or "ro" in self.super_options
+
+
+_ESCAPE = re.compile(r"\\([0-7]{3})")
+
+
+def _unescape(text: str) -> str:
+    return _ESCAPE.sub(lambda match: chr(int(match.group(1), 8)), text)
+
+
+def parse_mountinfo(text: str) -> list[MountEntry]:
+    """The entries of a ``/proc/self/mountinfo`` text; raises :class:`ValueError` on a malformed line."""
+    entries = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split()
+        if "-" not in parts[6:] or len(parts) < 10:
+            raise ValueError(f"malformed mountinfo line: {line[:200]!r}")
+        separator = parts.index("-", 6)
+        if len(parts) < separator + 4:
+            raise ValueError(f"malformed mountinfo line: {line[:200]!r}")
+        entries.append(
+            MountEntry(
+                device=parts[2],
+                root=_unescape(parts[3]),
+                point=_unescape(parts[4]),
+                options=frozenset(parts[5].split(",")),
+                fstype=parts[separator + 1],
+                source=_unescape(parts[separator + 2]),
+                super_options=frozenset(parts[separator + 3].split(",")),
+            )
+        )
+    return entries
+
+
+#: Writable tmpfs file systems of the sandbox (checked in detail by :func:`evaluate_self_test`).
+_SCRATCH = frozenset({"/tmp", "/work", "/dev/shm"})
+#: Root-owned, empty ``noexec`` tmpfs file systems of :func:`~orkexa.dynamic.docker.run_args`.
+_SEALED = ("/run", "/var/tmp")
+#: Files the engine bind-mounts from its own state directory (Docker and Podman).
+_ENGINE_FILES = frozenset({"/etc/hosts", "/etc/hostname", "/etc/resolv.conf", "/run/.containerenv"})
+#: Init binaries an engine adds with ``--init`` (Docker's ``"init": true``, Podman's ``init = true``).
+_INIT_BINARIES = frozenset({"/sbin/docker-init", "/run/podman-init"})
+#: Device nodes a runtime in a user namespace (rootless) bind-mounts from the host's ``/dev``.
+_DEVICES = frozenset({"null", "zero", "full", "tty", "random", "urandom"})
+#: The kernel's own file systems a read-only mount under ``/sys`` may show.
+_SYS_PSEUDO = frozenset(
+    {
+        "sysfs",
+        "tmpfs",
+        "cgroup",
+        "cgroup2",
+        "securityfs",
+        "pstore",
+        "bpf",
+        "debugfs",
+        "tracefs",
+        "configfs",
+        "fusectl",
+        "efivarfs",
+        "binfmt_misc",
+    }
+)
+#: What a mount must be at a fixed place: file system types, and whether it must be read-only.
+_FIXED: dict[str, tuple[frozenset[str], bool]] = {
+    "/proc": (frozenset({"proc"}), False),
+    "/dev": (frozenset({"tmpfs"}), False),
+    "/dev/pts": (frozenset({"devpts"}), False),
+    "/dev/mqueue": (frozenset({"mqueue"}), False),
+    "/sys": (frozenset({"sysfs"}), True),
+    "/sys/fs/cgroup": (frozenset({"cgroup2", "cgroup", "tmpfs"}), True),
+}
+_REQUIRED = ("/", "/proc", "/dev", "/sys", "/tmp", "/work", "/dev/shm", *_SEALED)
+
+
+def _masked(entry: MountEntry) -> bool:
+    """A path the runtime hides by binding ``/dev/null`` over it (runc and crun ``maskedPaths``)."""
+    return entry.root == "/null" and entry.fstype in ("tmpfs", "devtmpfs")
+
+
+def _mount_problem(entry: MountEntry, proc_devices: set[str]) -> str | None:
+    point = entry.point
+    mode = "read-only" if entry.read_only else "writable"
+    unexpected = f"unexpected {mode} mount at {point} ({entry.fstype} {entry.source}, root {entry.root})"
+    if point == "/":
+        return None  # evaluate_self_test checks the root (read-only, not writable)
+    if point in _SCRATCH:
+        return None if entry.fstype == "tmpfs" else f"{point} is {entry.fstype}, not a tmpfs"
+    if point in _SEALED:
+        missing = {"noexec", "nosuid", "nodev"} - entry.options
+        if entry.fstype != "tmpfs":
+            return f"{point} is {entry.fstype}, not a tmpfs"
+        return f"{point} is mounted without {', '.join(sorted(missing))}" if missing else None
+    if point in _FIXED:
+        fstypes, read_only = _FIXED[point]
+        if entry.fstype not in fstypes or entry.root != "/":
+            return unexpected
+        if read_only and not entry.read_only:
+            return f"{point} is writable"
+        if point == "/dev" and "nosuid" not in entry.options:
+            return "/dev is mounted without nosuid"
+        return None
+    if point in _ENGINE_FILES:
+        return None if entry.root != "/" else unexpected  # a single file from the engine, not a file system
+    if point in _INIT_BINARIES:
+        return None if entry.read_only and entry.root != "/" else unexpected
+    if point.startswith("/dev/") and point[5:] in _DEVICES:
+        return None if entry.root == point[4:] and entry.fstype in ("devtmpfs", "tmpfs") else unexpected
+    if point.startswith(("/proc/", "/sys/")) and _masked(entry):
+        return None
+    if point.startswith("/proc/"):
+        # read-only views of the container's own /proc (readonlyPaths) and empty read-only tmpfs masks
+        if entry.read_only and (
+            (entry.fstype == "proc" and entry.device in proc_devices) or entry.fstype == "tmpfs"
+        ):
+            return None
+        return unexpected
+    if point.startswith("/sys/"):
+        return None if entry.read_only and entry.fstype in _SYS_PSEUDO else unexpected
+    return unexpected
+
+
+def check_mount_table(mountinfo: str) -> list[str]:
+    """What is wrong with a container's mount table (``/proc/self/mountinfo``; empty: nothing).
+
+    Only what Docker and Podman mount themselves is allowed: the read-only root, ``/proc`` (with read-only
+    or masked sub-paths), ``/dev`` with ``/dev/pts``, ``/dev/mqueue`` and the device nodes a rootless runtime
+    binds, a read-only ``/sys`` and ``/sys/fs/cgroup``, the sandbox's tmpfs file systems, the engine's
+    ``/etc/hosts``, ``/etc/hostname``, ``/etc/resolv.conf`` and ``/run/.containerenv``, and a read-only
+    ``--init`` binary. Every other mount, read-only or not, is refused: a volume or bind mount from engine
+    defaults (``containers.conf``, ``mounts.conf``) reaches the host's files."""
+    try:
+        entries = parse_mountinfo(mountinfo)
+    except ValueError as exc:
+        return [f"the mount table cannot be read: {exc}"]
+    proc_devices = {entry.device for entry in entries if entry.point == "/proc" and entry.fstype == "proc"}
+    problems = [problem for entry in entries if (problem := _mount_problem(entry, proc_devices))]
+    present = {entry.point for entry in entries}
+    problems += [f"nothing is mounted at {point}" for point in _REQUIRED if point not in present]
+    return problems
+
+
+# ---- seccomp and AppArmor -------------------------------------------------------------------------------
+
+
+def check_seccomp_probes(probes: Any) -> list[str]:
+    """What the :data:`SECCOMP_PROBES` results of a self-test report show (empty: every call was blocked).
+
+    A call counts as blocked when it failed with any error: the probes prove a permissive profile, not a
+    strict one (the kernel may refuse a call on its own). Missing results and architectures without probes
+    (only x86-64 and arm64 have them) are refused."""
+    if not isinstance(probes, dict):
+        return ["the seccomp probes are not reported"]
+    if "unsupported" in probes:
+        return [f"no seccomp probes for the architecture {probes['unsupported']}"]
+    if "error" in probes:
+        return [f"the seccomp probes failed: {probes['error']}"]
+    problems = []
+    allowed = [name for name in SECCOMP_PROBES if probes.get(name) == "allowed"]
+    if allowed:
+        problems.append(
+            f"the seccomp profile allows {', '.join(allowed)}, which the default profiles of Docker and "
+            "Podman block: the daemon uses a more permissive custom profile"
+        )
+    missing = [name for name in SECCOMP_PROBES if not isinstance(probes.get(name), str)]
+    if missing:
+        problems.append(f"seccomp probes not reported: {', '.join(missing)}")
+    return problems
+
+
+def check_apparmor(label: Any, *, required: bool) -> list[str]:
+    """Whether the container's AppArmor label (``/proc/self/attr/apparmor/current``) is an enforcing
+    profile, as needed when the host reports AppArmor (``required``); otherwise nothing is refused."""
+    if not required:
+        return []
+    text = str(label or "").strip()
+    if text.endswith(("(enforce)", "(kill)")):
+        return []
+    return [
+        "the host reports AppArmor, but the container is not confined by an enforcing profile "
+        f"({text or 'no label'})"
+    ]
 
 
 def _check_cgroup(cgroup: Any, limits: ContainerLimits) -> list[str]:

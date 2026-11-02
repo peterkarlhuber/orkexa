@@ -1,0 +1,30 @@
+1260 1203 0:72 / / ro,relatime - overlay overlay rw,lowerdir=/var/lib/containers/storage/overlay/l/RKZ4D6WQ3O:/var/lib/containers/storage/overlay/l/2JXQ7N5HLM,upperdir=/var/lib/containers/storage/overlay/51ad/diff,workdir=/var/lib/containers/storage/overlay/51ad/work,nouserxattr
+1261 1260 0:75 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
+1262 1260 0:76 / /dev rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755,inode64
+1263 1260 0:77 / /sys ro,nosuid,nodev,noexec,relatime - sysfs sysfs ro
+1264 1262 0:78 / /dev/pts rw,nosuid,noexec,relatime - devpts devpts rw,gid=5,mode=620,ptmxmode=666
+1265 1262 0:74 / /dev/mqueue rw,nosuid,nodev,noexec,relatime - mqueue mqueue rw
+1266 1260 0:26 /containers/storage/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629040k,mode=755,inode64
+1267 1260 0:26 /containers/storage/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629040k,mode=755,inode64
+1268 1260 0:26 /containers/storage/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/hosts /etc/hosts rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629040k,mode=755,inode64
+1269 1262 0:71 / /dev/shm rw,nosuid,nodev,noexec,relatime - tmpfs shm rw,size=16384k,inode64
+1270 1260 0:79 / /run rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=1024k,mode=755,inode64
+1271 1260 0:80 / /tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=16384k,inode64
+1272 1260 0:81 / /var/tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=1024k,mode=755,inode64
+1273 1260 0:82 / /work rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,size=16384k,mode=1777,inode64
+1274 1270 0:26 /containers/storage/overlay-containers/47b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1/userdata/.containerenv /run/.containerenv rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=1629040k,mode=755,inode64
+1275 1263 0:29 / /sys/fs/cgroup ro,nosuid,nodev,noexec,relatime - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+1204 1261 0:83 / /proc/acpi ro,relatime - tmpfs tmpfs ro,size=0k,inode64
+1205 1261 0:5 /null /proc/kcore ro,nosuid,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+1206 1261 0:5 /null /proc/keys ro,nosuid,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+1207 1261 0:5 /null /proc/latency_stats ro,nosuid,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+1208 1261 0:5 /null /proc/timer_list ro,nosuid,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+1209 1261 0:84 / /proc/scsi ro,relatime - tmpfs tmpfs ro,size=0k,inode64
+1210 1263 0:85 / /sys/firmware ro,relatime - tmpfs tmpfs ro,size=0k,inode64
+1211 1263 0:86 / /sys/dev/block ro,relatime - tmpfs tmpfs ro,size=0k,inode64
+1212 1261 0:5 /null /proc/interrupts ro,nosuid,relatime master:2 - devtmpfs udev rw,size=8133432k,nr_inodes=2033358,mode=755,inode64
+1213 1261 0:75 /bus /proc/bus ro,nosuid,nodev,noexec,relatime - proc proc rw
+1214 1261 0:75 /fs /proc/fs ro,nosuid,nodev,noexec,relatime - proc proc rw
+1215 1261 0:75 /irq /proc/irq ro,nosuid,nodev,noexec,relatime - proc proc rw
+1216 1261 0:75 /sys /proc/sys ro,nosuid,nodev,noexec,relatime - proc proc rw
+1217 1261 0:75 /sysrq-trigger /proc/sysrq-trigger ro,nosuid,nodev,noexec,relatime - proc proc rw
