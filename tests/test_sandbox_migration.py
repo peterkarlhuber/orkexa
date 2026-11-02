@@ -20,9 +20,18 @@ def test_no_provider_key_reaches_the_sandbox(monkeypatch: pytest.MonkeyPatch) ->
     assert not [n for n in names if "KEY" in n or "TOKEN" in n]
 
 
-def test_docker_mounts_the_orkexa_package(tmp_path: Path) -> None:
+def test_docker_streams_the_runner_without_mounts(tmp_path: Path) -> None:
     sandbox = DockerSandbox()
-    assert sandbox.image == "orkexa-sandbox"
+    assert sandbox.image == "orkexa-sandbox" and sandbox.transport == "stdin"
+    command = sandbox.command(tmp_path, "sb-1")
+    assert "-v" not in command and str(tmp_path) not in " ".join(command)
+    assert command[-5:-1] == ["python", "-I", "-B", "-c"]
+    assert not any("claude" in part for part in command)
+
+
+def test_docker_bind_transport_mounts_the_orkexa_package(tmp_path: Path) -> None:
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        sandbox = DockerSandbox(transport="bind")
     command = sandbox.command(tmp_path, "sb-1")
     package = Path(orkexa.__file__).resolve().parent
     assert f"{package}:/opt/orkexa/orkexa:ro" in command

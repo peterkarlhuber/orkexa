@@ -187,3 +187,13 @@ def test_probe_passes_a_good_host(fake_docker: FakeDocker) -> None:
     assert probe.available, probe
     assert dict(probe.facts)["engine"] == "docker"
     assert DockerSandbox.available(str(fake_docker.path))
+
+
+def test_a_failing_info_is_unreachable_even_with_json(tmp_path: Path) -> None:
+    """A current CLI prints an empty info object and exits 1 when the daemon is down."""
+    fake = tmp_path / "docker"
+    fake.write_text('#!/bin/sh\necho \'{"OSType": "", "ServerErrors": ["daemon down"]}\'\nexit 1\n')
+    fake.chmod(0o755)
+    with pytest.raises(DockerProbeError, match="daemon down") as caught:
+        inspect_host(str(fake))
+    assert caught.value.reason == "unreachable"

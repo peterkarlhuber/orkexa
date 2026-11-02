@@ -99,10 +99,12 @@ def _run_json(docker: str, args: list[str], env: Mapping[str, str] | None, timeo
             data = json.loads(text)
         except ValueError:
             data = None
-    if completed.returncode != 0 and not isinstance(data, dict):
+    if completed.returncode != 0:  # e.g. the CLI prints an empty info object when the daemon is down
         stderr = completed.stderr.decode("utf-8", "replace").strip()
+        errors = data.get("ServerErrors") if isinstance(data, dict) else None
+        message = "; ".join(map(str, errors)) if errors else stderr
         raise DockerProbeError(
-            "unreachable", f"{docker} {args[0]} exited with {completed.returncode}: {stderr[-500:]}"
+            "unreachable", f"{docker} {args[0]} exited with {completed.returncode}: {message[-500:]}"
         )
     if not isinstance(data, dict):
         raise DockerProbeError("malformed", f"{docker} {args[0]} did not print a JSON object")

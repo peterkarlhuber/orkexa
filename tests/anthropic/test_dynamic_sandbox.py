@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 import sys
+import warnings
 
 import pytest
 
@@ -199,8 +200,11 @@ def test_agent_uses_sandboxed_tool(sandbox: SubprocessSandbox) -> None:
     assert agent.tools == {}
 
 
-def test_docker_command_is_locked_down(tmp_path: Path) -> None:
-    command = DockerSandbox(memory_mb=256).command(tmp_path, "sb-1")
+@pytest.mark.parametrize("transport", ["stdin", "bind"])
+def test_docker_command_is_locked_down(tmp_path: Path, transport: str) -> None:  # Orkexa: both transports
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        command = DockerSandbox(memory_mb=256, transport=transport).command(tmp_path, "sb-1")  # type: ignore[arg-type]
     joined = " ".join(command)
     for flag in (
         "--network none",
@@ -209,9 +213,10 @@ def test_docker_command_is_locked_down(tmp_path: Path) -> None:
         "--security-opt no-new-privileges",
         "--user 65534:65534",
         "--memory 256m",
-        f"{tmp_path}:/work:ro",
+        "--pull never",
     ):
         assert flag in joined
+    assert ((f"{tmp_path}:/work:ro" in joined) and "-v" in command) is (transport == "bind")
     assert "-e" not in command and "--env" not in command
 
 

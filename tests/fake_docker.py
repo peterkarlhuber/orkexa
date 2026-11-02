@@ -242,6 +242,13 @@ def _run(argv: list[str]) -> int:
     if "-d" in flags:
         print(container["Id"])
         return 0
+    if command[:3] == ["python", "-I", "-B"] and command[3:4] != ["-c"]:  # the deprecated bind transport
+        mounts = dict(spec.rsplit(":", 1)[0].split(":", 1)[::-1] for spec in values.get("-v", []))
+        runner = command[3].replace("/opt/orkexa/orkexa", mounts["/opt/orkexa/orkexa"], 1)
+        os.chdir(mounts["/work"])
+        os.environ.clear()
+        os.environ.update({"PATH": "/usr/bin:/bin"})
+        os.execv(sys.executable, [sys.executable, "-I", "-B", runner])
     assert command[:4] == ["python", "-I", "-B", "-c"], command
     script = command[4]
     if "ORKEXA_SELF_TEST" in script:
