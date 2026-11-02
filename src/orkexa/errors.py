@@ -33,6 +33,7 @@ __all__ = [
     "ProviderServerError",
     "RateLimitError",
     "RefusalError",
+    "RequestSuspended",
     "StructuredOutputError",
     "ToolCallSuspended",
     "ToolDefinitionError",
@@ -197,17 +198,47 @@ class ToolCallSuspended(OrkexaError, RuntimeError):
         self.ref = ref
 
 
+class RequestSuspended(OrkexaError, RuntimeError):
+    """Raised by a usage tracker before a model request: the request waits for a decision.
+
+    A tracker raises it from ``check_request``, ``before_request`` or ``try_reserve``
+    (e.g. because the request does not fit a budget and a person may raise it). The
+    request is not sent, recorded or reserved; the turn stops with
+    :class:`TurnSuspended`, whose checkpoint has ``stage="request"``, and
+    ``resume(checkpoint)`` admits the same request again later. ``ref`` is the
+    application's reference of what the request waits for (e.g. an approval id).
+    Native batch requests (``ask_batch``) cannot be suspended: the error propagates.
+    """
+
+    def __init__(self, reason: str = "", ref: str | None = None) -> None:
+        super().__init__(reason or "the request waits for a decision")
+        self.reason = reason
+        self.ref = ref
+
+
 class TurnSuspended(OrkexaError, RuntimeError):
-    """``ask()`` or ``resume()`` stopped because a tool call waits (:class:`ToolCallSuspended`).
+    """``ask()`` or ``resume()`` stopped because the turn waits for a decision outside it.
 
     ``checkpoint`` (a :class:`~orkexa.core.checkpoint.TurnCheckpoint`) holds everything
-    to continue: the conversation of the turn, the requested calls, the results of the
-    calls that already ran and the waiting ones. The committed conversation is unchanged.
+    to continue. Its ``stage`` says where the turn stopped:
+
+    * ``"tools"``: a tool call waits (:class:`ToolCallSuspended`); the checkpoint holds
+      the conversation of the turn, the requested calls, the results of the calls that
+      already ran and the waiting ones.
+    * ``"request"``: the usage tracker suspended the next model request
+      (:class:`RequestSuspended`) before it was sent; the checkpoint holds the
+      conversation up to that request and the tracker's ``reason`` and ``ref``.
+
+    The committed conversation is unchanged in both cases.
     """
 
     def __init__(self, checkpoint: Any) -> None:
-        waiting = ", ".join(item.name for item in checkpoint.waiting)
-        super().__init__(f"the turn waits for: {waiting}")
+        if getattr(checkpoint, "stage", "tools") == "request":
+            message = f"the turn waits before a model request: {checkpoint.reason or 'suspended'}"
+        else:
+            waiting = ", ".join(item.name for item in checkpoint.waiting)
+            message = f"the turn waits for: {waiting}"
+        super().__init__(message)
         self.checkpoint = checkpoint
 
 

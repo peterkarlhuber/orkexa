@@ -41,6 +41,7 @@ from ..errors import (
     MemoryToolError,
     ProviderError,
     RefusalError,
+    RequestSuspended,
     StructuredOutputError,
     ToolCallSuspended,
     ToolDefinitionError,
@@ -771,7 +772,11 @@ class AgentCore(Generic[OutputT]):
             # One pinned price basis per request: the pre-check and the bill use the
             # same snapshot even if prices are updated while the request runs.
             basis = self._pricing_basis()
-            reservation = yield from self._admit(request, basis)
+            try:
+                reservation = yield from self._admit(request, basis)
+            except RequestSuspended as exc:
+                # Nothing was sent, recorded or reserved (a refused admission holds nothing).
+                raise TurnSuspended(self._request_checkpoint(history, round_number, exc)) from exc
             try:
                 self._request_basis = basis
                 response: ModelResponse = yield CallModel(request)
@@ -823,6 +828,24 @@ class AgentCore(Generic[OutputT]):
         # All results of one assistant turn go back in a single user message.
         history.append(Message(role="user", content=[cast(ToolResultPart, item) for item in results]))
 
+    def _request_checkpoint(
+        self, history: list[Message], round_number: int, exc: RequestSuspended
+    ) -> TurnCheckpoint:
+        """The checkpoint of a turn whose next model request the usage tracker suspended."""
+        return TurnCheckpoint(
+            agent=self.name,
+            model=self._model_id(),
+            fingerprint=self._checkpoint_fingerprint(),
+            turn_id=self._turn_id,
+            round=round_number,
+            history=[message.model_dump(mode="json", exclude_none=True) for message in history],
+            effort=self._turn_effort,
+            max_tokens=self._turn_max_tokens,
+            stage="request",
+            reason=exc.reason,
+            ref=exc.ref,
+        )
+
     def _checkpoint_fingerprint(self) -> str:
         """What a suspended turn depends on besides its conversation (see :mod:`orkexa.core.checkpoint`)."""
         payload = {
@@ -863,7 +886,9 @@ class AgentCore(Generic[OutputT]):
         if checkpoint.round > self.max_tool_rounds:
             raise CheckpointError("the checkpoint's tool round exceeds max_tool_rounds")
         history = [Message.model_validate(message) for message in checkpoint.history]
-        if not history or history[-1].role != "assistant":
+        if not history:
+            raise CheckpointError("the checkpoint's conversation is empty")
+        if checkpoint.stage == "tools" and history[-1].role != "assistant":
             raise CheckpointError("the checkpoint's conversation does not end with the tool calls")
         self._last_turn_records = []
         self._turn_effort = checkpoint.effort
@@ -872,9 +897,16 @@ class AgentCore(Generic[OutputT]):
         return checkpoint, history
 
     def _resume_turn(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> Generator[Effect, Any, OutputT]:
-        """Continue a suspended turn: run the waiting calls, then the remaining rounds."""
+        """Continue a suspended turn: run the waiting calls, then the remaining rounds.
+
+        A ``"request"`` checkpoint continues with the round whose request was suspended:
+        the request is built from the checkpoint's conversation and admitted again.
+        """
         try:
             restored, history = self._restore(checkpoint)
+            if restored.stage == "request":
+                resumed: OutputT = yield from self._rounds(history, restored.round)
+                return resumed
             waiting = {item.call_id for item in restored.waiting}
             again = tuple(call for call in restored.calls if call.id in waiting)
             request = self._build_request(history)

@@ -83,6 +83,18 @@ budget = BudgetTracker("5.00", on_unpriced="reject")
 * `BudgetTracker(limit, parent=other, prefix="team")` is a child scope: every record
   and reservation also counts in `other` (records as `"team/<agent>"`), so neither
   scope can spend past the other's limit.
+* `BudgetExceededError` carries structured details, so an application does not have to
+  parse the message: `reason` (`"used_up"`, `"request_too_large"` or `"exceeded"`),
+  `limit_usd`, `spent_usd`, `reserved_usd`, `requested_usd` (the bound of the refused
+  request; `None` when it is unknown or unbounded) and `tracker`, the tracker whose
+  limit refused it (with child scopes, possibly the parent). Errors raised with a
+  message only have `None` there.
+* `set_limit(limit)` changes the limit while agents run (thread-safe, returns the
+  previous limit, `None` removes it, negative amounts raise `ValueError`). Requests
+  that wait for budget check again at once, so raising the limit lets them proceed.
+  Lowering it is allowed but does not cancel requests in flight; it applies to
+  requests admitted afterwards. To pause a turn until a person raises the limit,
+  see [Pausing before a request](streaming-hooks-errors.md#pausing-before-a-request).
 * The limit is still not a billing limit; use the provider's spend limits for that.
 * A native batch (`Evaluator.evaluate_many(batch=True)`) is admitted as a whole like
   one request: it is not submitted when the budget is used up or, with

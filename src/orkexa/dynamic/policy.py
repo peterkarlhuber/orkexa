@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from decimal import Decimal
 import threading
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 import warnings
 
 from ..core.types import Effort
@@ -270,23 +270,75 @@ class BudgetTracker(UsageTracker):
 
     def check(self) -> None:
         """Raise :class:`BudgetExceededError` if the budget is already used up."""
-        if self.limit_usd is not None and self.spent_usd > self.limit_usd:
-            raise BudgetExceededError(
-                f"Budget exceeded: spent ${self.spent_usd:.4f} of ${self.limit_usd:.4f}"
-            )
+        limit = self.limit_usd
+        if limit is not None:
+            spent = self.spent_usd
+            if spent > limit:
+                raise BudgetExceededError(
+                    f"Budget exceeded: spent ${spent:.4f} of ${limit:.4f}",
+                    **self._details(limit, spent, None, "exceeded"),
+                )
         if self.parent is not None:
             self.parent.check()
+
+    def set_limit(self, limit_usd: Decimal | float | str | None) -> Decimal | None:
+        """Change :attr:`limit_usd` while agents may be running; returns the previous limit.
+
+        Thread-safe: the change happens under the tracker's lock, so a concurrent
+        :meth:`try_reserve` sees either the old or the new limit, never a mix. Requests
+        that wait for budget (because requests in flight hold the money they need) are
+        woken and check again at once, so raising the limit lets them proceed without
+        waiting for a release. ``None`` removes the limit.
+
+        Lowering the limit is allowed, but it does not cancel requests already in
+        flight: their reservations stay, and they are recorded as usual (which may then
+        exceed the new limit and raise :class:`BudgetExceededError` when recorded). Only
+        requests admitted afterwards are checked against the new limit. The
+        ``on_unpriced`` default chosen at construction time is not changed.
+
+        Raises:
+            ValueError: ``limit_usd`` is negative.
+        """
+        limit = None if limit_usd is None else Decimal(str(limit_usd))
+        if limit is not None and (not limit.is_finite() or limit < 0):
+            raise ValueError("limit_usd must be a nonnegative finite amount or None")
+        with self._lock:
+            previous, self.limit_usd = self.limit_usd, limit
+        with _RELEASED:
+            _RELEASED.notify_all()
+        return previous
+
+    def _details(
+        self,
+        limit: Decimal,
+        spent: Decimal,
+        requested: Decimal | None,
+        reason: Literal["used_up", "request_too_large", "exceeded"],
+    ) -> dict[str, Any]:
+        """The structured attributes of a :class:`BudgetExceededError` raised by this tracker."""
+        return {
+            "limit_usd": limit,
+            "spent_usd": spent,
+            "reserved_usd": self._reserved,
+            "requested_usd": requested,
+            "tracker": self,
+            "reason": reason,
+        }
 
     def _upstream(self, agent: str) -> str:
         return f"{self.prefix}/{agent}" if self.prefix else agent
 
     def before_request(self, *, agent: str, provider: str, model: str, priced: bool) -> None:
         # A budget that is exactly used up (e.g. limit 0) admits no further request.
-        if self.limit_usd is not None and self.spent_usd >= self.limit_usd:
-            raise BudgetExceededError(
-                f"Budget used up: spent ${self.spent_usd:.4f} of ${self.limit_usd:.4f}; "
-                f"request of agent {agent!r} to {provider}:{model} not sent"
-            )
+        limit = self.limit_usd
+        if limit is not None:
+            spent = self.spent_usd
+            if spent >= limit:
+                raise BudgetExceededError(
+                    f"Budget used up: spent ${spent:.4f} of ${limit:.4f}; "
+                    f"request of agent {agent!r} to {provider}:{model} not sent",
+                    **self._details(limit, spent, None, "used_up"),
+                )
         if not priced and self.on_unpriced == "reject":
             raise UnpricedModelError(
                 f"No price known for {provider}:{model} (agent {agent!r}); the budget cannot be enforced. "
@@ -315,7 +367,8 @@ class BudgetTracker(UsageTracker):
                 if spent >= self.limit_usd:
                     raise BudgetExceededError(
                         f"Budget used up: spent ${spent:.4f} of ${self.limit_usd:.4f}; "
-                        f"request of agent {agent!r} to {provider}:{model} not sent"
+                        f"request of agent {agent!r} to {provider}:{model} not sent",
+                        **self._details(self.limit_usd, spent, amount, "used_up"),
                     )
                 if spent + self._reserved + need > self.limit_usd:
                     if self._in_flight:
@@ -324,7 +377,8 @@ class BudgetTracker(UsageTracker):
                         raise BudgetExceededError(
                             f"Budget too small for the request: it can cost up to ${need:.4f}, "
                             f"${self.limit_usd - spent:.4f} of ${self.limit_usd:.4f} left; "
-                            f"request of agent {agent!r} to {provider}:{model} not sent"
+                            f"request of agent {agent!r} to {provider}:{model} not sent",
+                            **self._details(self.limit_usd, spent, amount, "request_too_large"),
                         )
                     oversized = True
                 if amount is None:

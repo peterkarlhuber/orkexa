@@ -1,12 +1,22 @@
-"""Turn checkpoints: a turn that stopped at a tool call waiting for a decision (e.g. a person's approval).
+"""Turn checkpoints: a turn that stopped to wait for a decision (e.g. a person's approval).
 
-A ``before_tool`` hook raises :class:`~orkexa.errors.ToolCallSuspended` instead of
-deciding. The turn then ends with :class:`~orkexa.errors.TurnSuspended`, whose
-:class:`TurnCheckpoint` is plain JSON. ``agent.resume(checkpoint)`` continues exactly
-there: the waiting calls go through ``before_tool`` again (now with
-``ToolCall.resumed``), the calls that already ran are not run again, and the model is
-called next only with all results of that round. Nothing is committed to the agent's
-conversation until the turn completes.
+A turn can stop at two points (``TurnCheckpoint.stage``):
+
+* ``"tools"``: a ``before_tool`` hook raises :class:`~orkexa.errors.ToolCallSuspended`
+  instead of deciding. ``agent.resume(checkpoint)`` continues exactly there: the
+  waiting calls go through ``before_tool`` again (now with ``ToolCall.resumed``), the
+  calls that already ran are not run again, and the model is called next only with
+  all results of that round.
+* ``"request"``: the usage tracker raises :class:`~orkexa.errors.RequestSuspended`
+  while admitting the next model request (``check_request``, ``before_request`` or
+  ``try_reserve``), e.g. because the request does not fit a budget. The request is
+  not sent, recorded or reserved. ``agent.resume(checkpoint)`` admits the same request
+  again (the tracker decides anew) and continues the turn; earlier requests of the
+  turn are not sent again. If the tracker suspends again, a new checkpoint results.
+
+In both cases the turn ends with :class:`~orkexa.errors.TurnSuspended`, whose
+:class:`TurnCheckpoint` is plain JSON, and nothing is committed to the agent's
+conversation until the turn completes. Native batch requests cannot be suspended.
 
 The checkpoint is bound to the agent: its name, model, system prompt, tool definitions,
 output format and tool round limit (``fingerprint``). A different agent, or the same
@@ -18,7 +28,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .types import Effort, ToolCallPart, ToolResultPart
 
@@ -50,13 +60,22 @@ class TurnCheckpoint(BaseModel):
         model: The model id the turn used.
         fingerprint: Digest of what the turn depends on besides the conversation.
         turn_id: The id usage records of this turn carry; the resumed turn keeps it.
-        round: The tool round whose calls wait.
-        history: The turn's conversation up to the assistant message with the calls.
-        calls: All tool calls of that assistant message, in order.
-        results: The results of the calls that already ran.
-        waiting: The calls that wait.
+        round: ``"tools"``: the tool round whose calls wait. ``"request"``: the round
+            whose model request was about to be sent.
+        history: The turn's conversation: up to the assistant message with the calls
+            (``"tools"``), or exactly what the suspended request would have sent
+            (``"request"``; it may end with a user, system or assistant message).
+        calls: All tool calls of that assistant message, in order (empty for ``"request"``).
+        results: The results of the calls that already ran (empty for ``"request"``).
+        waiting: The calls that wait (empty for ``"request"``).
         effort: The turn's effort override.
         max_tokens: The turn's ``max_tokens`` override.
+        stage: Where the turn stopped: ``"tools"`` (a tool call waits; the default, so
+            checkpoints written before this field existed parse unchanged) or
+            ``"request"`` (the next model request waits).
+        reason: ``"request"``: the reason from :class:`~orkexa.errors.RequestSuspended`.
+        ref: ``"request"``: the application's reference from
+            :class:`~orkexa.errors.RequestSuspended`.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -69,8 +88,22 @@ class TurnCheckpoint(BaseModel):
     turn_id: str | None = None
     round: int = Field(ge=0)
     history: list[dict[str, Any]]
-    calls: list[ToolCallPart] = Field(min_length=1)
+    calls: list[ToolCallPart] = Field(default_factory=list)
     results: list[ToolResultPart] = Field(default_factory=list)
-    waiting: list[WaitingCall] = Field(min_length=1)
+    waiting: list[WaitingCall] = Field(default_factory=list)
     effort: Effort | None = None
     max_tokens: int | None = None
+    stage: Literal["tools", "request"] = "tools"
+    reason: str = ""
+    ref: str | None = None
+
+    @model_validator(mode="after")
+    def _check_stage(self) -> TurnCheckpoint:
+        if self.stage == "tools":
+            if not self.calls or not self.waiting:
+                raise ValueError("a 'tools' checkpoint needs at least one call and one waiting call")
+            if self.reason or self.ref is not None:
+                raise ValueError("reason and ref belong to the waiting calls of a 'tools' checkpoint")
+        elif self.calls or self.results or self.waiting:
+            raise ValueError("a 'request' checkpoint has no calls, results or waiting calls")
+        return self

@@ -4,6 +4,29 @@
 
 First release of Orkexa.
 
+### Added: pausing a turn before a model request; adjustable budgets
+
+* `RequestSuspended(reason, ref)` (exported from `orkexa`): a usage tracker may raise it
+  from `check_request()`, `before_request()` or `try_reserve()`. The request is not sent,
+  recorded or reserved; the turn ends with `TurnSuspended`, whose `TurnCheckpoint` has
+  the new field `stage="request"` (plus `reason` and `ref`). `Agent.resume()` /
+  `AsyncAgent.resume()` admit the same request again and continue the turn without
+  re-sending earlier requests. Tool-stage checkpoints have `stage="tools"` (the default;
+  `CHECKPOINT_VERSION` stays 1, so existing checkpoints still resume). Native batch
+  requests cannot be suspended (ORK-022).
+* `TurnCheckpoint.calls` and `waiting` may be empty for `stage="request"`; a
+  `stage="tools"` checkpoint still needs at least one call and one waiting call.
+* `BudgetExceededError` (and its subclasses) has optional keyword-only details:
+  `limit_usd`, `spent_usd`, `reserved_usd`, `requested_usd`, `tracker` (the tracker whose
+  limit blocked, possibly a parent) and `reason` (`"used_up"`, `"request_too_large"`,
+  `"exceeded"`). `BudgetTracker` fills them at every refusal; raising it with a message
+  only keeps working.
+* `BudgetTracker.set_limit(limit_usd)` changes the limit thread-safely, returns the
+  previous one and wakes requests that wait for budget.
+* `tool_results_of_last_turn(agent)` is public (exported from `orkexa` and
+  `orkexa.evaluation`): the text `refine()` gives a judge, for applications that run their
+  own (for example resumable) ask-evaluate-revise loop.
+
 ### Removed: native macOS sandbox (Docker-first, ADR 0012)
 
 * The experimental Seatbelt `MacOSSandbox` (ORK-014) is removed; `DockerSandbox` is the sandbox for untrusted

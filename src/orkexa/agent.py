@@ -132,15 +132,19 @@ class Agent(AgentCore[OutputT]):
             self._exit_turn()
 
     def resume(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> OutputT:
-        """Continue a turn that stopped at a waiting tool call (:class:`~orkexa.TurnSuspended`).
+        """Continue a suspended turn (:class:`~orkexa.TurnSuspended`).
 
-        The waiting calls go through ``before_tool`` again (``ToolCall.resumed`` is
-        ``True``); calls that already ran are not run again; the model gets all results
-        of that round and the turn continues like :meth:`ask`. The checkpoint must come
-        from this agent with the same prompt, tools and limits
-        (:class:`~orkexa.CheckpointError` otherwise). The completed turn's conversation
-        (from the checkpoint) becomes the agent's conversation. A call that waits again
-        raises :class:`~orkexa.TurnSuspended` with a new checkpoint.
+        At a waiting tool call (``checkpoint.stage == "tools"``) the waiting calls go
+        through ``before_tool`` again (``ToolCall.resumed`` is ``True``); calls that
+        already ran are not run again; the model gets all results of that round and the
+        turn continues like :meth:`ask`. Before a suspended model request
+        (``checkpoint.stage == "request"``, :class:`~orkexa.RequestSuspended`) the same
+        request is admitted again by the usage tracker and sent; earlier requests of the
+        turn are not sent again. The checkpoint must come from this agent with the same
+        prompt, tools and limits (:class:`~orkexa.CheckpointError` otherwise). The
+        completed turn's conversation (from the checkpoint) becomes the agent's
+        conversation. A turn that waits again raises :class:`~orkexa.TurnSuspended` with
+        a new checkpoint.
         """
         self._enter_turn()
         try:
