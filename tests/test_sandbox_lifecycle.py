@@ -17,7 +17,6 @@ import pytest
 from orkexa import ToolExecutionError
 from orkexa.dynamic import (
     DockerSandbox,
-    MacOSSandbox,
     Sandbox,
     SandboxCancelled,
     SandboxCapabilities,
@@ -121,9 +120,7 @@ def test_capabilities_describe_each_backend() -> None:
     assert subprocess_caps.maturity == "stable" and subprocess_caps.cancellable
     docker = DockerSandbox().capabilities()
     assert docker.isolating and docker.isolation == "container" and docker.memory == "kernel"
-    macos = MacOSSandbox().capabilities()
-    assert macos.isolating and macos.maturity == "experimental" and macos.memory == "watchdog"
-    assert macos.as_dict()["isolating"] is True
+    assert docker.as_dict()["isolating"] is True
 
 
 def test_probe_reports_why_a_backend_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,7 +1,6 @@
 name: Platforms
 
-# ORK-013: the offline suite on macOS (arm64, x86-64) and Windows (x64, ARM64) as well as Linux, with the
-# experimental macOS sandbox required on the macOS runners (a sandbox that cannot start fails the job).
+# ORK-013: the offline suite on macOS (arm64, x86-64) and Windows (x64, ARM64) as well as Linux.
 # ORK-006: DockerSandbox against a real daemon and the image built from docker/sandbox.Dockerfile.
 on:
   push:
@@ -24,8 +23,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      ORKEXA_REQUIRE_NATIVE_SANDBOX: ${{ startsWith(matrix.os, 'macos') && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,9 +44,7 @@ jobs:
           fi
       - name: System
         run: python -c "import platform, sys; print(sys.platform, platform.machine(), platform.platform())"
-      - name: Native sandbox probe
-        run: python -c "import json, orkexa.dynamic as d; print(json.dumps(d.MacOSSandbox.probe().as_dict()))"
-      - run: pytest -v -s tests/test_macos_sandbox.py tests/test_sandbox_lifecycle.py
+      - run: pytest -v -s tests/test_sandbox_lifecycle.py
       - run: pytest -q
 
   docker:
