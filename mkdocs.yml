@@ -121,4 +121,5 @@ nav:
   - Development:
       - development/index.md
       - Releasing: development/releasing.md
+      - Docker manual verification: development/docker-manual-verification.md
   - Changelog: changelog.md

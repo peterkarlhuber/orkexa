@@ -82,3 +82,11 @@ use `DockerSandbox` (the default of `ToolRegistry`) or stronger isolation
 generated code in `DockerSandbox` by default and refuses to run it without Docker.
 Build the image (`docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`), or,
 for code you trust, pass `sandbox=SubprocessSandbox(acknowledge_unsafe=True)`.
+
+**Why is the Docker sandbox "not available (limits)" or "(self-test)"?** The daemon
+cannot enforce a limit the sandbox needs, or a test container showed that a setting was
+not applied. `python -m orkexa.dynamic.docker --self-test` prints the reason and the
+daemon's facts. A rootless Docker or Podman needs the `cpu`, `memory` and `pids` cgroup
+controllers delegated to the user (systemd `Delegate=`) and cgroup v2; a daemon with an
+unconfined seccomp default is refused. See
+[Docker manual verification](development/docker-manual-verification.md).

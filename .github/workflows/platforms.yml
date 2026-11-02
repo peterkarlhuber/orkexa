@@ -48,11 +48,27 @@ jobs:
       - run: pytest -q
 
   docker:
-    name: DockerSandbox (real daemon)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # ORK-006/019/020/021: DockerSandbox against real daemons. Each job builds docker/sandbox.Dockerfile, runs the
+    # preflight and the self-test (python -m orkexa.dynamic.docker --self-test) and the real-container tests,
+    # which fail instead of skipping under ORKEXA_REQUIRE_DOCKER=1. The "refused" job proves that a rootless daemon
+    # without cpu cgroup delegation is refused. Apple Silicon (no nested virtualization) and Windows (no Linux
+    # containers on the hosted runners) cannot run here: docs/development/docker-manual-verification.md.
+    name: DockerSandbox (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: rootful, os: ubuntu-24.04, mode: rootful, experimental: false }
+          - { name: rootless, os: ubuntu-24.04, mode: rootless, experimental: false }
+          - { name: rootless without cpu delegation is refused, os: ubuntu-24.04, mode: refused, experimental: false }
+          - { name: podman, os: ubuntu-24.04, mode: podman, experimental: false }
+          - { name: rootful arm64, os: ubuntu-24.04-arm, mode: rootful, experimental: false }
+          - { name: colima macOS x86-64, os: macos-15-intel, mode: colima, experimental: true }
     env:
-      ORKEXA_REQUIRE_DOCKER: "1"
+      ORKEXA_REQUIRE_DOCKER: ${{ matrix.mode == 'refused' && '0' || '1' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,5 +77,86 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
-      - run: docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
-      - run: pytest -v tests/test_docker_sandbox.py tests/anthropic/test_dynamic_sandbox.py
+
+      - name: Delegate cgroup controllers to the runner user
+        if: matrix.mode == 'rootless' || matrix.mode == 'refused'
+        run: |
+          set -euo pipefail
+          # rootless: cpu, memory and pids for the user's containers; refused: no cpu (systemd delegates pids to
+          # every user manager anyway), so the daemon cannot enforce --cpus and the preflight must refuse it.
+          if [ "${{ matrix.mode }}" = rootless ]; then controllers="cpu cpuset io memory pids"; else controllers="memory pids"; fi
+          sudo mkdir -p /etc/systemd/system/user@.service.d
+          printf '[Service]\nDelegate=\nDelegate=%s\n' "$controllers" | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+          sudo systemctl daemon-reload
+          # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor; rootlesskit needs them.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update -q
+          sudo apt-get install -y -q uidmap dbus-user-session
+          sudo apt-get install -y -q docker-ce-rootless-extras || {
+            curl -fsSL https://get.docker.com/rootless | FORCE_ROOTLESS_INSTALL=1 SKIP_IPTABLES=1 sh
+            echo "$HOME/bin" >> "$GITHUB_PATH"
+          }
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl restart "user@$(id -u).service"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+          delegated="$(cat "/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers")"
+          echo "delegated controllers: $delegated"
+          if [ "${{ matrix.mode }}" = refused ]; then
+            case " $delegated " in *" cpu "*) echo "cpu is still delegated"; exit 1;; esac
+          else
+            for c in cpu memory pids; do case " $delegated " in *" $c "*) ;; *) echo "$c is not delegated"; exit 1;; esac; done
+          fi
+      - name: Start rootless Docker
+        if: matrix.mode == 'rootless' || matrix.mode == 'refused'
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/bin:$PATH"
+          dockerd-rootless-setuptool.sh install --force --skip-iptables
+          echo "DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock" >> "$GITHUB_ENV"
+      - name: Start Podman's Docker API
+        if: matrix.mode == 'podman'
+        run: |
+          set -euo pipefail
+          podman --version
+          sudo sh -c 'nohup podman system service --time=0 unix:///run/podman-ci.sock > /tmp/podman-service.log 2>&1 &'
+          for _ in $(seq 30); do [ -S /run/podman-ci.sock ] && break; sleep 1; done
+          sudo chmod 666 /run/podman-ci.sock
+          echo "DOCKER_HOST=unix:///run/podman-ci.sock" >> "$GITHUB_ENV"
+      - name: Start Colima
+        if: matrix.mode == 'colima'
+        run: |
+          set -euo pipefail
+          brew install colima docker
+          colima start --vm-type vz --cpu 2 --memory 4 || colima start --vm-type qemu --cpu 2 --memory 4
+          echo "DOCKER_HOST=unix://$HOME/.colima/default/docker.sock" >> "$GITHUB_ENV"
+
+      - name: Daemon
+        run: |
+          docker version
+          docker info
+          python -m orkexa.dynamic.docker --preflight --json || true
+      - name: Build the sandbox image
+        if: matrix.mode != 'refused'
+        run: |
+          if [ "${{ matrix.mode }}" = podman ]; then
+            sudo podman build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
+          else
+            docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .
+          fi
+      - name: Self-test
+        if: matrix.mode != 'refused'
+        run: python -m orkexa.dynamic.docker --self-test --json
+      - name: Real-container tests
+        if: matrix.mode != 'refused'
+        run: pytest -v -rs -m docker tests/test_docker_sandbox.py tests/anthropic/test_dynamic_sandbox.py
+      - name: The daemon without delegation is refused
+        if: matrix.mode == 'refused'
+        run: |
+          set -euo pipefail
+          docker pull -q python:3.12-slim && docker tag python:3.12-slim orkexa-sandbox
+          python tests/docker_refusal_check.py
+          if python -m orkexa.dynamic.docker --self-test; then echo "the self-test must fail here"; exit 1; fi
+      - name: No sandbox container is left
+        if: always() && matrix.mode != 'refused'
+        run: test -z "$(docker ps -a -q --filter label=org.orkexa.sandbox)"

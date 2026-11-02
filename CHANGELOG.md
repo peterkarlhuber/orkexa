@@ -40,6 +40,52 @@ First release of Orkexa.
   between the Anthropic API and Claude on Bedrock, EU data residency with an example
   SCP, invocation logging and Bedrock prices.
 
+### Changed: Docker sandbox proves its host before code runs (ORK-019 to ORK-021)
+
+* New `orkexa.dynamic.docker`: `inspect_host()` reads `docker info`/`docker version`
+  (and the native `podman info`) into a `DockerHost`; `preflight()` refuses a daemon
+  with the reason codes `os-type` (no Linux containers), `limits` (no `MemoryLimit`,
+  `PidsLimit`, `CpuCfsQuota` or `CpuCfsPeriod`, e.g. rootless without cgroup
+  delegation), `seccomp` (none or `unconfined`) and `rootless-cgroup` (rootless on
+  cgroup v1). The engine's name is reported, never trusted. `host_fingerprint()`.
+* `DockerSandbox.self_test()` runs one container of exactly the sandbox's shape and
+  checks user 65534, `CapEff`/`CapPrm`/`CapBnd` 0, `NoNewPrivs` 1, `Seccomp` 2, only
+  `lo`, a read-only root, `noexec`/`nosuid`/`nodev` `/tmp` and `/work`, the cgroup v2
+  `memory.max`, `memory.swap.max`, `pids.max` and `cpu.max`, `RLIMIT_NOFILE`,
+  `RLIMIT_FSIZE`, `RLIMIT_CORE`, the tmpfs sizes and the environment (only the
+  engine's and the image's own variables; secret-like image variables are refused).
+  cgroup v1 is refused (reason `self-test`). A pass is remembered per daemon
+  fingerprint, image id and shape. `DockerSandbox.probe()` and `available()` (same
+  signatures; `available()` gains an optional `image`) are true only after preflight
+  and self-test, and every run refuses otherwise. `clear_self_test_cache()`.
+* One container shape for every call: `ContainerLimits` and `run_args()` add
+  `--pull never`, `--ipc private`, `--shm-size`, `--ulimit nofile/fsize/core`,
+  `--log-driver none`, `nodev` and a tmpfs `/work` (uid 65534, mode 0700), and the
+  labels `org.orkexa.sandbox=<owner>` and `org.orkexa.deadline=<epoch>`; no `-v`, no
+  `-e`. Calls run the checked image by its id (`resolve_image_id()`); `pin_base()`
+  pulls base images only by digest and checks `RepoDigests`.
+* `DockerSandbox(transport="stdin")` is the new default: code, payload and the runner
+  modules (`runner_files()`, `runner_fingerprint()`, `copy_runner()`) travel in a JSON
+  envelope on stdin, so nothing of the host's file system is mounted and the daemon
+  may run in a VM or on another host. `transport="bind"` keeps the old mounts and
+  emits a `DeprecationWarning`. New `owner=` (the label value).
+* `DockerSandbox(environ=...)`: the environment of every `docker` CLI process the
+  sandbox starts (preflight, image inspection, self-test, runs, stop, reap), e.g. only
+  `PATH`, `HOME` and `DOCKER_HOST`; default `None` inherits this process's. It never
+  reaches the container.
+* `Sandbox.cancel()` and timeouts kill and remove the call's container by name;
+  `list_sandbox_containers()`, `reap()` and `DockerSandbox.reap()` remove containers
+  past their deadline label (after a crash of the host process).
+* `python -m orkexa.dynamic.docker --self-test` (also `--preflight`, `--reap`,
+  `--json`) checks a computer; see `docs/development/docker-manual-verification.md`.
+* CI: the `docker` job of the `Platforms` workflow is a matrix of rootful and
+  rootless Docker (cgroup delegation of cpu, memory and pids) on ubuntu-24.04, a
+  rootless daemon without cpu/pids delegation that must be refused, Podman through
+  `podman system service`, rootful Docker on ubuntu-24.04-arm and a non-blocking
+  Colima job on macos-15-intel. The real-container tests (pytest marker `docker`:
+  self-test, fork bomb, OOM kill, network, read-only root, file-size limit, cancel,
+  reaper) fail instead of skipping with `ORKEXA_REQUIRE_DOCKER=1`.
+
 ### Fixed: sandbox output is bounded in the host
 
 * `SubprocessSandbox` and `DockerSandbox` read the runner's output with

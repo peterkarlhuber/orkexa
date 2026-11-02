@@ -62,3 +62,26 @@ later is corrected by `capabilities=` until Orkexa is updated.
 
 The test matrix lives in `tests/contract/test_contract.py` (11 scenarios × 6 adapters
 plus cross-provider continuation into every other adapter).
+
+## Docker sandbox hosts
+
+`DockerSandbox` runs only on a daemon that passes the preflight and the in-container
+self-test (`python -m orkexa.dynamic.docker --self-test`); the engine's name is never a
+reason to trust it. "CI" = the `docker` jobs of the `Platforms` workflow run the
+self-test and the real-container tests on every push; "unverified in CI" = no hosted
+runner can run it, so it is checked with the
+[manual checklist](development/docker-manual-verification.md).
+
+| Host | Status | Notes |
+| --- | --- | --- |
+| Docker Engine, rootful, Linux x86-64 (ubuntu-24.04) | CI | cgroup v2 |
+| Docker Engine, rootful, Linux arm64 (ubuntu-24.04-arm) | CI | cgroup v2 |
+| Docker Engine, rootless, Linux x86-64 | CI | needs cpu, memory and pids delegated to the user |
+| Docker Engine, rootless without cpu delegation | CI: refused | reason `limits` |
+| Podman (`podman system service`, Docker API) | CI | rootful service in CI; rootless needs delegation like Docker |
+| Colima, macOS x86-64 (macos-15-intel) | CI, non-blocking | nested virtualization on hosted runners is not guaranteed |
+| Docker Desktop, macOS arm64 | unverified in CI | refused if it reports an unconfined seccomp default |
+| Docker Desktop, Windows (WSL2 backend) | unverified in CI | Linux containers only; Windows containers are refused (`os-type`) |
+| Colima, macOS arm64 | unverified in CI | |
+| OrbStack, macOS | unverified in CI | |
+| Any daemon on cgroup v1 | refused | rootless: `rootless-cgroup`; rootful: `self-test` (limits cannot be verified) |
