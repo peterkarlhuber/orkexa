@@ -42,6 +42,13 @@ def test_docs_serve_the_same_brand_assets(name: str) -> None:
     assert (ROOT / "docs" / "assets" / "branding" / name).read_bytes() == (BRANDING / name).read_bytes()
 
 
+def test_the_social_preview_has_the_github_size() -> None:
+    # PNG IHDR: width and height are the big-endian 32-bit integers at bytes 16..24.
+    header = (BRANDING / "social-preview.png").read_bytes()[:24]
+    assert header[:8] == b"\x89PNG\r\n\x1a\n"
+    assert (int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")) == (1280, 640)
+
+
 # ---- links and community files ---------------------------------------------------------------
 
 MARKDOWN = [

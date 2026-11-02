@@ -2,8 +2,9 @@
 
 ``derive_branding.py`` (vendored unchanged from the brand kit, shared with the other
 products) does every pixel operation. This wrapper only picks the files the repository
-uses, lays the light lockup out as the 1280 x 640 social preview, and copies the web
-assets into ``docs/assets/branding/`` because MkDocs only serves files below ``docs/``.
+uses, renders the 1280 x 640 social preview with the shared ``social_preview.py`` template
+and copies the web assets into ``docs/assets/branding/`` because MkDocs only serves files
+below ``docs/``.
 Run from the repository root with Pillow and NumPy:
 
     uv run --with pillow --with numpy python assets/branding/build.py
@@ -16,13 +17,12 @@ import shutil
 import sys
 import tempfile
 
-from PIL import Image
-
 HERE = Path(__file__).resolve().parent
 DOCS = HERE.parent.parent / "docs" / "assets" / "branding"
 
 sys.path.insert(0, str(HERE))
 import derive_branding  # noqa: E402  (vendored next to this file)
+import social_preview  # noqa: E402  (vendored next to this file)
 
 PRODUCT = "orkexa"
 
@@ -36,9 +36,8 @@ KEPT = (
     "apple-touch-icon.png",
 )
 
-#: GitHub's recommended social preview size, and the lockup width on it (generous margin).
-SOCIAL_SIZE = (1280, 640)
-SOCIAL_LOCKUP_WIDTH = 800
+#: One-line caption on the GitHub social preview.
+SOCIAL_CAPTION = "One agent runtime for every major model provider"
 
 
 def main() -> int:
@@ -52,13 +51,9 @@ def main() -> int:
         for name in KEPT:
             shutil.copyfile(out / name, HERE / name)
 
-    # Social preview: the light lockup, derived by the same script, centred on white.
-    variants = derive_branding.variants(PRODUCT, HERE)
-    lockup = derive_branding.lockup(variants["light"], SOCIAL_LOCKUP_WIDTH)
-    social = Image.new("RGBA", SOCIAL_SIZE, (255, 255, 255, 255))
-    offset = ((SOCIAL_SIZE[0] - lockup.width) // 2, (SOCIAL_SIZE[1] - lockup.height) // 2)
-    social.alpha_composite(lockup, offset)
-    social.convert("RGB").save(HERE / "social-preview.png", optimize=True)
+    # Social preview: the shared 1280 x 640 template (social_preview.py, same in every product repo).
+    social = social_preview.compose(PRODUCT, HERE, SOCIAL_CAPTION, None)
+    social.save(HERE / "social-preview.png", optimize=True)
 
     DOCS.mkdir(parents=True, exist_ok=True)
     for name in KEPT:

@@ -15,6 +15,10 @@ First release of Orkexa.
   `build.py` regenerates every derived file from them. The old logo
   (`orkexa-logo-original.png`) and its derivatives, including `orkexa-mark.png`, are
   removed.
+* The GitHub social preview (`assets/branding/social-preview.png`, 1280 × 640) now uses the
+  template shared with Nodestro and Axentra (`social_preview.py`): the white-wordmark lockup
+  on a dark background with a blue glow and the caption "One agent runtime for every major
+  model provider".
 
 ### Changed: the Docker self-test checks mounts, seccomp and AppArmor (security review DS-8, DS-9, DS-10)
 
