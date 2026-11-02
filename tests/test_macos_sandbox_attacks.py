@@ -427,7 +427,10 @@ return json.dumps(r)
     assert not leaked, leaked
     # Documented (MS-2, MS-3, MS-8): the PID list and System V IPC cannot be denied by Seatbelt; segments are
     # removed after the call; uname() needs the host name.
+    # kill(-1) succeeds because it may signal the caller itself; that no other process got the signal is
+    # asserted above with the helper's SIGCONT handler.
     expected = (
+        "kill(-1, SIGCONT) all user processes",
         "sysctl kern.hostname (info)",
         "sysctl kern.osversion (info)",
         "proc_listallpids",
