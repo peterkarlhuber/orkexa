@@ -68,11 +68,13 @@ None known.
 
 ### ORK-001 · Sandbox calls cannot be cancelled
 
-- **Priority:** P2 Medium · **Status:** Open · **Refs:** #22, internal backend audit 2026-11-01, finding B-03
+- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #28) · **Refs:** #22, internal backend audit 2026-11-01, finding B-03
 - **What:** `SubprocessSandbox` and `DockerSandbox` run until their timeout after the caller cancels; the `Sandbox`
   base class has no cancellation hook (`src/orkexa/dynamic/sandbox.py`). Nodestro's own Linux sandbox stops at once.
-- **Next step:** Add a cancellation signal to the sandbox API, kill the process and remove the container, with tests.
-- **Depends on:** nodestro-runtime must pass its cancellation into Orkexa sandboxes afterwards.
+- **Done:** `orkexa.dynamic.lifecycle` (`cancel_scope`, `bind_cancel`, `SandboxCancelled`) and `Sandbox.cancel()`;
+  `run_bounded` kills the process group, `DockerSandbox` removes the container. Tested on Linux, macOS and
+  Windows (`tests/test_sandbox_lifecycle.py`) and against a real daemon (`tests/test_docker_sandbox.py`).
+  nodestro-runtime's `sandbox_cancel` uses the same context (nodestro-runtime #78).
 
 ### ORK-002 · Registries do not see records written by other processes
 
@@ -121,10 +123,11 @@ None known.
 
 ### ORK-006 · DockerSandbox end-to-end test never runs in CI
 
-- **Priority:** P2 Medium · **Status:** Open · **Refs:** #23, internal backend audit 2026-11-01 (B-01, test gaps)
+- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #28) · **Refs:** #23, internal backend audit 2026-11-01 (B-01, test gaps)
 - **What:** The only real-container test is skipped because no CI job builds the `orkexa-sandbox` image; the
   container paths of bounded output and cleanup are tested only against a mocked `docker` CLI.
-- **Next step:** Add a CI job that builds `docker/sandbox.Dockerfile` and runs the Docker tests.
+- **Done:** The `docker` job of the `Platforms` workflow builds the image and runs the Docker tests with
+  `ORKEXA_REQUIRE_DOCKER=1` (a missing daemon or image fails the job instead of skipping).
 
 ## Platform coverage
 
@@ -141,10 +144,27 @@ None known.
 
 ### ORK-013 · CI runs on Linux only
 
-- **Priority:** P3 Low · **Status:** Open
+- **Priority:** P3 Low · **Status:** Done (2026-11-02, #28)
 - **What:** CI uses Ubuntu only. macOS (no reliable `RLIMIT_AS`, sandbox limits) and Windows (POSIX permission
   tests are skipped; owner-private storage relies on ACLs) are untested.
-- **Next step:** Add a macOS and a Windows job for the offline suite, at least before the first release.
+- **Done:** The `Platforms` workflow runs the offline suite on macOS arm64 and x86-64 and Windows x64 and ARM64
+  (ARM64: no sqlite-vec wheel, cryptography pinned to 46.0.3). On macOS the experimental `MacOSSandbox` must pass.
+
+### ORK-014 · The macOS sandbox is experimental
+
+- **Priority:** P2 Medium · **Status:** Open · **Refs:** #28
+- **What:** `MacOSSandbox` (Seatbelt `sandbox_init`, deny-default profile, rlimits, memory watchdog) passes its
+  self-test and attack tests on macOS 26 arm64 in CI, but has had no independent security review. `sandbox_init`
+  is deprecated API; memory is limited by a watchdog (`proc_pid_rusage`), not by the kernel.
+- **Next step:** Independent review; test on more macOS versions and Intel; then decide on release
+  (Nodestro does not use it until then).
+
+### ORK-015 · No native sandbox on Windows
+
+- **Priority:** P3 Low · **Status:** Open
+- **What:** Windows has no isolating backend besides Docker. Options evaluated 2026-11-02: AppContainer + Job
+  Object of our own, or Microsoft's MXC (`wxc-exec`, Windows 11 24H2+) inside a Job Object.
+- **Next step:** Separate decision and implementation; Docker is the Windows path until then.
 
 ## Documentation
 
@@ -208,11 +228,11 @@ None known.
 
 | This repo item | Other repo | Other item | Relation |
 |---|---|---|---|
-| ORK-001 | nodestro-runtime | audit B-03 (runtime side) | Runtime passes cancellation into Orkexa sandboxes once ORK-001 lands |
+| ORK-001 | nodestro-runtime | audit B-03 (runtime side) | Done: runtime #78 uses Orkexa's cancel context |
 | ORK-002 | nodestro-runtime | #57 (registry refresh workaround) | Runtime can drop its workaround after ORK-002 |
 | ORK-005 | nodestro-runtime | `require_session` guard | Runtime already enforces it; ORK-005 would add a second layer |
 | ORK-007 | nodestro-runtime | RT-022 (supported Python versions) | One platform decision, held in runtime; runtime depends on Orkexa |
-| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `3467940`) | Changes reach Nodestro only through a coordinated pin cascade |
+| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `544ef92`) | Changes reach Nodestro only through a coordinated pin cascade |
 
 ## Maintaining this file
 
