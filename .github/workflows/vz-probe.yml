@@ -1,0 +1,45 @@
+name: VZ feasibility probe
+
+# Review branch only: can GitHub's macOS runners boot a Linux guest with Virtualization.framework?
+on:
+  push:
+    branches: [claude/project-thread-qz41p9]
+    paths: [review/vz/**, .github/workflows/vz-probe.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: vz (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15, macos-15-intel, macos-14]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: System
+        run: |
+          sw_vers; uname -m; sysctl -n machdep.cpu.brand_string
+          sysctl kern.hv_support kern.hv_vmm_present 2>/dev/null || true
+          sysctl -a 2>/dev/null | grep -i -E "hv_|vmm" | head -20 || true
+      - name: Build probe
+        run: |
+          swiftc -O -o vzprobe review/vz/vzprobe.swift -framework Virtualization
+          codesign --force --sign - --entitlements review/vz/vz.entitlements vzprobe
+          codesign -d --entitlements - vzprobe
+      - name: Guest kernel (Alpine virt netboot)
+        run: |
+          arch=$(uname -m); [ "$arch" = arm64 ] && arch=aarch64
+          base=https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/$arch/netboot
+          curl -fsSLo vmlinuz "$base/vmlinuz-virt" && curl -fsSLo initramfs "$base/initramfs-virt"
+          file vmlinuz initramfs
+          if [ "$arch" = aarch64 ] && file vmlinuz | grep -q gzip; then mv vmlinuz k.gz && gunzip -c k.gz > vmlinuz; fi
+          file vmlinuz
+      - name: Boot
+        run: ./vzprobe vmlinuz initramfs 40
