@@ -20,20 +20,19 @@
   --md-accent-fg-color: #5aa9ff;
 }
 
-/* The header logo is the symbol on its own light tile; keep it a little larger. */
+/* The header logo is the symbol for dark surfaces (the header is navy in both schemes). */
 .md-header__button.md-logo img {
   height: 1.6rem;
-  border-radius: 0.3rem;
 }
 
-/* Landing page hero: the full logo on its light background, also in dark mode. */
+/* Landing page hero: the lockup; index.md switches between the light and the on-dark
+   variant with Material's #only-light / #only-dark image suffixes. */
 .orkexa-hero {
   text-align: center;
   margin: 0 0 1.5rem;
 }
 
 .orkexa-hero img {
-  width: 320px;
+  width: 400px;
   max-width: 100%;
-  border-radius: 0.6rem;
 }

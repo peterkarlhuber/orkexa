@@ -36,7 +36,7 @@ done by the repository owner by hand:
    `pytest -m packaging tests/packaging --noconftest`.
 4. The published description is `README.md` with the logo and relative links
    rewritten to absolute URLs on the default branch (`hatch-fancy-pypi-readme`, see
-   `pyproject.toml`); `tests/packaging/test_artifacts.py` checks that no relative path
+   `pyproject.toml`; PyPI has no dark mode, so the hero keeps only the light logo); `tests/packaging/test_artifacts.py` checks that no relative path
    is left and that the logo URL names a committed file. These URLs resolve only for a
    **public** repository: make the repository public before uploading, then open
    `https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/assets/branding/orkexa-logo.png`

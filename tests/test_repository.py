@@ -15,17 +15,28 @@ BRANDING = ROOT / "assets" / "branding"
 # about the repository checkout only.
 pytestmark = pytest.mark.skipif(not (ROOT / ".github").is_dir(), reason="needs a repository checkout")
 
-# sha256 of the official logo as supplied; the master copy must never change.
-ORIGINAL_LOGO_SHA256 = "2f0ab826a322613a297d5aafa7120356726eccd80dd5ffa6096446b514e69289"
+# sha256 of the official logo masters as supplied; the master copies must never change.
+MASTER_SHA256 = {
+    "orkexa-logo-transparent.png": "7a925b11768bf68a69fcc784370d175046706d12b3de5fa5dd0f86352bcf942a",
+    "orkexa-logo-white.png": "096952e28a2dd85018f8cafba52911167c2913b66cc2f074276b399e67ff98ee",
+}
 
 
-def test_the_original_logo_is_unchanged() -> None:
-    digest = hashlib.sha256((BRANDING / "orkexa-logo-original.png").read_bytes()).hexdigest()
-    assert digest == ORIGINAL_LOGO_SHA256
+@pytest.mark.parametrize("name", sorted(MASTER_SHA256))
+def test_the_logo_masters_are_unchanged(name: str) -> None:
+    assert hashlib.sha256((BRANDING / name).read_bytes()).hexdigest() == MASTER_SHA256[name]
 
 
 @pytest.mark.parametrize(
-    "name", ["orkexa-logo.png", "orkexa-mark.png", "favicon.ico", "favicon-32.png", "apple-touch-icon.png"]
+    "name",
+    [
+        "orkexa-logo.png",
+        "orkexa-logo-on-dark.png",
+        "orkexa-mark-on-dark-128.png",
+        "favicon.ico",
+        "favicon-32.png",
+        "apple-touch-icon.png",
+    ],
 )
 def test_docs_serve_the_same_brand_assets(name: str) -> None:
     assert (ROOT / "docs" / "assets" / "branding" / name).read_bytes() == (BRANDING / name).read_bytes()

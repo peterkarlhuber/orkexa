@@ -1,38 +1,45 @@
 # Orkexa brand assets
 
-`orkexa-logo-original.png` is the official Orkexa logo as supplied (1254 × 1254 px,
-RGB raster). It is kept byte for byte; every other file here is derived from it by
-`build.py` and must not be edited by hand.
+`orkexa-logo-transparent.png` and `orkexa-logo-white.png` are the official Orkexa logo
+masters as supplied (2048 × 640 px each: symbol left, black wordmark right; the white
+file is the transparent one flattened on white). They are kept byte for byte
+(`tests/test_repository.py` checks their sha256). Every other image here is derived from
+the transparent master and must not be edited by hand.
 
 | File | Size | Use |
 |------|------|-----|
-| `orkexa-logo-original.png` | 1254 × 1254 | master copy, do not modify |
-| `orkexa-logo.png` | 640 × 496 | README hero and docs landing page (symbol and wordmark) |
-| `orkexa-mark.png` | 256 × 256 | docs header logo (symbol on a rounded light tile) |
-| `favicon.ico` | 16, 32, 48 | browser favicon |
+| `orkexa-logo-transparent.png` | 2048 × 640 | master, transparent background, do not modify |
+| `orkexa-logo-white.png` | 2048 × 640 | master, white background, do not modify |
+| `orkexa-logo.png` | 960 × 166 | lockup with black wordmark for light surfaces: README hero, docs landing page (light scheme), PyPI description |
+| `orkexa-logo-on-dark.png` | 960 × 166 | lockup with white wordmark for dark surfaces: README hero (dark mode), docs landing page (dark scheme) |
+| `orkexa-mark-on-dark-128.png` | 128 × 128 | symbol for dark surfaces: docs header logo (the header bar is navy in both schemes) |
+| `favicon.ico` | 16, 32, 48 | browser favicon (symbol on a rounded white tile) |
 | `favicon-32.png` | 32 × 32 | PNG favicon (docs site) |
-| `apple-touch-icon.png` | 180 × 180 | home-screen icon |
-| `social-preview.png` | 1280 × 640 | GitHub social preview (uploaded manually in the repository settings) |
+| `apple-touch-icon.png` | 180 × 180 | home-screen icon (opaque white tile) |
+| `social-preview.png` | 1280 × 640 | GitHub social preview: the light lockup centered on white (uploaded manually in the repository settings) |
 
 ## Rules
 
-* The derivatives are crops, scaled copies and padded copies of the original on its own
-  light background. The artwork, its proportions and its colors are not changed;
-  no part of it is redrawn.
-* There is no vector (SVG) version. A traced vector would be a reinterpretation of the
-  raster artwork and is not provided; an official vector master would have to come from
+* Nothing is redrawn. `derive_branding.py` (the brand kit's derivation script, vendored
+  unchanged and shared with the other products) only removes the light fringe of the
+  background knockout, recolors the black wordmark to white for dark surfaces, lifts
+  the darkest navy tones of the symbol for dark surfaces (hue and saturation kept), trims,
+  pads and scales.
+* Light surfaces use `orkexa-logo.png`, dark surfaces `orkexa-logo-on-dark.png`; the
+  switch follows the surface's own theme mechanism (`<picture>` with
+  `prefers-color-scheme` in the README, `#only-light` / `#only-dark` in MkDocs Material).
+  No CSS filters or boxes behind the logo.
+* Below about 40 px height, use the symbol instead of the full lockup.
+* There is no vector (SVG) version; an official vector master would have to come from
   the logo's designer.
-* There is no separate dark variant. On dark backgrounds the logo is shown on its light
-  tile or light background, which keeps the navy wordmark legible without recoloring it.
-* Brand colors sampled from the logo: navy `#16243B` (wordmark, symbol), blue
-  `#0079FE` (accent). The docs theme uses these two colors.
 
 ## Regenerating
 
 ```bash
-cd assets/branding
-uv run --with pillow python build.py   # or: pip install pillow && python build.py
+uv run --with pillow --with numpy python assets/branding/build.py
 ```
 
-`build.py` also copies the web assets into `docs/assets/branding/`, because MkDocs only
-serves files below `docs/`. `tests/test_repository.py` checks that the copies match.
+`build.py` checks the masters, runs `derive_branding.py`, keeps the files listed above,
+lays out `social-preview.png` and copies the web assets into `docs/assets/branding/`,
+because MkDocs only serves files below `docs/`. `tests/test_repository.py` checks that the
+copies match.

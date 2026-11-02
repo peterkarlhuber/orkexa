@@ -4,6 +4,18 @@
 
 First release of Orkexa.
 
+### Changed: new official logo
+
+* The README, the documentation site (header, landing page, favicon) and the social
+  preview use the new official Orkexa logo, with a white-wordmark variant on dark
+  surfaces (README in dark mode, docs in the dark scheme, the navy docs header). The
+  published PyPI description keeps the light logo only.
+* `assets/branding/` holds the two new masters (`orkexa-logo-transparent.png`,
+  `orkexa-logo-white.png`) and the shared derivation script `derive_branding.py`;
+  `build.py` regenerates every derived file from them. The old logo
+  (`orkexa-logo-original.png`) and its derivatives, including `orkexa-mark.png`, are
+  removed.
+
 ### Added: pausing a turn before a model request; adjustable budgets
 
 * `RequestSuspended(reason, ref)` (exported from `orkexa`): a usage tracker may raise it
