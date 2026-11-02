@@ -160,8 +160,14 @@ def _from_docker_info(info: Mapping[str, Any], version: Mapping[str, Any]) -> Do
     server = _dict(version.get("Server"))
     cgroup = info.get("CgroupVersion")
     swap = info.get("SwapLimit")
+    engine = _engine_of(info, version)
+    cpu_quota, cpu_period = _reported(info, "CpuCfsQuota"), _reported(info, "CpuCfsPeriod")
+    if engine == "podman":
+        # Podman's Docker-compatible info reports ``false`` for both even where it enforces ``--cpus`` (seen
+        # with rootful Podman 4.9.3 on cgroup v2), so its answer counts as unreported: the self-test decides.
+        cpu_quota = cpu_period = None
     return DockerHost(
-        engine=_engine_of(info, version),
+        engine=engine,
         os_type=str(info.get("OSType", "")),
         arch=str(info.get("Architecture", "")),
         rootless="rootless" in options,
@@ -169,8 +175,8 @@ def _from_docker_info(info: Mapping[str, Any], version: Mapping[str, Any]) -> Do
         cgroup_driver=str(info["CgroupDriver"]) if info.get("CgroupDriver") else None,
         memory_limit=info.get("MemoryLimit") is True,
         pids_limit=info.get("PidsLimit") is True,
-        cpu_cfs_quota=_reported(info, "CpuCfsQuota"),
-        cpu_cfs_period=_reported(info, "CpuCfsPeriod"),
+        cpu_cfs_quota=cpu_quota,
+        cpu_cfs_period=cpu_period,
         seccomp_profile=(seccomp.get("profile") or "default") if seccomp is not None else None,
         apparmor="apparmor" in options,
         selinux="selinux" in options,

@@ -201,7 +201,10 @@ def test_a_failing_info_is_unreachable_even_with_json(tmp_path: Path) -> None:
 
 
 def test_unreported_cpu_limits_are_left_to_the_self_test_only_on_cgroup_v2(fake_docker: FakeDocker) -> None:
-    """Podman's Docker-compatible ``info`` omits ``CpuCfsQuota``/``CpuCfsPeriod`` (seen on Podman 4.9.3)."""
+    """Podman's Docker-compatible ``info`` reports ``CpuCfsQuota``/``CpuCfsPeriod`` as false even where it
+    enforces ``--cpus`` (rootful Podman 4.9.3 on cgroup v2); other daemons may leave the keys out."""
+    fake_docker.host("rootful-cgroup2", CpuCfsQuota=None, CpuCfsPeriod=None)
+    assert preflight(inspect_host(str(fake_docker.path))).reason == "limits"  # null is not "left out"
     fake_docker.host("podman-compat")
     host = inspect_host(str(fake_docker.path))
     assert host.cpu_cfs_quota is None and host.cpu_cfs_period is None
@@ -210,3 +213,6 @@ def test_unreported_cpu_limits_are_left_to_the_self_test_only_on_cgroup_v2(fake_
     assert not checked.available and checked.reason == "limits" and "CpuCfsQuota" in checked.detail
     reported_false = preflight(replace(host, cpu_cfs_quota=False))
     assert not reported_false.available and reported_false.reason == "limits"
+    # A Docker Engine that says false is believed and refused; only Podman's answer is not.
+    fake_docker.host("rootful-cgroup2", CpuCfsQuota=False)
+    assert preflight(inspect_host(str(fake_docker.path))).reason == "limits"

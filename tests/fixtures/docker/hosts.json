@@ -386,7 +386,9 @@
    ],
    "ServerVersion": "4.9.3",
    "SwapLimit": true,
-   "Warnings": null
+   "Warnings": null,
+   "CpuCfsPeriod": false,
+   "CpuCfsQuota": false
   },
   "version": {
    "Client": {
