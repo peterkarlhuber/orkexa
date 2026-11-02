@@ -1,0 +1,1086 @@
+{
+ "colima": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "cgroupfs",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "colima",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=seccomp,profile=builtin",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "docker-desktop": {
+  "info": {
+   "Architecture": "aarch64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "cgroupfs",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.10.14-linuxkit",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "docker-desktop",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Docker Desktop",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=seccomp,profile=builtin",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "arm64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "arm64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Desktop 4.35.1 (173168)"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "docker-desktop-unconfined": {
+  "info": {
+   "Architecture": "aarch64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "cgroupfs",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.10.14-linuxkit",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "docker-desktop",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Docker Desktop",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=seccomp,profile=unconfined",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "arm64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "arm64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Desktop 4.35.1 (173168)"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "no-seccomp": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "orbstack": {
+  "info": {
+   "Architecture": "aarch64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "orbstack",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "OrbStack",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=seccomp,profile=builtin",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "arm64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "arm64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "podman-compat": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=seccomp,profile=default",
+    "name=rootless"
+   ],
+   "ServerVersion": "4.9.3",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "APIVersion": "4.9.3",
+       "Arch": "amd64",
+       "MinAPIVersion": "4.0.0",
+       "Os": "linux"
+      },
+      "Name": "Podman Engine",
+      "Version": "4.9.3"
+     },
+     {
+      "Name": "Conmon",
+      "Version": "conmon version 2.1.10"
+     },
+     {
+      "Name": "OCI Runtime (crun)",
+      "Version": "crun version 1.14.1"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "linux/amd64/ubuntu-24.04"
+    },
+    "Version": "4.9.3"
+   }
+  }
+ },
+ "podman-native": {
+  "info": {
+   "host": {
+    "arch": "amd64",
+    "cgroupControllers": [
+     "cpu",
+     "io",
+     "memory",
+     "pids"
+    ],
+    "cgroupManager": "systemd",
+    "cgroupVersion": "v2",
+    "distribution": {
+     "distribution": "ubuntu",
+     "version": "24.04"
+    },
+    "hostname": "runner-host",
+    "os": "linux",
+    "security": {
+     "apparmorEnabled": false,
+     "rootless": true,
+     "seccompEnabled": true,
+     "seccompProfilePath": "/usr/share/containers/seccomp.json",
+     "selinuxEnabled": false
+    }
+   },
+   "version": {
+    "APIVersion": "4.9.3",
+    "Version": "4.9.3"
+   }
+  },
+  "version": null
+ },
+ "podman-native-cgroup1": {
+  "info": {
+   "host": {
+    "arch": "amd64",
+    "cgroupControllers": [],
+    "cgroupManager": "cgroupfs",
+    "cgroupVersion": "v1",
+    "hostname": "runner-host",
+    "os": "linux",
+    "security": {
+     "apparmorEnabled": false,
+     "rootless": true,
+     "seccompEnabled": true,
+     "selinuxEnabled": false
+    }
+   },
+   "version": {
+    "Version": "4.9.3"
+   }
+  },
+  "version": null
+ },
+ "podman-native-no-delegation": {
+  "info": {
+   "host": {
+    "arch": "amd64",
+    "cgroupControllers": [
+     "memory"
+    ],
+    "cgroupManager": "systemd",
+    "cgroupVersion": "v2",
+    "hostname": "runner-host",
+    "os": "linux",
+    "security": {
+     "apparmorEnabled": false,
+     "rootless": true,
+     "seccompEnabled": true,
+     "selinuxEnabled": false
+    }
+   },
+   "version": {
+    "Version": "4.9.3"
+   }
+  },
+  "version": null
+ },
+ "rootful-arm64": {
+  "info": {
+   "Architecture": "aarch64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=seccomp,profile=builtin",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "arm64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "arm64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "rootful-cgroup1": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "cgroupfs",
+   "CgroupVersion": "1",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=seccomp,profile=builtin",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "rootful-cgroup2": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=seccomp,profile=builtin",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "rootless-cgroup1": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "none",
+   "CgroupVersion": "1",
+   "Containers": 0,
+   "CpuCfsPeriod": false,
+   "CpuCfsQuota": false,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": false,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": false,
+   "SecurityOptions": [
+    "name=seccomp,profile=builtin",
+    "name=rootless",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": false,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "rootless-cgroup2": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=seccomp,profile=builtin",
+    "name=rootless",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "rootless-cgroup2-no-delegation": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": false,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": false,
+   "CpuCfsQuota": false,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": false,
+   "SecurityOptions": [
+    "name=seccomp,profile=builtin",
+    "name=rootless",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": [
+    "WARNING: No cpu cfs quota support",
+    "WARNING: No cpu cfs period support",
+    "WARNING: No pids limit support"
+   ]
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "seccomp-unconfined": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=seccomp,profile=unconfined",
+    "name=cgroupns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ },
+ "windows": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "",
+   "CgroupVersion": "",
+   "Containers": 0,
+   "CpuCfsPeriod": false,
+   "CpuCfsQuota": false,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b7a11",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": false,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "windows",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Windows Server 2022 Datacenter",
+   "PidsLimit": false,
+   "SecurityOptions": null,
+   "ServerVersion": "27.3.1",
+   "SwapLimit": false,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "windows"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "windows",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
+ }
+}

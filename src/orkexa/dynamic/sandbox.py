@@ -46,6 +46,7 @@ import warnings
 
 from ..errors import ToolExecutionError
 from .capabilities import SandboxCapabilities, SandboxProbe
+from .docker import DockerProbeError, inspect_host, preflight
 from .errors import SandboxError, UnsafeOptInWarning
 from .lifecycle import CancelCheck, SandboxCancelled, cancel_requested, current_cancel
 from .static_check import TOOL_MODULE
@@ -592,36 +593,51 @@ class DockerSandbox(Sandbox):
 
     @classmethod
     def probe(cls, docker: str = "docker", image: str = "orkexa-sandbox") -> SandboxProbe:
-        """Whether the Docker CLI, a reachable daemon and the sandbox image are present."""
-        if shutil.which(docker) is None:
-            return SandboxProbe("docker", False, "missing", "The docker command is not installed")
-        try:
-            info = subprocess.run([docker, "info"], capture_output=True, timeout=10, check=False)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return SandboxProbe("docker", False, "unreachable", f"docker info failed: {exc}")
-        if info.returncode != 0:
-            return SandboxProbe("docker", False, "unreachable", "The Docker daemon is not reachable")
-        try:
-            found = subprocess.run(
-                [docker, "image", "inspect", image], capture_output=True, timeout=10, check=False
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return SandboxProbe("docker", False, "image", f"Cannot inspect the image {image}: {exc}")
-        if found.returncode != 0:
-            return SandboxProbe("docker", False, "image", f"The sandbox image {image} is not built")
-        return SandboxProbe("docker", True)
+        """Whether the Docker CLI, a reachable daemon that passes :func:`~orkexa.dynamic.docker.preflight`
+        and the sandbox image are present. The daemon is judged by what it enforces, never by its name."""
+        return cls(docker=docker, image=image)._readiness()
 
     @staticmethod
     def available(docker: str = "docker") -> bool:
-        """Whether a Docker daemon is reachable."""
+        """Whether a Docker daemon is reachable and passes the preflight (it can enforce the limits)."""
         if shutil.which(docker) is None:
             return False
         try:
-            return (
-                subprocess.run([docker, "info"], capture_output=True, timeout=10, check=False).returncode == 0
-            )
-        except (OSError, subprocess.TimeoutExpired):
+            return preflight(inspect_host(docker)).available
+        except DockerProbeError:
             return False
+
+    def _readiness(self) -> SandboxProbe:
+        """The checks every run depends on: CLI, daemon, preflight, image."""
+        if shutil.which(self.docker) is None:
+            return SandboxProbe("docker", False, "missing", f"The {self.docker} command is not installed")
+        try:
+            host = inspect_host(self.docker)
+        except DockerProbeError as exc:
+            return SandboxProbe("docker", False, exc.reason, exc.detail)
+        checked = preflight(host)
+        if not checked.available:
+            return checked
+        try:
+            found = subprocess.run(
+                [self.docker, "image", "inspect", self.image], capture_output=True, timeout=10, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return SandboxProbe("docker", False, "image", f"Cannot inspect the image {self.image}: {exc}")
+        if found.returncode != 0:
+            return SandboxProbe("docker", False, "image", f"The sandbox image {self.image} is not built")
+        return checked
+
+    def _require_ready(self) -> None:
+        """Raise :class:`SandboxError` unless :meth:`_readiness` passes: nothing runs on an unproven host."""
+        ready = self._readiness()
+        if ready.available:
+            return
+        if ready.reason == "missing":
+            raise SandboxError(f"Cannot start docker: {ready.detail}. {_DOCKER_HINT}")
+        raise SandboxError(
+            f"The Docker sandbox is not available ({ready.reason}): {ready.detail}. {_DOCKER_HINT}"
+        )
 
     def command(self, workdir: Path, container_name: str) -> list[str]:
         """The ``docker run`` command line for one sandbox run."""
@@ -665,6 +681,7 @@ class DockerSandbox(Sandbox):
         ]
 
     def _execute(self, workdir: Path, request: str) -> str:
+        self._require_ready()
         name = f"orkexa-sandbox-{uuid.uuid4().hex[:12]}"
 
         def remove() -> None:
