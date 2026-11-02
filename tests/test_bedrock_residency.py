@@ -9,7 +9,7 @@ ConverseStream is called.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from botocore.stub import Stubber
@@ -61,7 +61,7 @@ def profile(
 
 
 def guardrail(cross_region: bool = False) -> dict[str, Any]:
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     response: dict[str, Any] = {
         "name": "g",
         "guardrailId": "gr-1",

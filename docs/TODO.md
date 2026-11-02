@@ -244,12 +244,14 @@ None known.
 
 ## Technical debt
 
-### ORK-007 · Python version support (3.10 end of life, 3.14 untested)
+### ORK-007 · Python 3.14 untested
 
-- **Priority:** P3 Low · **Status:** Needs decision · **Refs:** #25
-- **What:** Python 3.10 reached end of life in October 2026 and still sets the lowest supported version (and holds
-  back the docs toolchain pins); Python 3.14 is not in the CI matrix or classifiers.
-- **Next step:** Add 3.14; follow the platform decision in nodestro-runtime RT-022 on dropping 3.10.
+- **Priority:** P3 Low · **Status:** Open · **Refs:** #25, `tests/test_sandbox_policy.py`
+- **What:** Python 3.11 is the minimum since 2026-11-02 (3.10 reached end of life in October 2026). On 3.14 all
+  dependencies install and the suite passes except
+  `test_sandbox_policy.py::test_every_module_reachable_from_allowed_imports_is_reviewed`: `annotationlib` (new in
+  3.14, reached through `dataclasses` and `typing`) is not reviewed for the sandbox.
+- **Next step:** Review `annotationlib` for the sandbox policy, then add 3.14 to the CI matrix and the classifiers.
 
 ### ORK-014 · Small leftovers
 
@@ -297,7 +299,7 @@ None known.
 | ORK-001 | nodestro-runtime | audit B-03 (runtime side) | Done: runtime #78 uses Orkexa's cancel context |
 | ORK-002 | nodestro-runtime | #57 (registry refresh workaround) | Runtime can drop its workaround after ORK-002 |
 | ORK-005 | nodestro-runtime | `require_session` guard | Runtime already enforces it; ORK-005 would add a second layer |
-| ORK-007 | nodestro-runtime | RT-022 (supported Python versions) | One platform decision, held in runtime; runtime depends on Orkexa |
+| ORK-007 | nodestro-runtime | RT-022 (Python 3.14) | Runtime adds 3.14 after this review; runtime depends on Orkexa |
 | ORK-019 to ORK-021 | nodestro-runtime | R1/R2 (adopt Orkexa's container shape, re-probed sandbox status) | Runtime builds on the Orkexa API after the pin update |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `544ef92`) | Changes reach Nodestro only through a coordinated pin cascade |
 

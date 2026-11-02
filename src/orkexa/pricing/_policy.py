@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from ..errors import PricingError
 from ._cost import CostBreakdown, PriceReference
@@ -53,7 +53,7 @@ class PricePolicy:
         if self.accepted_quality is not None and quality not in self.accepted_quality:
             issues.append(f"price of {label} has quality {quality!r}")
         if self.max_age is not None:
-            now = at or datetime.now(timezone.utc)
+            now = at or datetime.now(UTC)
             if checked_at is None:
                 issues.append(f"price of {label} has no check date")
             elif now - checked_at > self.max_age:

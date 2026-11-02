@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import json
 import threading
@@ -39,7 +39,7 @@ from orkexa.pricing import (
     round_cost,
 )
 
-UTC = timezone.utc
+UTC = UTC
 BUILTIN = PriceResolver(BUILTIN_SNAPSHOT)  # independent of what other tests registered
 NOW = datetime(2026, 11, 1, tzinfo=UTC)
 M = 1_000_000

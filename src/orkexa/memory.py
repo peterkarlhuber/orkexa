@@ -34,7 +34,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import os
 from pathlib import Path
 import shutil
@@ -695,7 +695,7 @@ class SQLiteMemory(MemoryBackend):
             "INSERT INTO memory_files (namespace, path, content, updated_at) VALUES (?, ?, ?, ?) "
             "ON CONFLICT (namespace, path) DO UPDATE SET content = excluded.content, "
             "updated_at = excluded.updated_at",
-            (self.namespace, key, text, datetime.now(timezone.utc).isoformat()),
+            (self.namespace, key, text, datetime.now(UTC).isoformat()),
         )
 
     def _files(self, prefix: str) -> dict[str, int]:
@@ -720,7 +720,7 @@ class SQLiteMemory(MemoryBackend):
             (
                 new,
                 len(old) + 1,
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 self.namespace,
                 old,
                 len(old) + 1,

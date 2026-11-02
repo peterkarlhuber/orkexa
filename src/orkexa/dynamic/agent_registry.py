@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import json
 import logging
 from pathlib import Path
@@ -108,7 +108,7 @@ class AgentRegistry:
             spec=spec,
             version=(versions[-1].version + 1) if versions else 1,
             status="approved",
-            created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            created_at=datetime.now(UTC).isoformat(timespec="seconds"),
             requirement=requirement,
         )
         self._save(record)  # persist first: a failed write leaves the registry unchanged

@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,7 +52,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.10"
+          python-version: "3.11"
       - run: pip install -e ".[dev]"
       # The lower bounds of pyproject.toml (pydantic 2.9 is the minimum of google-genai 2.0).
       - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "boto3==1.43.80" "botocore==1.43.80" "pydantic==2.9.0" "typing-extensions==4.14.0"

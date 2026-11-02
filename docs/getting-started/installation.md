@@ -1,6 +1,6 @@
 # Installation
 
-Orkexa needs Python 3.10 or newer. The core depends only on Pydantic; each provider
+Orkexa needs Python 3.11 or newer. The core depends only on Pydantic; each provider
 SDK is an extra.
 
 !!! note "Not yet on PyPI"

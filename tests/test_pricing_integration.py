@@ -6,7 +6,7 @@ fake provider; no network access, no API key, no paid request.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import json
 from typing import Any
@@ -42,7 +42,7 @@ from orkexa.usage import UsageRecord, record_api_usage, record_token_usage, summ
 
 from .contract.harness import GeminiHarness, OpenAIHarness
 
-UTC = timezone.utc
+UTC = UTC
 M = 1_000_000
 CHECKED = datetime.now(UTC) - timedelta(days=1)
 

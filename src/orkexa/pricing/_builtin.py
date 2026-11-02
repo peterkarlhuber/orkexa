@@ -7,7 +7,7 @@ account, region and tier. Register them, or pass your own catalog.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ._model import FeeRate, LongContextTier, ModelPrice, Tariff, TokenRates
 from ._snapshot import PriceSnapshot
@@ -16,7 +16,7 @@ __all__ = ["BUILTIN_CHECKED_AT", "BUILTIN_SNAPSHOT", "BUILTIN_SOURCE_URL", "BUIL
 
 BUILTIN_VERSION = "orkexa-builtin-2026-10-31"
 BUILTIN_SOURCE_URL = "https://platform.claude.com/docs/en/about-claude/pricing"
-BUILTIN_CHECKED_AT = datetime(2026, 10, 31, tzinfo=timezone.utc)
+BUILTIN_CHECKED_AT = datetime(2026, 10, 31, tzinfo=UTC)
 
 # (model id, input, output, 5m cache write, 1h cache write, cache read, fast mode, data residency)
 _ANTHROPIC: tuple[tuple[str, str, str, str, str, str, bool, bool], ...] = (
