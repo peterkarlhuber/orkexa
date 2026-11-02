@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import contextlib
-import errno
 import json
 import os
 import subprocess
@@ -110,6 +109,8 @@ def _report(completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return result
 
 
+#: errno values inside the (Linux) container; the host's ``errno`` module differs on macOS (EAGAIN is 35).
+LINUX_EAGAIN, LINUX_EACCES, LINUX_EFBIG, LINUX_EROFS = 11, 13, 27, 30
 LIMITS = ContainerLimits(memory_mb=128, cpus=0.5, pids=16, fsize_mb=1, lifetime_s=120)
 
 
@@ -167,11 +168,14 @@ def test_fork_bomb_hits_the_pids_limit(sandbox: DockerSandbox, owner: str) -> No
         "        os._exit(0)\n"
         "    children.append(pid)\n"
         "for pid in children:\n"
-        "    os.kill(pid, 9)\n"
+        "    try:\n"
+        "        os.kill(pid, 9)\n"
+        "    except OSError:\n"  # Podman: a child that already went can answer EPERM
+        "        pass\n"
         "print(json.dumps({'forked': len(children), 'errno': error}))\n"
     )
     report = _report(_in_shape(script, LIMITS, owner))
-    assert report["errno"] == errno.EAGAIN
+    assert report["errno"] == LINUX_EAGAIN
     assert isinstance(report["forked"], int) and report["forked"] < LIMITS.pids
 
 
@@ -208,7 +212,7 @@ def test_write_to_root_fails(sandbox: DockerSandbox, owner: str) -> None:
         "    result = exc.errno\n"
         "print(json.dumps({'result': result}))\n"
     )
-    assert _report(_in_shape(script, LIMITS, owner))["result"] in (errno.EROFS, errno.EACCES)
+    assert _report(_in_shape(script, LIMITS, owner))["result"] in (LINUX_EROFS, LINUX_EACCES)
 
 
 def test_fsize_ulimit_limits_a_big_write(sandbox: DockerSandbox, owner: str) -> None:
@@ -225,7 +229,7 @@ def test_fsize_ulimit_limits_a_big_write(sandbox: DockerSandbox, owner: str) -> 
         "print(json.dumps({'result': result, 'written': written}))\n"
     )
     report = _report(_in_shape(script, LIMITS, owner))
-    assert report["result"] == errno.EFBIG
+    assert report["result"] == LINUX_EFBIG
     assert isinstance(report["written"], int) and report["written"] <= 1024 * 1024
 
 
