@@ -148,23 +148,25 @@ None known.
 - **What:** CI uses Ubuntu only. macOS (no reliable `RLIMIT_AS`, sandbox limits) and Windows (POSIX permission
   tests are skipped; owner-private storage relies on ACLs) are untested.
 - **Done:** The `Platforms` workflow runs the offline suite on macOS arm64 and x86-64 and Windows x64 and ARM64
-  (ARM64: no sqlite-vec wheel, cryptography pinned to 46.0.3). On macOS the experimental `MacOSSandbox` must pass.
+  (ARM64: no sqlite-vec wheel, cryptography pinned to 46.0.3). (The macOS sandbox it also required was removed, ORK-014.)
 
 ### ORK-014 · The macOS sandbox is experimental
 
-- **Priority:** P2 Medium · **Status:** Open · **Refs:** #28
-- **What:** `MacOSSandbox` (Seatbelt `sandbox_init`, deny-default profile, rlimits, memory watchdog) passes its
-  self-test and attack tests on macOS 26 arm64 in CI, but has had no independent security review. `sandbox_init`
-  is deprecated API; memory is limited by a watchdog (`proc_pid_rusage`), not by the kernel.
-- **Next step:** Independent review; test on more macOS versions and Intel; then decide on release
-  (Nodestro does not use it until then).
+- **Priority:** P2 Medium · **Status:** Closed – removed (2026-11-02, Docker-first) · **Refs:** #28,
+  [ADR 0012](architecture/decisions/0012-macos-sandbox-removed.md)
+- **What:** `MacOSSandbox` (Seatbelt `sandbox_init`, deny-default profile, rlimits, memory watchdog) had no
+  independent security review.
+- **Done:** The review found it not releasable (MS-1 `KERN_PROCARGS2` environment leak of same-user processes,
+  MS-2 to MS-10). Decision Docker-first: the backend, its confinement helper and tests are removed;
+  `MacOSSandbox` stays as a deprecated placeholder that always reports `removed` and never runs code, until
+  nodestro-runtime drops its reference. Untrusted code needs `DockerSandbox` on every platform.
 
 ### ORK-015 · No native sandbox on Windows
 
 - **Priority:** P3 Low · **Status:** Open
 - **What:** Windows has no isolating backend besides Docker. Options evaluated 2026-11-02: AppContainer + Job
   Object of our own, or Microsoft's MXC (`wxc-exec`, Windows 11 24H2+) inside a Job Object.
-- **Next step:** Separate decision and implementation; Docker is the Windows path until then.
+- **Next step:** Docker-first (ADR 0012): Docker is the Windows path; a native backend needs a new decision.
 
 ## Documentation
 

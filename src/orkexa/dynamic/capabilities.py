@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 #: The mechanism that separates the code from the host: none (a plain process), a container, or the operating
-#: system's own sandbox (Landlock and seccomp, Seatbelt, AppContainer).
+#: system's own sandbox (Landlock and seccomp, AppContainer).
 IsolationKind = Literal["none", "container", "os"]
 #: ``host``: every file the user can read; ``restricted``: only the interpreter, the system libraries and the
 #: call's own directory (write only to its ``tmp``); ``private``: an own file system (a container).
