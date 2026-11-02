@@ -55,6 +55,55 @@ agent's name, model, system prompt, tool definitions, output format and tool rou
 limit; anything else raises `CheckpointError`. Where the checkpoint is stored, how long
 it is valid and who may decide is the application's responsibility.
 
+### Pausing before a request
+
+A usage tracker can pause a turn *before* a model request in the same way: when
+`check_request()`, `before_request()` or `try_reserve()` raises
+`RequestSuspended(reason, ref=...)`, the request is not sent, recorded or reserved,
+and `ask()` raises `TurnSuspended`. Its checkpoint has `stage="request"`: `round` is
+the round whose request was about to be sent, `history` is exactly the conversation
+that request would have sent (it may end with the prompt, a system message, tool
+results or a paused assistant message), `calls`, `results` and `waiting` are empty,
+and `reason` and `ref` come from the exception. The committed conversation is
+unchanged. Tool-stage checkpoints have `stage="tools"` (the default, so checkpoints
+written before the field existed still resume).
+
+A typical use is a budget that a person may raise. A `BudgetTracker` subclass turns
+the refusal into a pause, and `BudgetTracker.set_limit()` raises the limit later:
+
+```python
+from orkexa import RequestSuspended, TurnSuspended
+from orkexa.dynamic import BudgetExceededError, BudgetTracker
+
+
+class PausingBudget(BudgetTracker):
+    def try_reserve(self, *, agent, provider, model, amount):
+        try:
+            return super().try_reserve(agent=agent, provider=provider, model=model, amount=amount)
+        except BudgetExceededError as exc:
+            # exc.reason, exc.limit_usd, exc.spent_usd, exc.requested_usd, exc.tracker
+            raise RequestSuspended(f"needs up to ${exc.requested_usd}", ref=ask_person(exc)) from exc
+
+
+budget = PausingBudget("1.00", on_oversized="reject")
+agent = Agent(model="anthropic:claude-sonnet-5-5", usage_tracker=budget)
+try:
+    answer = agent.ask("Write the report")
+except TurnSuspended as paused:
+    store(paused.checkpoint.model_dump(mode="json"))
+
+# later, once the person agreed:
+budget.set_limit("5.00")
+answer = agent.resume(load())
+```
+
+`resume()` builds the suspended request from the checkpoint's conversation and admits
+it again: the tracker decides anew, and if it suspends again, a new request-stage
+checkpoint results. Requests the turn already sent are not sent again, and usage keeps
+the turn's `turn_id`. The same agent binding (`CheckpointError`) applies. Native batch
+requests (`Evaluator.evaluate_many(batch=True)`) cannot be suspended: there,
+`RequestSuspended` propagates to the caller.
+
 ## Errors
 
 | Situation | Exception |
@@ -64,6 +113,7 @@ it is valid and who may decide is the application's responsibility.
 | structured output invalid | `StructuredOutputError` |
 | tool rounds exhausted | `MaxToolRoundsError` |
 | second `ask()`, `reset()` or `load_history()` while a turn runs | `ConcurrentTurnError` |
+| a tool call waits (`ToolCallSuspended`) or the usage tracker pauses a request (`RequestSuspended`) | `TurnSuspended` (with a `checkpoint`) |
 | provider API errors (generic agents) | `AuthenticationError`, `RateLimitError`, `InvalidRequestError`, `ProviderConnectionError`, `ProviderServerError` (all `ProviderError`) |
 
 `ProviderError` has `provider`, `status_code`, `request_id` and `retryable`; its message

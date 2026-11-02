@@ -13,7 +13,7 @@
 | P1 High | 0 |
 | P2 Medium | 6 |
 | P3 Low | 9 |
-| P4 Optional | 6 |
+| P4 Optional | 7 |
 
 **Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
 Nodestro consumes it by commit SHA.
@@ -118,6 +118,17 @@ None known.
 - **What:** Deliberately out of scope so far: batch inference, citations and server tools, custom or VPC endpoints,
   and the AWS European Sovereign Cloud partition. All are refused with a clear error or documented as not covered.
 - **Next step:** Revisit when there is a concrete need.
+
+### ORK-022 · Suspending native batches and delegated requests
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** [Pausing before a request](guides/streaming-hooks-errors.md#pausing-before-a-request)
+- **What:** A usage tracker can pause a turn before a model request (`RequestSuspended`, request-stage
+  `TurnCheckpoint`), but a native batch (`Evaluator.evaluate_many(batch=True)`) has no turn to suspend:
+  `RequestSuspended` propagates to the caller. A delegated agent that runs as a tool of another agent (`run_agent`)
+  suspends only its own turn: the outer turn sees its `TurnSuspended` like any other tool exception and gets no
+  checkpoint for it (this applies to tool-stage suspension as well).
+- **Next step:** Decide whether batches need a resumable form, and whether delegated agents should map their
+  suspension to the outer turn (as `Pending` delegations do for orchestrations).
 
 ## Tests and quality assurance
 
