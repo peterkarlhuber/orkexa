@@ -105,8 +105,7 @@ def secrets() -> Any:
             made[name] = str(path)
         except OSError as exc:
             print(f"cannot create canary {name} at {path}: {exc}")
-    with contextlib.suppress(OSError):
-        os.setxattr(made["home"], "com.example.secret", TOKEN.encode())
+    subprocess.run(["xattr", "-w", "com.example.secret", TOKEN, made["home"]], check=False)
     yield made
     for path in made.values():
         with contextlib.suppress(OSError):
@@ -165,7 +164,12 @@ def exchange():
     open(tmp + "/ex", "w").write("x")
     rc(lib.exchangedata((tmp + "/ex").encode(), s.encode(), 0)); return read(tmp + "/ex")
 r["exchangedata secret"] = attempt(exchange)
-r["getxattr secret"] = attempt(lambda: os.getxattr(s, "com.example.secret"))
+def getxattr():
+    buf = ctypes.create_string_buffer(256)
+    n = lib.getxattr(s.encode(), b"com.example.secret", buf, 256, 0, 0)
+    if n < 0: raise OSError(ctypes.get_errno(), "getxattr")
+    return buf.raw[:n]
+r["getxattr secret"] = attempt(getxattr)
 r["write home"] = attempt(lambda: open(home + "/review-escape.txt", "w").write("x"))
 r["write /private/tmp"] = attempt(lambda: open("/private/tmp/review-escape.txt", "w").write("x"))
 r["write site-packages (persistence)"] = attempt(lambda: open(c["site"] + "/review_escape.pth", "w").write("x"))
@@ -174,7 +178,7 @@ r["write call dir outside tmp"] = attempt(lambda: open(os.getcwd() + "/tool.py",
 r["unlink secret"] = attempt(lambda: os.unlink(c["secrets"]["users_shared"]))
 r["chmod secret"] = attempt(lambda: os.chmod(s, 0o777))
 r["utime secret"] = attempt(lambda: os.utime(s, (0, 0)))
-r["setxattr secret"] = attempt(lambda: os.setxattr(s, "com.example.x", b"x"))
+r["setxattr secret"] = attempt(lambda: rc(lib.setxattr(s.encode(), b"com.example.x", b"x", 1, 0, 0)))
 r["truncate secret"] = attempt(lambda: os.truncate(s, 0))
 r["mkdir home"] = attempt(lambda: os.mkdir(home + "/review-escape-dir"))
 r["open /dev/tty"] = attempt(lambda: open("/dev/tty", "w"))
@@ -208,8 +212,14 @@ return json.dumps(r)
 def helper_process() -> Any:
     """A host process (same user) with a secret in its argv and environment."""
     env = {"PATH": "/usr/bin:/bin", "REVIEW_ENV_SECRET": TOKEN}
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)", f"--token={TOKEN}"], env=env)
-    time.sleep(0.5)
+    marker = Path(tempfile.gettempdir()) / f"review-sigcont-{os.getpid()}"
+    marker.unlink(missing_ok=True)
+    code = ("import signal, sys, time\n"
+            "signal.signal(signal.SIGCONT, lambda *a: open(sys.argv[1], 'a').write('got SIGCONT\\n'))\n"
+            "time.sleep(300)")
+    proc = subprocess.Popen([sys.executable, "-c", code, str(marker), f"--token={TOKEN}"], env=env)
+    proc.marker = marker  # type: ignore[attr-defined]
+    time.sleep(0.8)
     yield proc
     proc.kill()
     proc.wait()
@@ -223,7 +233,11 @@ def procargs(p):
     mib = (ctypes.c_int * 3)(1, 49, p)  # CTL_KERN, KERN_PROCARGS2
     size = ctypes.c_size_t(1 << 18); buf = ctypes.create_string_buffer(size.value)
     rc(lib.sysctl(mib, 3, buf, ctypes.byref(size), None, 0))
-    return buf.raw[: size.value].replace(b"\x00", b" ")[-400:]
+    raw = buf.raw[: size.value]
+    parts = [x.decode("utf-8", "replace") for x in raw.split(b"\x00") if x]
+    names = sorted({x.split("=", 1)[0] for x in parts if "=" in x and not x.startswith("/")})
+    hits = [x[:60] for x in parts if c["token"] in x]
+    return {"bytes": len(raw), "secret_strings": hits, "env_names": names[:40], "argv0": parts[1:3]}
 r["KERN_PROCARGS2 other process (argv+env)"] = attempt(lambda: procargs(pid))
 r["KERN_PROCARGS2 parent (host)"] = attempt(lambda: procargs(parent))
 def proclist():
@@ -254,6 +268,36 @@ r["kill(other, 0)"] = attempt(lambda: os.kill(pid, 0))
 r["kill(other, SIGCONT)"] = attempt(lambda: os.kill(pid, 18))
 r["kill(parent, SIGCONT)"] = attempt(lambda: os.kill(parent, 18))
 r["kill(-1, SIGCONT) all user processes"] = attempt(lambda: os.kill(-1, 18))
+def sysv_read(key):
+    lib.shmat.restype = ctypes.c_void_p
+    i = lib.shmget(key, 0, 0)
+    if i < 0: raise OSError(ctypes.get_errno(), "shmget existing")
+    addr = lib.shmat(i, None, 0)
+    if addr in (None, ctypes.c_void_p(-1).value): raise OSError(ctypes.get_errno(), "shmat")
+    return ctypes.string_at(addr, 64)
+r["sysv shm read host segment"] = attempt(lambda: sysv_read(c["shm_key"]))
+def sysv_write(key):
+    lib.shmat.restype = ctypes.c_void_p
+    i = lib.shmget(key, 0, 0)
+    addr = lib.shmat(i, None, 0)
+    if addr in (None, ctypes.c_void_p(-1).value): raise OSError(ctypes.get_errno(), "shmat")
+    ctypes.memmove(addr, b"WRITTEN-BY-SANDBOX", 18); return "written"
+r["sysv shm write host segment"] = attempt(lambda: sysv_write(c["shm_key"]))
+def sysv_leak():
+    i = lib.shmget(c["leak_key"], 4096, 0o1000 | 0o666)
+    if i < 0: raise OSError(ctypes.get_errno(), "shmget create")
+    return i
+r["sysv shm create persistent segment"] = attempt(sysv_leak)
+def semget():
+    i = lib.semget(0, 1, 0o1000 | 0o600)
+    if i < 0: raise OSError(ctypes.get_errno(), "semget")
+    return i
+r["sysv semget"] = attempt(semget)
+def msgget():
+    i = lib.msgget(0, 0o1000 | 0o600)
+    if i < 0: raise OSError(ctypes.get_errno(), "msgget")
+    return i
+r["sysv msgget"] = attempt(msgget)
 def tfp(p):
     me = ctypes.c_uint.in_dll(lib, "mach_task_self_").value
     port = ctypes.c_uint(0)
@@ -333,14 +377,54 @@ r["sysctl kern.hostname (info)"] = attempt(lambda: sysctl_name("kern.hostname"))
 r["sysctl kern.osversion (info)"] = attempt(lambda: sysctl_name("kern.osversion"))
 return json.dumps(r)
 '''
-    results = run(sandbox, body, {"pid": helper_process.pid, "token": TOKEN})
+    import ctypes
+
+    libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+    libc.shmat.restype = ctypes.c_void_p
+    shm_key, leak_key = 0x52450000 + os.getpid() % 0xFFFF, 0x52460000 + os.getpid() % 0xFFFF
+    shm_id = libc.shmget(shm_key, 4096, 0o1000 | 0o600)
+    addr = libc.shmat(shm_id, None, 0)
+    ctypes.memmove(addr, TOKEN.encode(), len(TOKEN))
+    try:
+        results = run(sandbox, body, {"pid": helper_process.pid, "token": TOKEN, "shm_key": shm_key,
+                                      "leak_key": leak_key})
+        host_view = ctypes.string_at(addr, 18)
+    finally:
+        libc.shmdt(ctypes.c_void_p(addr))
+        libc.shmctl(shm_id, 0, None)  # IPC_RMID
+    ipcs = subprocess.run(["ipcs", "-m"], capture_output=True, text=True).stdout
+    leftover = hex(leak_key)[2:] in ipcs.replace("0x", "")
+    leak_id = libc.shmget(leak_key, 0, 0)
+    if leak_id >= 0:
+        libc.shmctl(leak_id, 0, None)
+    time.sleep(0.3)
+    sigcont = helper_process.marker.read_text() if helper_process.marker.exists() else ""
     leaked = [k for k, v in results.items() if TOKEN in v]
-    save("processes", {"results": results, "token_leaked_in": leaked})
+    save("processes", {"results": results, "token_leaked_in": leaked, "host_segment_after": repr(host_view),
+                       "sandbox_segment_survives_call": leftover, "helper_received_sigcont": bool(sigcont)})
+    assert not sigcont, "kill(-1) reached another process"
     assert helper_process.poll() is None, "the helper process was affected"
     assert not leaked, leaked
     expected = ("sysctl kern.hostname (info)", "sysctl kern.osversion (info)", "KERN_PROC_ALL size (process list)",
                 "proc_listallpids")
     assert not escapes(results, expected), escapes(results, expected)
+
+
+def test_procargs_reads_host_secrets(sandbox: MacOSSandbox) -> None:
+    """Does KERN_PROCARGS2 expose the argv/env of the host process (the Nodestro backend in production)?"""
+    secret = os.environ.get("REVIEW_PARENT_SECRET", "")
+    if not secret:
+        pytest.skip("REVIEW_PARENT_SECRET not set in the host environment")
+    body = r'''
+mib = (ctypes.c_int * 3)(1, 49, os.getppid())
+size = ctypes.c_size_t(1 << 20); buf = ctypes.create_string_buffer(size.value)
+rc(lib.sysctl(mib, 3, buf, ctypes.byref(size), None, 0))
+found = [x.decode()[:80] for x in buf.raw[: size.value].split(b"\x00") if c["needle"].encode() in x]
+return json.dumps({"host env entries with the secret": found})
+'''
+    result = run(sandbox, body, {"needle": secret[:12]})
+    save("procargs_parent", result)
+    assert not result["host env entries with the secret"], result
 
 
 def test_exec_replacing_the_process_is_refused(sandbox: MacOSSandbox) -> None:
