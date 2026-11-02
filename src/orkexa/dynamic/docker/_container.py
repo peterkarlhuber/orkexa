@@ -162,7 +162,9 @@ def run_args(
         "--tmpfs",
         f"/tmp:{tmpfs}",
         "--tmpfs",
-        f"/work:{tmpfs},uid=65534,gid=65534,mode=0700",
+        # mode=1777 rather than uid=/gid=: Podman 4 rejects those tmpfs options. Every process in the
+        # container runs as the sandbox user, so no other user exists there to read or replace the files.
+        f"/work:{tmpfs},mode=1777",
         "-w",
         "/work",
         "--label",
