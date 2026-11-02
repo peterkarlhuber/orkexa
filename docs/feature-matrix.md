@@ -77,7 +77,7 @@ runner can run it, so it is checked with the
 | Docker Engine, rootful, Linux x86-64 (ubuntu-24.04) | CI | cgroup v2 |
 | Docker Engine, rootful, Linux arm64 (ubuntu-24.04-arm) | CI | cgroup v2 |
 | Docker Engine, rootless, Linux x86-64 | CI | needs cpu, memory and pids delegated to the user |
-| Docker Engine, rootless without cpu/pids delegation | CI: refused | reason `limits` |
+| Docker Engine, rootless without cpu delegation | CI: refused | reason `limits` |
 | Podman (`podman system service`, Docker API) | CI | rootful service in CI; rootless needs delegation like Docker |
 | Colima, macOS x86-64 (macos-15-intel) | CI, non-blocking | nested virtualization on hosted runners is not guaranteed |
 | Docker Desktop, macOS arm64 | unverified in CI | refused if it reports an unconfined seccomp default |

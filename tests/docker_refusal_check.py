@@ -1,4 +1,4 @@
-"""CI check (``docker`` job, mode ``refused``): a rootless daemon without cpu/pids delegation is refused.
+"""CI check (``docker`` job, mode ``refused``): a rootless daemon without cpu delegation is refused.
 
 Run as ``python tests/docker_refusal_check.py`` against such a daemon; exits non-zero unless the preflight,
 the probe and a real call all refuse it with the reason ``limits`` and no code runs.

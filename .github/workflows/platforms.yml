@@ -51,7 +51,7 @@ jobs:
     # ORK-006/019/020/021: DockerSandbox against real daemons. Each job builds docker/sandbox.Dockerfile, runs the
     # preflight and the self-test (python -m orkexa.dynamic.docker --self-test) and the real-container tests,
     # which fail instead of skipping under ORKEXA_REQUIRE_DOCKER=1. The "refused" job proves that a rootless daemon
-    # without cpu/pids cgroup delegation is refused. Apple Silicon (no nested virtualization) and Windows (no Linux
+    # without cpu cgroup delegation is refused. Apple Silicon (no nested virtualization) and Windows (no Linux
     # containers on the hosted runners) cannot run here: docs/development/docker-manual-verification.md.
     name: DockerSandbox (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -63,7 +63,7 @@ jobs:
         include:
           - { name: rootful, os: ubuntu-24.04, mode: rootful, experimental: false }
           - { name: rootless, os: ubuntu-24.04, mode: rootless, experimental: false }
-          - { name: rootless without cpu/pids delegation is refused, os: ubuntu-24.04, mode: refused, experimental: false }
+          - { name: rootless without cpu delegation is refused, os: ubuntu-24.04, mode: refused, experimental: false }
           - { name: podman, os: ubuntu-24.04, mode: podman, experimental: false }
           - { name: rootful arm64, os: ubuntu-24.04-arm, mode: rootful, experimental: false }
           - { name: colima macOS x86-64, os: macos-15-intel, mode: colima, experimental: true }
@@ -82,9 +82,9 @@ jobs:
         if: matrix.mode == 'rootless' || matrix.mode == 'refused'
         run: |
           set -euo pipefail
-          # rootless: cpu, memory and pids for the user's containers; refused: memory only, so the daemon cannot
-          # enforce --cpus and --pids-limit and the preflight must refuse it.
-          if [ "${{ matrix.mode }}" = rootless ]; then controllers="cpu cpuset io memory pids"; else controllers="memory"; fi
+          # rootless: cpu, memory and pids for the user's containers; refused: no cpu (systemd delegates pids to
+          # every user manager anyway), so the daemon cannot enforce --cpus and the preflight must refuse it.
+          if [ "${{ matrix.mode }}" = rootless ]; then controllers="cpu cpuset io memory pids"; else controllers="memory pids"; fi
           sudo mkdir -p /etc/systemd/system/user@.service.d
           printf '[Service]\nDelegate=\nDelegate=%s\n' "$controllers" | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
           sudo systemctl daemon-reload
@@ -103,7 +103,7 @@ jobs:
           delegated="$(cat "/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers")"
           echo "delegated controllers: $delegated"
           if [ "${{ matrix.mode }}" = refused ]; then
-            case " $delegated " in *" cpu "*|*" pids "*) echo "cpu or pids is still delegated"; exit 1;; esac
+            case " $delegated " in *" cpu "*) echo "cpu is still delegated"; exit 1;; esac
           else
             for c in cpu memory pids; do case " $delegated " in *" $c "*) ;; *) echo "$c is not delegated"; exit 1;; esac; done
           fi
