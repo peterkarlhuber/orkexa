@@ -546,3 +546,17 @@ def test_module_entry_point_runs_without_warnings(tmp_path: Path) -> None:
     )
     assert completed.returncode == 1, completed.stderr
     assert "reason: missing" in completed.stdout and completed.stderr == ""
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="reads /proc/self/environ")
+def test_the_environment_is_the_one_the_container_started_with() -> None:
+    # An image without LANG (uv's images): Python's C locale coercion (PEP 538) sets LC_CTYPE in os.environ,
+    # which is not a variable the container was given; a variable the container was given is still reported.
+    start, end = SELF_TEST_SCRIPT.index("def environment_names"), SELF_TEST_SCRIPT.index("def attempt")
+    code = "import os\n" + SELF_TEST_SCRIPT[start:end] + "print(','.join(environment_names()))"
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "GIVEN": "1"}
+    command = [sys.executable, "-I", "-B", "-c", code]
+    result = subprocess.run(command, env=env, capture_output=True, text=True, check=True)
+    names = result.stdout.strip().split(",")
+    assert "GIVEN" in names
+    assert "LC_CTYPE" not in names

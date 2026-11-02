@@ -4,6 +4,15 @@
 
 First release of Orkexa.
 
+### Fixed: the Docker self-test reports the container's own environment
+
+* The self-test read the environment from `os.environ`, which also holds what Python sets
+  itself. In an image without `LANG` (such as uv's images), C locale coercion (PEP 538) adds
+  `LC_CTYPE`, so the self-test refused every daemon with "unexpected environment variables:
+  LC_CTYPE". It now reads `/proc/self/environ`, the environment the container started the
+  process with. Every variable the container is given is still reported and checked;
+  `ALLOWED_ENVIRONMENT` is unchanged.
+
 ### Changed: new official logo
 
 * The README, the documentation site (header, landing page, favicon) and the social

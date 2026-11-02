@@ -59,6 +59,16 @@ def read(path):
     except OSError:
         return None
 
+def environment_names():
+    # /proc/self/environ is the environment the container started this process with. os.environ also holds
+    # what the interpreter set itself: C locale coercion (PEP 538) adds LC_CTYPE in an image without LANG.
+    try:
+        with open('/proc/self/environ', 'rb') as handle:
+            entries = handle.read().split(b'\\0')
+    except OSError:
+        return sorted(os.environ)
+    return sorted({entry.split(b'=', 1)[0].decode('utf-8', 'replace') for entry in entries if entry})
+
 def attempt(action):
     try:
         action()
@@ -187,7 +197,7 @@ report = {
     'exec_tmp': exec_in('/tmp'),
     'cgroup': cgroup,
     'rlimits': {name: list(resource.getrlimit(getattr(resource, name))) for name in names},
-    'env': sorted(os.environ),
+    'env': environment_names(),
     'mountinfo': read('/proc/self/mountinfo'),
     'write_sealed': {point: write_in(point) for point in ('/run', '/var/tmp')},
     'apparmor': apparmor,
