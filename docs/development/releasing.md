@@ -19,8 +19,8 @@ done by the repository owner by hand:
    by `SECURITY.md`), Dependabot alerts and security updates, and protect the default
    branch (required CI checks, no force pushes).
 4. **Optional:** upload `assets/branding/social-preview.png` as the repository's social
-   preview, and pin the GitHub Actions in the workflows to commit SHAs (Dependabot keeps
-   SHA pins up to date).
+   preview. (The GitHub Actions in the workflows are already pinned to commit SHAs;
+   Dependabot keeps the pins up to date.)
 5. **Optional documentation site:** the docs build in CI, but are not deployed. To
    publish them, enable GitHub Pages and add a deployment job (for example
    `mkdocs gh-deploy` or the `actions/deploy-pages` flow) after reviewing what the site
