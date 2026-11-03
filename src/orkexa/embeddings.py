@@ -27,6 +27,7 @@ from .local._http import DEFAULT_OLLAMA_URL, OllamaError
 from .local.client import OllamaClient
 
 __all__ = [
+    "KNOWN_PREFIXES",
     "QWEN3_QUERY_INSTRUCTION",
     "CallableEmbeddings",
     "EmbeddingError",
@@ -38,6 +39,12 @@ __all__ = [
 
 QWEN3_QUERY_INSTRUCTION = "Given a search query, retrieve relevant passages that answer the query"
 """The task instruction Qwen3-Embedding expects in front of queries (documents get none)."""
+
+KNOWN_PREFIXES: dict[str, tuple[str, str]] = {
+    "mdenseon": ("document: ", "query: "),
+}
+"""``(document prefix, query prefix)`` that models were trained with, by model name without
+namespace and tag (``mdenseon:307m`` -> ``mdenseon``)."""
 
 
 class EmbeddingError(OllamaError):
@@ -60,21 +67,25 @@ class EmbeddingIdentity:
     normalized: bool = True
     document_instruction: str = ""
     query_instruction: str = ""
+    #: Plain text put in front of every document/query (e.g. ``"query: "``).
+    document_prefix: str = ""
+    query_prefix: str = ""
 
     @property
     def key(self) -> str:
         """A short stable id of this vector space (hex)."""
-        data = json.dumps(
-            [
-                self.provider,
-                self.model,
-                self.digest,
-                self.dimensions,
-                self.normalized,
-                self.document_instruction,
-                self.query_instruction,
-            ]
-        )
+        fields: list[Any] = [
+            self.provider,
+            self.model,
+            self.digest,
+            self.dimensions,
+            self.normalized,
+            self.document_instruction,
+            self.query_instruction,
+        ]
+        if self.document_prefix or self.query_prefix:  # keeps the keys of older spaces unchanged
+            fields += [self.document_prefix, self.query_prefix]
+        data = json.dumps(fields)
         return hashlib.sha256(data.encode()).hexdigest()[:20]
 
     def to_dict(self) -> dict[str, Any]:
@@ -86,6 +97,8 @@ class EmbeddingIdentity:
             "normalized": self.normalized,
             "document_instruction": self.document_instruction,
             "query_instruction": self.query_instruction,
+            "document_prefix": self.document_prefix,
+            "query_prefix": self.query_prefix,
         }
 
     @classmethod
@@ -98,6 +111,8 @@ class EmbeddingIdentity:
             normalized=bool(data.get("normalized", True)),
             document_instruction=str(data.get("document_instruction") or ""),
             query_instruction=str(data.get("query_instruction") or ""),
+            document_prefix=str(data.get("document_prefix") or ""),
+            query_prefix=str(data.get("query_prefix") or ""),
         )
 
 
@@ -203,6 +218,10 @@ class OllamaEmbeddings(EmbeddingModel):
         base_url: The Ollama server (loopback unless ``allow_remote``).
         query_instruction: Instruction put in front of queries; defaults to
             :data:`QWEN3_QUERY_INSTRUCTION` for ``qwen3-embedding`` models and none otherwise.
+        document_prefix: Text put in front of every document; defaults to the model's entry
+            in :data:`KNOWN_PREFIXES` (e.g. ``"document: "`` for ``mdenseon``), else none.
+        query_prefix: Text put in front of every query; same default. A model uses either
+            a query instruction or a query prefix, not both.
         dimensions: Ask for shorter vectors (Matryoshka models); ``None``: the model's size.
         batch_size: Texts per request.
         max_inputs: Most texts one :meth:`embed_documents` call accepts.
@@ -217,6 +236,8 @@ class OllamaEmbeddings(EmbeddingModel):
         *,
         base_url: str = DEFAULT_OLLAMA_URL,
         query_instruction: str | None = None,
+        document_prefix: str | None = None,
+        query_prefix: str | None = None,
         dimensions: int | None = None,
         batch_size: int = 16,
         max_inputs: int = 100_000,
@@ -232,6 +253,11 @@ class OllamaEmbeddings(EmbeddingModel):
         self.model = model
         if query_instruction is None:
             query_instruction = QWEN3_QUERY_INSTRUCTION if model.startswith("qwen3-embedding") else ""
+        known = KNOWN_PREFIXES.get(model.split("/")[-1].split(":")[0].lower(), ("", ""))
+        self.document_prefix = known[0] if document_prefix is None else document_prefix
+        self.query_prefix = known[1] if query_prefix is None else query_prefix
+        if query_instruction and self.query_prefix:
+            raise ValueError("Pass either query_instruction or query_prefix, not both")
         self.query_instruction = query_instruction
         self.dimensions = dimensions
         self.batch_size = batch_size
@@ -243,7 +269,9 @@ class OllamaEmbeddings(EmbeddingModel):
         self._lock = threading.Lock()
 
     def _query_text(self, text: str) -> str:
-        return f"Instruct: {self.query_instruction}\nQuery: {text}" if self.query_instruction else text
+        if self.query_instruction:
+            return f"Instruct: {self.query_instruction}\nQuery: {text}"
+        return self.query_prefix + text
 
     def _embed(self, texts: Sequence[str], kind: Literal["document", "query"]) -> list[list[float]]:
         if any(not text.strip() for text in texts):
@@ -288,10 +316,17 @@ class OllamaEmbeddings(EmbeddingModel):
         for start in range(0, len(texts), self.batch_size):
             if self.cancel is not None and self.cancel.is_set():
                 raise EmbeddingError("cancelled", "Embedding was cancelled")
-            vectors += self._embed(texts[start : start + self.batch_size], "document")
+            batch = texts[start : start + self.batch_size]
+            if self.document_prefix:
+                if any(not text.strip() for text in batch):
+                    raise EmbeddingError("empty_input", "Empty texts cannot be embedded")
+                batch = [self.document_prefix + text for text in batch]
+            vectors += self._embed(batch, "document")
         return vectors
 
     def embed_query(self, text: str) -> list[float]:
+        if not text.strip():
+            raise EmbeddingError("empty_input", "Empty texts cannot be embedded")
         return self._embed([self._query_text(text)], "query")[0]
 
     def identity(self) -> EmbeddingIdentity:
@@ -323,5 +358,7 @@ class OllamaEmbeddings(EmbeddingModel):
                     digest=installed.digest,
                     normalized=True,
                     query_instruction=self.query_instruction,
+                    document_prefix=self.document_prefix,
+                    query_prefix=self.query_prefix,
                 )
             return self._identity

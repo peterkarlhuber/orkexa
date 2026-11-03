@@ -86,6 +86,31 @@ Packages are **not signed**: checksums prove integrity, not origin.
 Transformers/safetensors folders are not imported: convert them to GGUF first (for example with
 llama.cpp's conversion script) and import the GGUF file.
 
+### Building a model from pinned upstream weights
+
+Some open-weight models are not published in a form Ollama can pull, although Ollama's engine runs
+their architecture from a GGUF file. `build_model(client, recipe)` builds such a model reproducibly
+from a `GGUFRecipe`: the upstream `safetensors` weights and a *template* GGUF header (tokenizer and
+hyperparameters of the same architecture) are both pinned by URL, size and SHA-256; the recipe's
+metadata overrides are applied; the GGUF file is created in Ollama offline; and the model is kept only
+if it reproduces the recipe's reference vectors (cosine >= 0.9999), otherwise it is deleted again.
+Inputs come from local files or, only with `download=True`, from the pinned URLs (the template is
+fetched with an HTTP range request: only its 6 MB header). Needs the `convert` extra (`gguf`).
+
+`MDENSEON` is the recipe for [LightOn mDenseOn](https://huggingface.co/lightonai/mDenseOn)
+(Apache-2.0, 307M parameters, 768 dimensions, 8192 tokens, trained for en, fr, de, it, es, pt, sv, no
+and ar, including cross-lingual pairs). It becomes `mdenseon:307m` (F16, 620 MB). Its tokenizer metadata
+comes from the llama.cpp conversion of mmBERT-base (MIT), the model mDenseOn was fine-tuned from, with
+two corrections found by comparing with the reference implementation: CLS pooling and
+`add_space_prefix=true`. Without the second one every vector drifts to cosine ~0.98.
+
+```bash
+orkexa-local build mdenseon --download                      # network: 1.2 GB weights + 6 MB header
+orkexa-local build mdenseon --weights model.safetensors --template mmBERT-Base-307M-F16.gguf  # offline
+```
+
+The built model is an ordinary Ollama model: export it in an offline package like any other.
+
 ```bash
 orkexa-local --url http://127.0.0.1:11434 export /media/usb/models qwen3.5:4b qwen3-embedding:0.6b --models-dir ~/.ollama/models
 orkexa-local import /media/usb/models --models-dir /Volumes/SSD/models
@@ -104,7 +129,10 @@ embeddings.identity()  # provider, model, digest, dimensions, instructions
 `EmbeddingModel` is provider-independent (`embed_documents`, `embed_query`, `identity`).
 `OllamaEmbeddings` calls `/api/embed` in batches with `truncate=false`: a text longer than the model's
 context raises `EmbeddingError("input_too_long")` instead of being cut silently. Qwen3-Embedding
-models get their query instruction in front of queries, documents get none. `on_usage` receives the
+models get their query instruction in front of queries, documents get none. Models trained with plain
+prefixes get them from `KNOWN_PREFIXES` (`mdenseon`: `"document: "` and `"query: "`), or pass
+`document_prefix=`/`query_prefix=`; the prefixes are part of the identity, so changing them needs a
+reindex. `on_usage` receives the
 measured prompt tokens and durations (`None` when Ollama does not report them). The older `embedder=`
 callables keep working; `CallableEmbeddings` gives them an explicit identity.
 
@@ -167,6 +195,14 @@ are the ones the Ollama library lists, and a client must read them from `/api/sh
 | `qwen3-embedding:0.6b` | 0.64 GB | embedding (1024 dimensions, 32k context) | |
 | `qwen3-embedding:4b` | 2.5 GB | embedding | |
 | `qwen3-embedding:8b` | 4.7 GB | embedding | |
+| `ministral-3:3b` | 2.95 GB | completion, vision, tools (Mistral AI, Apache-2.0) | 0.13.1 |
+| `ministral-3:8b` | 6.02 GB | completion, vision, tools | 0.13.1 |
+| `ministral-3:14b` | 9.08 GB | completion, vision, tools | 0.13.1 |
+| `devstral-small-2:24b` | 15.18 GB | completion, vision, tools (coding agents) | 0.13.3 |
+| `mdenseon:307m` | 0.62 GB | embedding (768 dimensions, 8k context), built with `build_model(MDENSEON)` | |
 
-The language models ship an Apache-2.0 license layer; the embedding manifests have none (the upstream
-Qwen3-Embedding models are Apache-2.0). Any other installed Ollama model works the same way.
+The Qwen and Ministral language models ship an Apache-2.0 license layer; the Qwen3-Embedding and
+`devstral-small-2` manifests have none (the upstream models are Apache-2.0 per their model cards).
+Ministral 3 needs an explicit system prompt for reliable classification (measured on CPU: routing 2/6
+without, 6/6 with). `devstral-small-2` reports 393,216 tokens of context (YaRN 8,192 x 48); Mistral
+documents 256k. Any other installed Ollama model works the same way.

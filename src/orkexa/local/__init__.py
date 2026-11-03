@@ -8,7 +8,8 @@ Three steps are kept apart:
    :func:`install_runtime` (from a local archive, or ``download=True``) plus
    :class:`ManagedOllama` (a child process on a free loopback port).
 2. **Get models**: :meth:`OllamaClient.pull` (network), :meth:`OllamaClient.create_from_gguf`
-   or :func:`import_package` (offline), or point ``models_dir`` at an existing folder.
+   or :func:`import_package` (offline), :func:`build_model` (a pinned recipe such as
+   :data:`MDENSEON`), or point ``models_dir`` at an existing folder.
 3. **Run models**: ``Agent(model="ollama:qwen3.5:4b", base_url=client.openai_base_url)`` and
    :class:`~orkexa.embeddings.OllamaEmbeddings`; no network after steps 1 and 2.
 """
@@ -24,6 +25,7 @@ from .client import (
     is_cloud_model,
     split_model_name,
 )
+from .convert import MDENSEON, BuildReport, GGUFRecipe, SourceFile, build_model
 from .install import (
     OLLAMA_VERSION,
     RUNTIME_ARTIFACTS,
@@ -38,9 +40,12 @@ from .server import DEFAULT_PORT, ManagedOllama, ServerState, detect_ollama, fre
 __all__ = [
     "DEFAULT_OLLAMA_URL",
     "DEFAULT_PORT",
+    "MDENSEON",
     "OLLAMA_VERSION",
     "RUNTIME_ARTIFACTS",
+    "BuildReport",
     "EmbedResult",
+    "GGUFRecipe",
     "LocalModel",
     "ManagedOllama",
     "ModelDetails",
@@ -49,8 +54,10 @@ __all__ = [
     "PackageReport",
     "PullProgress",
     "ServerState",
+    "SourceFile",
     "StoredModel",
     "artifact_for",
+    "build_model",
     "check_model_name",
     "check_ollama_url",
     "detect_ollama",

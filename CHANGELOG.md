@@ -25,6 +25,13 @@ First release of Orkexa.
   (`UsageRecord.local_inference`, `UsageSummary.local_requests`), so strict pricing and budgets do not
   refuse or ignore them as unpriced. Local operating costs are not recorded and must not be shown as 0.
   New extra `local` (`zstandard`).
+* `orkexa.local.build_model` with `GGUFRecipe`: builds an Ollama model from pinned upstream
+  `safetensors` weights and a pinned template GGUF header, verifies every input by SHA-256 and the
+  result against reference vectors, and removes a model that does not match. `MDENSEON` builds LightOn
+  mDenseOn (Apache-2.0, multilingual and cross-lingual retrieval) as `mdenseon:307m`;
+  `orkexa-local build mdenseon`. New extra `convert` (`gguf`).
+* `OllamaEmbeddings(document_prefix=, query_prefix=)` and `KNOWN_PREFIXES` for models trained with
+  plain prefixes; `EmbeddingIdentity` records them (keys of spaces without prefixes are unchanged).
 
 ### Changed: an unknown provider prefix raises instead of falling back to Anthropic (DX-02)
 
