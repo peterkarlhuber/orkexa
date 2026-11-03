@@ -74,6 +74,10 @@ class Agent(AgentCore[OutputT]):
         max_tokens: Output token limit per request.
         max_tool_rounds: Maximum tool rounds per :meth:`ask`.
         max_parallel_tools: Tool calls of one response run in up to this many threads.
+        max_tool_calls_per_round: Tool calls one model response may ask for (default 64,
+            ``None``: no limit). A response with more raises :class:`~orkexa.MaxToolCallsError`
+            before any of its calls runs; a turn runs at most ``max_tool_rounds`` times this
+            many calls.
         raise_tool_errors: Raise tool failures (default) or send them back to the model.
         tool_timeout: Seconds per tool call; a call that takes longer fails with
             :class:`~orkexa.ToolExecutionError`. A sandbox call it started is stopped (process

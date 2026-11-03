@@ -19,6 +19,7 @@ change. This page collects the common cases.
 | `RefusalError` | The model declined | Rephrase; or `on_refusal="return"` to get the text instead of an exception |
 | `StructuredOutputError` | The output does not validate against `output_format` | Simplify the schema, describe fields better, or use a model with native structured output |
 | `MaxToolRoundsError` | The model kept calling tools | Raise `max_tool_rounds` or improve the tool descriptions |
+| `MaxToolCallsError` | One response asked for more than `max_tool_calls_per_round` (default 64) tool calls; none ran | Raise the limit (or `None`) if that fan-out is intended |
 | `HistoryConversionError` | A history with provider-specific parts was sent to another provider | `history_policy="convert"` drops what cannot be converted, with a warning |
 | `ConcurrentTurnError` | A second `ask()`, `reset()` or `load_history()` while a turn runs | Use one agent per concurrent conversation |
 | `DataResidencyError` | `bedrock` with `data_residency="eu_only"` or `allowed_regions`: the region, an inference profile destination, the endpoint or the guardrail is outside the allowlist, or it could not be verified | See [Amazon Bedrock](#amazon-bedrock) below; nothing was sent |

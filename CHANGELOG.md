@@ -4,6 +4,13 @@
 
 First release of Orkexa.
 
+### Added: a limit on tool calls per model response (audit ORK2-04)
+
+* `max_tool_rounds` did not bound tool calls: one response with 500 calls ran all of them.
+  New `max_tool_calls_per_round` (default 64, `None`: no limit): a response with more calls
+  raises `MaxToolCallsError` (a subclass of `MaxToolRoundsError`) before any of its calls
+  runs. A turn runs at most `max_tool_rounds × max_tool_calls_per_round` calls.
+
 ### Changed: turn checkpoints are bound to their content; single-use resume is opt-in (audit ORK2-03)
 
 * `TurnCheckpoint` has two new optional fields, `nonce` and `digest`. The digest covers the

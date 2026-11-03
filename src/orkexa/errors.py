@@ -22,6 +22,7 @@ __all__ = [
     "HistoryConversionError",
     "IncompleteResponseError",
     "InvalidRequestError",
+    "MaxToolCallsError",
     "MaxToolRoundsError",
     "MemoryToolError",
     "MissingDependencyError",
@@ -147,6 +148,13 @@ class IncompleteResponseError(OrkexaError, RuntimeError):
 
 class MaxToolRoundsError(OrkexaError, RuntimeError):
     """The model kept calling tools beyond ``max_tool_rounds``."""
+
+
+class MaxToolCallsError(MaxToolRoundsError):
+    """One model response asked for more tool calls than ``max_tool_calls_per_round``.
+
+    None of that response's calls ran. A subclass of :class:`MaxToolRoundsError`, so code
+    that handles the round limit handles this limit too."""
 
 
 class RefusalError(OrkexaError, RuntimeError):

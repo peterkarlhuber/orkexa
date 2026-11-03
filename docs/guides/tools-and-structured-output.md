@@ -29,6 +29,7 @@ agent = Agent(
     tools=[price, multiply],
     max_tool_rounds=8,  # MaxToolRoundsError after that
     max_parallel_tools=4,  # tool calls of one response run concurrently
+    max_tool_calls_per_round=64,  # default; MaxToolCallsError above, before any call runs
     tool_timeout=10,  # seconds per call
     raise_tool_errors=False,  # failures go back to the model
     tool_choice="required",  # "auto", "none", "required" or {"name": "price"}

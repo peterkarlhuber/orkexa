@@ -138,6 +138,7 @@ requests (`Evaluator.evaluate_many(batch=True)`) cannot be suspended: there,
 | output token limit reached | `IncompleteResponseError` (usage is recorded) |
 | structured output invalid | `StructuredOutputError` |
 | tool rounds exhausted | `MaxToolRoundsError` |
+| more tool calls in one response than `max_tool_calls_per_round` (none ran) | `MaxToolCallsError` (a `MaxToolRoundsError`) |
 | second `ask()`, `reset()` or `load_history()` while a turn runs | `ConcurrentTurnError` |
 | a tool call waits (`ToolCallSuspended`) or the usage tracker pauses a request (`RequestSuspended`) | `TurnSuspended` (with a `checkpoint`) |
 | provider API errors (generic agents) | `AuthenticationError`, `RateLimitError`, `InvalidRequestError`, `ProviderConnectionError`, `ProviderServerError` (all `ProviderError`) |

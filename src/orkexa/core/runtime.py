@@ -38,6 +38,7 @@ from ..errors import (
     ConcurrentTurnError,
     ConfigurationError,
     IncompleteResponseError,
+    MaxToolCallsError,
     MaxToolRoundsError,
     MemoryToolError,
     ProviderError,
@@ -93,6 +94,7 @@ if TYPE_CHECKING:
     from ..providers.base import Provider
 
 __all__ = [
+    "DEFAULT_MAX_TOOL_CALLS_PER_ROUND",
     "AgentCore",
     "CallModel",
     "Emit",
@@ -105,6 +107,10 @@ __all__ = [
 
 OutputT = TypeVar("OutputT", default=str)
 RefusalMode = Literal["raise", "return"]
+
+#: Tool calls one model response may ask for (``max_tool_calls_per_round``); with
+#: ``max_tool_rounds`` it bounds the calls of a turn.
+DEFAULT_MAX_TOOL_CALLS_PER_ROUND = 64
 
 _FINAL = ("end_turn", "stop_sequence", "refusal")
 _INCOMPLETE = ("max_tokens", "context_window_exceeded")
@@ -210,6 +216,7 @@ class AgentCore(Generic[OutputT]):
         max_tokens: int = 16_000,
         max_tool_rounds: int = 8,
         max_parallel_tools: int = 1,
+        max_tool_calls_per_round: int | None = DEFAULT_MAX_TOOL_CALLS_PER_ROUND,
         raise_tool_errors: bool = True,
         tool_timeout: float | None = None,
         stream: bool | None = None,
@@ -252,6 +259,8 @@ class AgentCore(Generic[OutputT]):
             raise ValueError("on_refusal must be 'raise' or 'return'")
         if history_policy not in ("strict", "convert"):
             raise ValueError("history_policy must be 'strict' or 'convert'")
+        if max_tool_calls_per_round is not None and max_tool_calls_per_round < 1:
+            raise ValueError("max_tool_calls_per_round must be positive or None")
         if checkpoint_key is not None and len(checkpoint_key) < 16:
             raise ValueError("checkpoint_key must have at least 16 bytes")
         if memory is not None and not isinstance(memory, MemoryBackend):
@@ -296,6 +305,7 @@ class AgentCore(Generic[OutputT]):
         self.max_tokens = max_tokens
         self.max_tool_rounds = max_tool_rounds
         self.max_parallel_tools = max_parallel_tools
+        self.max_tool_calls_per_round = max_tool_calls_per_round
         self.raise_tool_errors = raise_tool_errors
         self.tool_timeout = tool_timeout
         self.stream = stream
@@ -856,6 +866,15 @@ class AgentCore(Generic[OutputT]):
             nonce=uuid.uuid4().hex,
         )
 
+    def _check_call_count(self, count: int) -> None:
+        """Refuse a response with more tool calls than ``max_tool_calls_per_round`` (none of them runs)."""
+        limit = self.max_tool_calls_per_round
+        if limit is not None and count > limit:
+            raise MaxToolCallsError(
+                f"{self.name}: the model asked for {count} tool calls in one response; "
+                f"max_tool_calls_per_round is {limit}. No call of that response ran."
+            )
+
     def _issue_checkpoint(self, **fields: Any) -> TurnCheckpoint:
         """A new checkpoint with its digest (an HMAC with ``checkpoint_key``)."""
         checkpoint = TurnCheckpoint(**fields)
@@ -914,6 +933,9 @@ class AgentCore(Generic[OutputT]):
             raise CheckpointError("the checkpoint's results and waiting calls do not match its calls")
         if checkpoint.round > self.max_tool_rounds:
             raise CheckpointError("the checkpoint's tool round exceeds max_tool_rounds")
+        limit = self.max_tool_calls_per_round
+        if limit is not None and len(checkpoint.calls) > limit:
+            raise CheckpointError("the checkpoint has more calls than max_tool_calls_per_round")
         history = [Message.model_validate(message) for message in checkpoint.history]
         if not history:
             raise CheckpointError("the checkpoint's conversation is empty")
@@ -1023,6 +1045,7 @@ class AgentCore(Generic[OutputT]):
             calls = tuple(response.tool_calls)
             if not calls:
                 raise UnexpectedResponseError("stop_reason='tool_use' without tool_use blocks")
+            self._check_call_count(len(calls))
             return _Step("tools", tool_calls=calls)
 
         if response.stop_reason not in _FINAL:

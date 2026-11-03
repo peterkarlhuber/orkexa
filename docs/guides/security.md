@@ -24,7 +24,8 @@
   session token). Treat a configurable `base_url` as security-relevant: it receives
   the full conversation.
 * **Tools** run only in Orkexa, after `before_tool`; SDK automatic function calling is
-  disabled. Tool inputs are validated; tool rounds, parallelism and timeouts are limited.
+  disabled. Tool inputs are validated; tool rounds, tool calls per response
+  (`max_tool_calls_per_round`, default 64), parallelism and timeouts are limited.
 * **OpenAI** requests use `store=False` by default.
 * **No network on import** and no live API calls in the default test suite.
 
