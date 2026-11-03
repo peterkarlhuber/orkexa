@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 import inspect
 import threading
 from typing import Any
@@ -80,11 +80,16 @@ class AsyncAgent(AgentCore[OutputT]):
         finally:
             self._exit_turn()
 
-    async def resume(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> OutputT:
+    async def resume(
+        self,
+        checkpoint: TurnCheckpoint | Mapping[str, Any],
+        *,
+        claim: Callable[[str], bool] | None = None,
+    ) -> OutputT:
         """Continue a suspended turn; see :meth:`Agent.resume <orkexa.Agent.resume>`."""
         self._enter_turn()
         try:
-            return await self._drive(self._resume_turn(checkpoint))
+            return await self._drive(self._resume_turn(checkpoint, claim))
         finally:
             self._exit_turn()
 

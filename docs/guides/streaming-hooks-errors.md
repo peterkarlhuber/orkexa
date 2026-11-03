@@ -55,6 +55,32 @@ agent's name, model, system prompt, tool definitions, output format and tool rou
 limit; anything else raises `CheckpointError`. Where the checkpoint is stored, how long
 it is valid and who may decide is the application's responsibility.
 
+!!! warning "Resuming is not single-use"
+    Every `resume()` of the same checkpoint runs its waiting calls again, each time with
+    `ToolCall.resumed=True`. A double approval, a retried job or a crash between `resume()`
+    and deleting the checkpoint can therefore run an approved side-effecting call twice.
+    Either consume the checkpoint atomically in your store before you resume it, or pass
+    `claim=`: a callable that records `checkpoint.id` and returns `False` if it was
+    recorded before (`CheckpointClaims()` does this in memory, for one process). A claimed
+    checkpoint is refused with `CheckpointError` before anything runs. Applications that
+    deliberately resume again after their own crash (with idempotent tools or a journal
+    that asks again) pass no claim.
+
+    ```python
+    claims = CheckpointClaims()  # or your own database-backed check
+    answer = agent.resume(load(), claim=claims)
+    ```
+
+A checkpoint carries a `digest` over its conversation, every call with its arguments, the
+stored results and the waiting calls; a checkpoint changed after it was issued is refused.
+Without a key the digest is a plain SHA-256, which detects accidental or inconsistent
+edits but can be recomputed by anyone who can write the checkpoint store. Give the agent
+`checkpoint_key=` (a secret of at least 16 bytes, the same in every process that resumes)
+to sign checkpoints with an HMAC: unsigned or altered checkpoints are then refused, so the
+arguments of an approved call cannot be changed in storage. Bind approvals to the call
+they were given for (`call.id`, `call.name` and `call.input` in `before_tool`), not only
+to the checkpoint.
+
 ### Pausing before a request
 
 A usage tracker can pause a turn *before* a model request in the same way: when

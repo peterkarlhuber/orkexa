@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextvars import copy_context
@@ -105,6 +105,9 @@ class Agent(AgentCore[OutputT]):
         history_policy: ``"strict"`` (default): continuing a conversation of another
             provider raises if reasoning or native parts would be lost; ``"convert"``
             drops them with a warning.
+        checkpoint_key: A secret (at least 16 bytes) that signs turn checkpoints with an
+            HMAC; :meth:`resume` then refuses unsigned or altered checkpoints. Without it
+            the checkpoint digest only detects accidental changes.
 
     The conversation is committed only after a complete turn. Usage of every API
     response is recorded immediately, also when the turn fails later; tools that
@@ -134,7 +137,12 @@ class Agent(AgentCore[OutputT]):
         finally:
             self._exit_turn()
 
-    def resume(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> OutputT:
+    def resume(
+        self,
+        checkpoint: TurnCheckpoint | Mapping[str, Any],
+        *,
+        claim: Callable[[str], bool] | None = None,
+    ) -> OutputT:
         """Continue a suspended turn (:class:`~orkexa.TurnSuspended`).
 
         At a waiting tool call (``checkpoint.stage == "tools"``) the waiting calls go
@@ -148,10 +156,18 @@ class Agent(AgentCore[OutputT]):
         completed turn's conversation (from the checkpoint) becomes the agent's
         conversation. A turn that waits again raises :class:`~orkexa.TurnSuspended` with
         a new checkpoint.
+
+        A checkpoint changed after it was issued is refused (its ``digest``; an HMAC with
+        ``checkpoint_key``). Resuming is **not single-use** by itself: each resume of the
+        same checkpoint runs its waiting calls again. Pass ``claim`` (e.g. a shared
+        :class:`~orkexa.CheckpointClaims`, or a callable that records
+        ``checkpoint.id`` in your database and returns ``False`` if it was there) to refuse
+        a second resume with :class:`~orkexa.CheckpointError` before anything runs, or
+        consume the checkpoint atomically in your store before resuming.
         """
         self._enter_turn()
         try:
-            return self._drive(self._resume_turn(checkpoint))
+            return self._drive(self._resume_turn(checkpoint, claim))
         finally:
             self._exit_turn()
 

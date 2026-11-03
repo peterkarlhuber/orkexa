@@ -21,6 +21,7 @@ from contextlib import contextmanager, suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 import hashlib
+import hmac
 import json
 import os
 import threading
@@ -58,7 +59,7 @@ from ..retrieval import Index
 from ..tools import Tool, ToolOutput
 from ..usage import Reservation, UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
 from .capabilities import ModelCapabilities, Support
-from .checkpoint import CHECKPOINT_FORMAT, CHECKPOINT_VERSION, TurnCheckpoint, WaitingCall
+from .checkpoint import CHECKPOINT_FORMAT, CHECKPOINT_VERSION, TurnCheckpoint, WaitingCall, checkpoint_digest
 from .conversion import (
     HistoryPolicy,
     dump_history,
@@ -231,6 +232,7 @@ class AgentCore(Generic[OutputT]):
         pricing: PricingInput = None,
         capabilities: Mapping[str, Support] | None = None,
         history_policy: HistoryPolicy = "strict",
+        checkpoint_key: bytes | str | None = None,
         _adapter: Provider | None = None,
     ) -> None:
         from ..providers.base import ProviderConfig
@@ -250,6 +252,8 @@ class AgentCore(Generic[OutputT]):
             raise ValueError("on_refusal must be 'raise' or 'return'")
         if history_policy not in ("strict", "convert"):
             raise ValueError("history_policy must be 'strict' or 'convert'")
+        if checkpoint_key is not None and len(checkpoint_key) < 16:
+            raise ValueError("checkpoint_key must have at least 16 bytes")
         if memory is not None and not isinstance(memory, MemoryBackend):
             raise TypeError("memory must be a MemoryBackend, e.g. EphemeralMemory() or FileMemory(path)")
         if files is not None and not isinstance(files, FileStore):
@@ -313,6 +317,10 @@ class AgentCore(Generic[OutputT]):
         self._turn_max_tokens: int | None = None
         self._turn_id: str | None = None
         self._resuming: set[str] = set()
+        #: Signs turn checkpoints (HMAC); not part of the fingerprint and never stored in a checkpoint.
+        self._checkpoint_key: bytes | None = (
+            checkpoint_key.encode() if isinstance(checkpoint_key, str) else checkpoint_key
+        )
         self._turn_lock = threading.Lock()
         for tool in tools or []:
             self.add_tool(tool)
@@ -808,7 +816,7 @@ class AgentCore(Generic[OutputT]):
         waiting = [item for item in results if isinstance(item, _Waiting)]
         if waiting:
             raise TurnSuspended(
-                TurnCheckpoint(
+                self._issue_checkpoint(
                     agent=self.name,
                     model=self._model_id(),
                     fingerprint=self._checkpoint_fingerprint(),
@@ -823,6 +831,7 @@ class AgentCore(Generic[OutputT]):
                     ],
                     effort=self._turn_effort,
                     max_tokens=self._turn_max_tokens,
+                    nonce=uuid.uuid4().hex,
                 )
             )
         # All results of one assistant turn go back in a single user message.
@@ -832,7 +841,7 @@ class AgentCore(Generic[OutputT]):
         self, history: list[Message], round_number: int, exc: RequestSuspended
     ) -> TurnCheckpoint:
         """The checkpoint of a turn whose next model request the usage tracker suspended."""
-        return TurnCheckpoint(
+        return self._issue_checkpoint(
             agent=self.name,
             model=self._model_id(),
             fingerprint=self._checkpoint_fingerprint(),
@@ -844,7 +853,27 @@ class AgentCore(Generic[OutputT]):
             stage="request",
             reason=exc.reason,
             ref=exc.ref,
+            nonce=uuid.uuid4().hex,
         )
+
+    def _issue_checkpoint(self, **fields: Any) -> TurnCheckpoint:
+        """A new checkpoint with its digest (an HMAC with ``checkpoint_key``)."""
+        checkpoint = TurnCheckpoint(**fields)
+        return checkpoint.model_copy(update={"digest": checkpoint_digest(checkpoint, self._checkpoint_key)})
+
+    def _check_digest(self, checkpoint: TurnCheckpoint) -> None:
+        """Refuse a checkpoint changed after it was issued (or unsigned, when this agent has a key)."""
+        if checkpoint.digest is None:
+            if self._checkpoint_key is not None:
+                raise CheckpointError(
+                    "the checkpoint is not signed (this agent requires a checkpoint_key HMAC)"
+                )
+            return  # written before checkpoints had a digest
+        expected = checkpoint_digest(checkpoint, self._checkpoint_key)
+        if not hmac.compare_digest(checkpoint.digest, expected):
+            raise CheckpointError(
+                "the checkpoint was changed after it was issued (or signed with another key)"
+            )
 
     def _checkpoint_fingerprint(self) -> str:
         """What a suspended turn depends on besides its conversation (see :mod:`orkexa.core.checkpoint`)."""
@@ -888,22 +917,36 @@ class AgentCore(Generic[OutputT]):
         history = [Message.model_validate(message) for message in checkpoint.history]
         if not history:
             raise CheckpointError("the checkpoint's conversation is empty")
-        if checkpoint.stage == "tools" and history[-1].role != "assistant":
-            raise CheckpointError("the checkpoint's conversation does not end with the tool calls")
+        if checkpoint.stage == "tools":
+            last = history[-1]
+            if last.role != "assistant":
+                raise CheckpointError("the checkpoint's conversation does not end with the tool calls")
+            requested = [part for part in last.parts() if isinstance(part, ToolCallPart)]
+            if requested != list(checkpoint.calls):
+                raise CheckpointError("the checkpoint's calls differ from the calls in its conversation")
+        self._check_digest(checkpoint)
         self._last_turn_records = []
         self._turn_effort = checkpoint.effort
         self._turn_max_tokens = checkpoint.max_tokens
         self._turn_id = checkpoint.turn_id
         return checkpoint, history
 
-    def _resume_turn(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> Generator[Effect, Any, OutputT]:
+    def _resume_turn(
+        self,
+        checkpoint: TurnCheckpoint | Mapping[str, Any],
+        claim: Callable[[str], bool] | None = None,
+    ) -> Generator[Effect, Any, OutputT]:
         """Continue a suspended turn: run the waiting calls, then the remaining rounds.
 
         A ``"request"`` checkpoint continues with the round whose request was suspended:
         the request is built from the checkpoint's conversation and admitted again.
+        ``claim(checkpoint.id)`` (optional) is asked after the checkpoint was checked and
+        before anything runs; ``False`` refuses a checkpoint that was resumed before.
         """
         try:
             restored, history = self._restore(checkpoint)
+            if claim is not None and not claim(restored.id):
+                raise CheckpointError("the checkpoint was already resumed (claimed before)")
             if restored.stage == "request":
                 resumed: OutputT = yield from self._rounds(history, restored.round)
                 return resumed

@@ -4,6 +4,20 @@
 
 First release of Orkexa.
 
+### Changed: turn checkpoints are bound to their content; single-use resume is opt-in (audit ORK2-03)
+
+* `TurnCheckpoint` has two new optional fields, `nonce` and `digest`. The digest covers the
+  conversation, every call with its arguments, the stored results and the waiting calls;
+  `resume()` refuses a checkpoint changed after it was issued, and one whose `calls` differ
+  from the calls in its conversation. Checkpoints written before (no digest) still resume
+  on agents without a key. The checkpoint version stays 1.
+* New `checkpoint_key=` (agents): signs checkpoints with an HMAC and refuses unsigned or
+  altered ones, so approved call arguments cannot be changed in storage.
+* New `resume(..., claim=)` and `CheckpointClaims`: a claim keyed by the new
+  `TurnCheckpoint.id` refuses a second resume of the same checkpoint before anything runs.
+  Without a claim, resuming again still works (and runs the waiting calls again), as
+  before; the guide now warns about it.
+
 ### Fixed: a failing parallel tool call in AsyncAgent cancels its siblings (audit ORK2-02)
 
 * With `max_parallel_tools > 1`, the first failing call ended `AsyncAgent.ask()` while its
