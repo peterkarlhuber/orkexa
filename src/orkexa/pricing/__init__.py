@@ -37,6 +37,7 @@ from ._legacy import (
     register_pricing,
     resolve_pricing,
 )
+from ._local import LOCAL_INFERENCE_PROVIDERS, LOCAL_PRICE_SOURCE, is_local_inference, local_price
 from ._model import (
     NEUTRAL_CONDITIONS,
     TOKENS_PER_RATE_UNIT,
@@ -55,6 +56,8 @@ from ._snapshot import SNAPSHOT_FORMAT, PriceLookup, PriceSnapshot
 __all__ = [
     "BUILTIN_SNAPSHOT",
     "BUILTIN_VERSION",
+    "LOCAL_INFERENCE_PROVIDERS",
+    "LOCAL_PRICE_SOURCE",
     "MODEL_PRICING",
     "NEUTRAL_CONDITIONS",
     "PROVIDER_PRICING",
@@ -82,6 +85,8 @@ __all__ = [
     "TokenRates",
     "calculate_cost",
     "default_resolver",
+    "is_local_inference",
+    "local_price",
     "pricing_basis",
     "register_pricing",
     "resolve_pricing",
