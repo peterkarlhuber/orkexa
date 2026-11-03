@@ -25,8 +25,8 @@ pip install "orkexa[openai,vector,local]"   # openai: the OpenAI-compatible prot
 from orkexa import Agent
 from orkexa.local import OllamaClient
 
-client = OllamaClient()                      # http://127.0.0.1:11434, loopback only by default
-details = client.show("qwen3.5:4b")           # capabilities from the installed model
+client = OllamaClient()  # http://127.0.0.1:11434, loopback only by default
+details = client.show("qwen3.5:4b")  # capabilities from the installed model
 agent = Agent(
     model="ollama:qwen3.5:4b",
     base_url=client.openai_base_url,
@@ -46,7 +46,7 @@ derives them from it.
 ```python
 from orkexa.local import ManagedOllama, install_runtime
 
-install_runtime("~/.orkexa/local", archive="ollama-linux-amd64.tar.zst")   # offline: a copied archive
+install_runtime("~/.orkexa/local", archive="ollama-linux-amd64.tar.zst")  # offline: a copied archive
 # install_runtime("~/.orkexa/local", download=True)                       # or download it (network)
 
 with ManagedOllama("~/.orkexa/local", models_dir="/Volumes/SSD/models") as server:
@@ -98,7 +98,7 @@ orkexa-local verify /media/usb/models
 from orkexa.embeddings import OllamaEmbeddings
 
 embeddings = OllamaEmbeddings("qwen3-embedding:0.6b")
-embeddings.identity()    # provider, model, digest, dimensions, instructions
+embeddings.identity()  # provider, model, digest, dimensions, instructions
 ```
 
 `EmbeddingModel` is provider-independent (`embed_documents`, `embed_query`, `identity`).

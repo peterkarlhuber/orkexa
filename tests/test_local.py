@@ -1,4 +1,4 @@
-"""orkexa.local: the Ollama client, managed server, runtime install, offline packages; embeddings; local pricing.
+"""orkexa.local: Ollama client, managed server, runtime install, offline packages; embeddings; pricing.
 
 A fake Ollama server (standard library HTTP server) stands in for the real one. Live tests
 against a real Ollama run only when ORKEXA_TEST_OLLAMA_URL is set (see tests at the end).
@@ -20,6 +20,7 @@ import sys
 import tarfile
 import textwrap
 import threading
+from typing import ClassVar
 import zipfile
 
 import pytest
@@ -54,8 +55,8 @@ MODELS = {
 
 
 class FakeOllama(http.server.BaseHTTPRequestHandler):
-    requests: list[tuple[str, str, object]] = []
-    blobs: dict[str, bytes] = {}
+    requests: ClassVar[list[tuple[str, str, object]]] = []
+    blobs: ClassVar[dict[str, bytes]] = {}
 
     def log_message(self, *args: object) -> None:
         pass
@@ -75,12 +76,12 @@ class FakeOllama(http.server.BaseHTTPRequestHandler):
             return raw
         return json.loads(raw) if raw else None
 
-    def do_HEAD(self) -> None:  # noqa: N802
+    def do_HEAD(self) -> None:
         digest = self.path.rsplit("/", 1)[-1]
         self.send_response(200 if digest in self.blobs else 404)
         self.end_headers()
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         self.requests.append(("GET", self.path, None))
         if self.path == "/api/version":
             self._json(200, {"version": "0.40.14"})
@@ -108,12 +109,12 @@ class FakeOllama(http.server.BaseHTTPRequestHandler):
         else:
             self._json(404, {"error": "not found"})
 
-    def do_DELETE(self) -> None:  # noqa: N802
+    def do_DELETE(self) -> None:
         body = self._body()
         self.requests.append(("DELETE", self.path, body))
         self._json(200, {})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         body = self._body()
         self.requests.append(("POST", self.path, body if not isinstance(body, bytes) else len(body)))
         if self.path == "/api/show":
@@ -142,7 +143,12 @@ class FakeOllama(http.server.BaseHTTPRequestHandler):
             vectors = [[float(len(text) % 7 + 1)] + [0.5] * (dims - 1) for text in body["input"]]
             self._json(
                 200,
-                {"model": body["model"], "embeddings": vectors, "prompt_eval_count": 7, "total_duration": 2_000_000},
+                {
+                    "model": body["model"],
+                    "embeddings": vectors,
+                    "prompt_eval_count": 7,
+                    "total_duration": 2_000_000,
+                },
             )
         elif self.path == "/api/pull":
             self.send_response(200)
@@ -209,7 +215,12 @@ def test_import_and_agent_construction_do_not_load_or_contact_ollama() -> None:
 def test_urls_are_loopback_only_unless_allowed() -> None:
     assert check_ollama_url("http://localhost:11434/v1") == "http://localhost:11434"
     assert check_ollama_url("http://[::1]:11434") == "http://[::1]:11434"
-    for bad in ("ftp://127.0.0.1", "http://user:pw@127.0.0.1", "http://127.0.0.1/api", "http://10.0.0.5:11434"):
+    for bad in (
+        "ftp://127.0.0.1",
+        "http://user:pw@127.0.0.1",
+        "http://127.0.0.1/api",
+        "http://10.0.0.5:11434",
+    ):
         with pytest.raises(ConfigurationError):
             check_ollama_url(bad)
     assert check_ollama_url("http://10.0.0.5:11434", allow_remote=True) == "http://10.0.0.5:11434"
@@ -218,7 +229,11 @@ def test_urls_are_loopback_only_unless_allowed() -> None:
 def test_model_names_and_cloud_tags() -> None:
     assert check_model_name("qwen3.5:4b") == "qwen3.5:4b"
     assert check_model_name("hf.co/org/model:Q4_K_M") == "hf.co/org/model:Q4_K_M"
-    assert is_cloud_model("gpt-oss:120b-cloud") and is_cloud_model("x:cloud") and not is_cloud_model("qwen3.5:4b")
+    assert (
+        is_cloud_model("gpt-oss:120b-cloud")
+        and is_cloud_model("x:cloud")
+        and not is_cloud_model("qwen3.5:4b")
+    )
     for bad in ("../x", "/abs", "a b", "x:cloud"):
         with pytest.raises(OllamaError):
             check_model_name(bad)
@@ -270,7 +285,7 @@ def test_gguf_import_uploads_a_verified_blob(ollama: str, tmp_path: Path) -> Non
     gguf.write_bytes(b"GGUF" + b"\0" * 100)
     statuses = [p.status for p in OllamaClient(ollama).create_from_gguf("mine:1", gguf)]
     assert statuses[-1] == "success"
-    create = [body for method, path, body in FakeOllama.requests if path == "/api/create"][0]
+    create = next(body for method, path, body in FakeOllama.requests if path == "/api/create")
     assert isinstance(create, dict)
     assert create["files"] == {"model.gguf": "sha256:" + hashlib.sha256(gguf.read_bytes()).hexdigest()}
 
@@ -317,12 +332,20 @@ def test_local_inference_has_no_api_price_but_is_not_unpriced() -> None:
     from orkexa.core.types import TokenUsage
 
     usage = TokenUsage(input_tokens=33, output_tokens=227)
-    local = record_token_usage(usage, agent_name="a", model="qwen3.5:4b", provider="ollama", custom_pricing=PricingBasis())
-    assert local.estimated_cost_usd == Decimal(0) and local.pricing_source == "local" and local.local_inference
-    remote = record_token_usage(usage, agent_name="a", model="my-model", provider="vllm", custom_pricing=PricingBasis())
+    local = record_token_usage(
+        usage, agent_name="a", model="qwen3.5:4b", provider="ollama", custom_pricing=PricingBasis()
+    )
+    assert (
+        local.estimated_cost_usd == Decimal(0) and local.pricing_source == "local" and local.local_inference
+    )
+    remote = record_token_usage(
+        usage, agent_name="a", model="my-model", provider="vllm", custom_pricing=PricingBasis()
+    )
     assert remote.estimated_cost_usd is None  # a self-hosted OpenAI-compatible server stays unpriced
     summary = summarize_usage([local, remote])
-    assert summary.local_requests == 1 and summary.unpriced_requests == 1 and summary.estimated_cost_usd is None
+    assert (
+        summary.local_requests == 1 and summary.unpriced_requests == 1 and summary.estimated_cost_usd is None
+    )
 
 
 # ---- runtime install ----------------------------------------------------------------------
@@ -346,9 +369,14 @@ def _tar(path: Path, members: dict[str, bytes], links: dict[str, str] | None = N
             bundle.addfile(info)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX runtime layout with symlinks")
 def test_install_from_a_verified_archive(tmp_path: Path) -> None:
     archive = tmp_path / "ollama-darwin.tgz"
-    _tar(archive, {"bin/ollama": b"#!/bin/sh\n", "lib/ollama/libx.so.1": b"x"}, {"lib/ollama/libx.so": "libx.so.1"})
+    _tar(
+        archive,
+        {"bin/ollama": b"#!/bin/sh\n", "lib/ollama/libx.so.1": b"x"},
+        {"lib/ollama/libx.so": "libx.so.1"},
+    )
     with pytest.raises(OllamaError) as error:
         install_runtime(tmp_path / "home", artifact=_artifact(archive, archive.name))
     assert error.value.code == "runtime_missing"  # neither archive nor download: nothing happens
@@ -364,7 +392,10 @@ def test_install_refuses_wrong_checksums_and_unsafe_archives(tmp_path: Path) -> 
     with pytest.raises(OllamaError) as error:
         install_runtime(tmp_path / "h1", archive=archive, artifact=wrong)
     assert error.value.code == "checksum_mismatch"
-    for members, links in (({"../evil": b"x", "bin/ollama": b"x"}, None), ({"bin/ollama": b"x"}, {"lib/l": "/etc/passwd"})):
+    for members, links in (
+        ({"../evil": b"x", "bin/ollama": b"x"}, None),
+        ({"bin/ollama": b"x"}, {"lib/l": "/etc/passwd"}),
+    ):
         bad = tmp_path / "ollama-bad.tgz"
         _tar(bad, members, links)
         with pytest.raises(OllamaError) as error:
@@ -384,7 +415,8 @@ def test_install_refuses_wrong_checksums_and_unsafe_archives(tmp_path: Path) -> 
 FAKE_BINARY = """#!{python}
 import http.server, json, os, sys
 host, port = os.environ["OLLAMA_HOST"].rsplit(":", 1)
-seen = {{k: os.environ.get(k) for k in ("OLLAMA_NO_CLOUD", "OLLAMA_MODELS", "HOME", "HTTPS_PROXY", "SECRET_TOKEN")}}
+names = ("OLLAMA_NO_CLOUD", "OLLAMA_MODELS", "HOME", "HTTPS_PROXY", "SECRET_TOKEN")
+seen = {{k: os.environ.get(k) for k in names}}
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
@@ -441,14 +473,21 @@ def _store(root: Path) -> Path:
     weights, wsize = _blob(root, b"GGUF weights" * 100)
     config, csize = _blob(root, b'{"model_format":"gguf"}')
     manifest = json.dumps(
-        {"schemaVersion": 2, "config": {"digest": config, "size": csize},
-         "layers": [{"mediaType": "application/vnd.ollama.image.model", "digest": weights, "size": wsize}]}
+        {
+            "schemaVersion": 2,
+            "config": {"digest": config, "size": csize},
+            "layers": [{"mediaType": "application/vnd.ollama.image.model", "digest": weights, "size": wsize}],
+        }
     ).encode()
     child, _ = _blob(root, manifest)
     listing = json.dumps(
-        {"mediaType": "application/vnd.ollama.manifest.list.v2+json",
-         "manifests": [{"digest": child, "runner": "llamacpp", "format": "gguf"},
-                       {"digest": "sha256:" + "f" * 64, "runner": "mlx", "format": "safetensors"}]}
+        {
+            "mediaType": "application/vnd.ollama.manifest.list.v2+json",
+            "manifests": [
+                {"digest": child, "runner": "llamacpp", "format": "gguf"},
+                {"digest": "sha256:" + "f" * 64, "runner": "mlx", "format": "safetensors"},
+            ],
+        }
     ).encode()
     entry, _ = _blob(root, listing)
     link = root / "manifests-v2/ollama.com/library/tiny/1b"
@@ -464,7 +503,9 @@ def test_scan_export_verify_import_roundtrip(tmp_path: Path) -> None:
     store = _store(tmp_path / "store")
     models = {m.name: m for m in scan_store(store)}
     assert set(models) == {"tiny:1b", "old:latest"}
-    child_digest = hashlib.sha256((store / "manifests/registry.ollama.ai/library/old/latest").read_bytes()).hexdigest()
+    child_digest = hashlib.sha256(
+        (store / "manifests/registry.ollama.ai/library/old/latest").read_bytes()
+    ).hexdigest()
     assert models["tiny:1b"].digest == child_digest  # the GGUF manifest, as `ollama list` shows it
     report = export_package(store, ["tiny:1b", "old"], tmp_path / "usb")
     assert report.models == ["tiny:1b", "old:latest"] and not report.signed
@@ -518,5 +559,7 @@ def test_live_agent_answer_and_embeddings() -> None:
     assert "paris" in answer.lower()
     usage = agent.usage
     assert usage.local_requests == 1 and usage.estimated_cost_usd == 0 and usage.input_tokens > 0
-    vectors = OllamaEmbeddings("qwen3-embedding:0.6b", base_url=LIVE).embed_documents(["Garantie", "warranty"])
+    vectors = OllamaEmbeddings("qwen3-embedding:0.6b", base_url=LIVE).embed_documents(
+        ["Garantie", "warranty"]
+    )
     assert len(vectors[0]) == 1024
