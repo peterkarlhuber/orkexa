@@ -4,6 +4,16 @@
 
 First release of Orkexa.
 
+### Changed: an unknown provider prefix raises instead of falling back to Anthropic (DX-02)
+
+* `Agent(model="OpenAI:gpt-4o")`, `"openai/gpt-4o"` or `"foo:bar"` silently went to
+  Anthropic (and only failed with a missing `anthropic` extra or at the API). A registered
+  name in another case or with `/` now raises `ConfigurationError` with the corrected name,
+  also in `resolve_model()`. Agents, `Evaluator` and the dynamic agent factory resolve
+  `strict`: without `provider=`, any other `prefix:` or `/` raises (pass `provider="ollama"`
+  for `llama3.1:8b`). `resolve_model(model)` without `strict=True` keeps the default provider
+  for other unknown prefixes, so code that only parses stored names is unaffected.
+
 ### Changed: a missing API key raises `MissingCredentialsError` for every provider (DX-01)
 
 * Without a key each SDK raised its own exception (anthropic a `TypeError` at request time,

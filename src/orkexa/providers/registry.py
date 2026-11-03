@@ -5,6 +5,12 @@ are equivalent. A ``name:`` prefix only selects a provider if ``name`` is regist
 so model ids that contain colons (Ollama tags such as ``llama3.1:8b``, fine-tuned
 ``ft:...`` ids) are never split. Without prefix and ``provider=``, the model belongs
 to :data:`DEFAULT_PROVIDER` (``"anthropic"``).
+
+A mistyped provider never falls back to Anthropic silently (DX-02): ``"OpenAI:gpt-5.5"``
+or ``"openai/gpt-5.5"`` (a registered name in another case or with ``/``) raise
+:class:`~orkexa.ConfigurationError` with the corrected name. Agents resolve their model
+``strict``: without ``provider=``, any other ``prefix:`` or ``/`` raises too (an Anthropic
+model id contains neither), so ``Agent(model="llama3.1:8b")`` asks for ``provider="ollama"``.
 """
 
 from __future__ import annotations
@@ -69,11 +75,17 @@ def split_model(model: str) -> tuple[str | None, str]:
     return None, model
 
 
-def resolve_model(model: str, provider: str | None = None) -> tuple[str, str]:
+def resolve_model(model: str, provider: str | None = None, *, strict: bool = False) -> tuple[str, str]:
     """The ``(provider, model id)`` an agent uses.
 
+    Without ``provider=`` and without a registered prefix the model belongs to
+    :data:`DEFAULT_PROVIDER`, except for a mistyped registered name (``"OpenAI:..."``,
+    ``"openai/..."``), which raises. With ``strict`` (agents, evaluators and the dynamic
+    agent factory), any unregistered ``prefix:`` and any ``/`` raise as well.
+
     Raises:
-        ConfigurationError: prefix and ``provider=`` disagree, or the provider is unknown.
+        ConfigurationError: prefix and ``provider=`` disagree, the provider is unknown, or
+            (without ``provider=``) the prefix is not a registered provider.
     """
     if not isinstance(model, str) or not model.strip():
         raise ConfigurationError("model must be a non-empty string")
@@ -84,7 +96,40 @@ def resolve_model(model: str, provider: str | None = None) -> tuple[str, str]:
         raise ConfigurationError(
             f"model={model!r} names provider {prefix!r} but provider={provider!r} was given"
         )
+    if provider is None and prefix is None:
+        _check_unprefixed(model, strict=strict)
     return provider or prefix or DEFAULT_PROVIDER, model_id
+
+
+def _check_unprefixed(model: str, *, strict: bool) -> None:
+    """Refuse a model name whose provider part is not a registered provider (no silent default)."""
+    known = {name.lower(): name for name in _REGISTRY}
+    head, colon, rest = model.partition(":")
+    if colon and head.strip().lower() in known and rest:
+        right = known[head.strip().lower()]
+        raise ConfigurationError(
+            f"Unknown provider prefix {head!r} in model {model!r}; did you mean {right + ':' + rest!r}?"
+        )
+    first, slash, tail = model.partition("/")
+    if slash and ":" not in first and first.strip().lower() in known and tail:
+        right = known[first.strip().lower()]
+        raise ConfigurationError(
+            f"Model {model!r} uses '/' to name a provider; did you mean {right + ':' + tail!r}? "
+            f"(for a model id with '/', e.g. on vLLM, pass provider=...)"
+        )
+    if not strict:
+        return
+    if colon:
+        raise ConfigurationError(
+            f"Unknown provider prefix {head!r} in model {model!r}; "
+            f"registered: {', '.join(provider_names())}. A model id that contains ':' "
+            f"(e.g. an Ollama tag) needs provider=..., e.g. provider='ollama' or 'ollama:{model}'"
+        )
+    if slash:
+        raise ConfigurationError(
+            f"Model {model!r} has no provider and contains '/'; pass provider=... "
+            f"(e.g. 'vllm' or 'compatible') or write it as 'provider:{model}'"
+        )
 
 
 def _factory(name: str) -> ProviderFactory:

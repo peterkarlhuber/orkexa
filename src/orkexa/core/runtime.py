@@ -270,7 +270,7 @@ class AgentCore(Generic[OutputT]):
         if index is not None and not isinstance(index, Index):
             raise TypeError("index must be an Index, e.g. SQLiteIndex(path)")
 
-        provider_name, model_id = resolve_model(model, provider)
+        provider_name, model_id = resolve_model(model, provider, strict=True)
         if _adapter is None:
             config = ProviderConfig(
                 api_key=api_key,  # type: ignore[arg-type]

@@ -52,7 +52,10 @@ class Agent(AgentCore[OutputT]):
         Agent(model="gemini:gemini-3-pro")
         Agent(provider="ollama", model="llama3.1:8b")
 
-    A model without registered prefix belongs to the default provider ``anthropic``.
+    A model name without ``prefix:`` belongs to the default provider ``anthropic``. A
+    prefix that is not a registered provider (``"OpenAI:gpt-5.5"``, ``"foo:bar"``) or a
+    ``/`` in a name without ``provider=`` raises :class:`~orkexa.ConfigurationError`
+    instead of falling back to Anthropic.
     With ``output_format=None`` :meth:`ask` returns ``str``; with a Pydantic
     ``BaseModel`` subclass ``M`` it returns an ``M`` instance (``Agent[M]``).
 
