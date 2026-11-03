@@ -4,6 +4,13 @@
 
 First release of Orkexa.
 
+### Changed: stopping a Docker sandbox call no longer always waits 3 seconds (audit ORK2-08)
+
+* `stop_container` watched the container name for 3 s after every timeout or cancellation.
+  When `docker kill` succeeded the container existed, so no create request can still be in
+  flight: the watch now ends as soon as the name is confirmed gone. When the kill failed
+  (the client may have died while creating it) the full 3 s watch remains.
+
 ### Added: a limit on tool calls per model response (audit ORK2-04)
 
 * `max_tool_rounds` did not bound tool calls: one response with 500 calls ran all of them.
