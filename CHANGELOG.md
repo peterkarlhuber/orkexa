@@ -4,6 +4,28 @@
 
 First release of Orkexa.
 
+### Added: local models with Ollama, embeddings and retrieval modes
+
+* `orkexa.local`: `OllamaClient` (models, `/api/show` capabilities, downloads with progress and cancel,
+  GGUF import, embeddings; loopback only unless `allow_remote=True`, no redirects), `install_runtime`
+  (the pinned Ollama 0.40.14 from a SHA-256-verified archive, offline or with `download=True`),
+  `ManagedOllama` (a child `ollama serve` on a free loopback port with its own model folder and
+  `OLLAMA_NO_CLOUD=1`; an existing Ollama is only detected), offline model packages
+  (`export_package`/`import_package`/`verify_package`, every file checked by SHA-256) and the
+  `orkexa-local` command. Nothing runs, installs or downloads on `import orkexa` or `Agent(...)`.
+* `orkexa.embeddings`: the provider-independent `EmbeddingModel` with an `EmbeddingIdentity`
+  (provider, model, digest, dimensions, instructions) and `OllamaEmbeddings` (`/api/embed`, batches,
+  `truncate=false`, dimension checks, measured usage). `embedder=` callables keep working.
+* Retrieval modes `fts`, `vector` and `hybrid`: `Index.retrieve(query, k, mode=, sources=)` and
+  `index.tool(mode=, sources=)`. `SQLiteIndex(embeddings=...)` keeps vectors per namespace in a space
+  bound to the model's identity, ranks by exact cosine similarity, filters sources before ranking and
+  never falls back to full text. `reindex()` switches models safely (batches, resumable, atomic switch).
+  `Hit.ranks` shows each ranking's position. The legacy `vec0` path also honours `mode`.
+* Local pricing: requests to provider `ollama` get a zero *API* price with source `"local"`
+  (`UsageRecord.local_inference`, `UsageSummary.local_requests`), so strict pricing and budgets do not
+  refuse or ignore them as unpriced. Local operating costs are not recorded and must not be shown as 0.
+  New extra `local` (`zstandard`).
+
 ### Changed: an unknown provider prefix raises instead of falling back to Anthropic (DX-02)
 
 * `Agent(model="OpenAI:gpt-4o")`, `"openai/gpt-4o"` or `"foo:bar"` silently went to

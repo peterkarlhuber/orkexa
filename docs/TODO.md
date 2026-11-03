@@ -12,9 +12,9 @@
 |---|---|
 | P0 Critical | 0 |
 | P1 High | 0 |
-| P2 Medium | 1 |
-| P3 Low | 11 |
-| P4 Optional | 9 |
+| P2 Medium | 2 |
+| P3 Low | 13 |
+| P4 Optional | 11 |
 
 **Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
 Nodestro consumes it by commit SHA.
@@ -140,9 +140,46 @@ None known.
 - **Next step:** With the pin update, add `run.agent.MaxToolCallsError` to the Studio translations and to the
   "advanced fix" set (`RunProblem.tsx`).
 
+### ORK-031 · Signed offline model packages
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** [Local models](guides/local-models.md#getting-models-offline)
+- **What:** Offline model packages (`orkexa.local.export_package`) carry a SHA-256 for every file and the model
+  digests, which `import_package` checks; they have no signature, so integrity is proven but origin is not. The
+  model digests can be compared with the registry (Nodestro's catalog pins them).
+- **Next step:** Decide whether a signature (e.g. Sigstore or a minisign key of the exporting organization) is needed
+  for air-gapped deployments.
+
+### ORK-032 · Approximate vector index for large corpora
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** `SQLiteIndex` vector spaces (2026-11-03)
+- **What:** Vector search ranks by an exact cosine scan of the namespace's (or the allowed sources') vectors with
+  sqlite-vec's scalar function. That is exact and scoped before ranking, but linear in the number of chunks.
+- **Next step:** Measure on large corpora; add an approximate index only if the scan becomes the bottleneck.
+
+### ORK-033 · Rerankers and further embedding providers
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** `orkexa.embeddings`
+- **What:** `EmbeddingModel` has one built-in implementation (`OllamaEmbeddings`) plus `CallableEmbeddings`.
+  Rerankers are not covered (Ollama has no official reranker models).
+- **Next step:** Add cloud embedding providers or a reranker step when there is a concrete need.
+
+### ORK-034 · Updating the pinned Ollama runtime
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** `src/orkexa/local/install.py`
+- **What:** `install_runtime` accepts only the archives of Ollama 0.40.14 by SHA-256. A newer Ollama needs the
+  table updated from the release's `sha256sum.txt`, and the live tests rerun.
+- **Next step:** Add the update to the release checklist; review with each Nodestro release.
+
 ## Tests and quality assurance
 
-None known.
+### ORK-030 · Live tests of the larger local models
+
+- **Priority:** P2 Medium · **Status:** Open · **Refs:** `tests/test_local.py` (live tests with `ORKEXA_TEST_OLLAMA_URL`)
+- **What:** Real answers, tool calls and embeddings were tested with `qwen3.5:4b` and `qwen3-embedding:0.6b` on a
+  4-core CPU machine with 16 GB (no GPU). `qwen3.5:9b`, `qwen3.6:35b-a3b`, `qwen3.8:27b` and the larger embedding
+  models were verified only by registry metadata; their tool calling and structured output are untested here, and
+  macOS/Windows runs of `ManagedOllama` are untested.
+- **Next step:** Run the live tests on hardware with 32+ GB (and a GPU, and macOS/Windows) and record the results.
 
 ## Platform coverage
 

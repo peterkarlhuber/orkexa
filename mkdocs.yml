@@ -77,6 +77,7 @@ nav:
       - Streaming, hooks and errors: guides/streaming-hooks-errors.md
       - History and provider switching: guides/history.md
       - Memory, files and RAG: guides/memory-files-rag.md
+      - Local models, embeddings and retrieval modes: guides/local-models.md
       - Usage, pricing and budgets: guides/usage-and-budgets.md
       - Pricing engine: guides/pricing.md
       - Multi-agent and dynamic agents: guides/multi-agent.md

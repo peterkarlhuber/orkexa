@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Union
 
 from ..errors import PricingError
 from ._cost import CostBreakdown, MeteredUsage, PriceReference, calculate_cost
+from ._local import is_local_inference, local_price
 from ._model import ModelPrice
 from ._snapshot import PriceLookup, PriceSnapshot
 
@@ -215,6 +216,8 @@ class PricingBasis:
                 return result
             first = first or result
         assert first is not None
+        if is_local_inference(provider):
+            return PriceLookup(provider, model, local_price(provider, model), "exact", self.version)
         return first
 
     def calculate(
