@@ -43,6 +43,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 import io
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -64,20 +65,27 @@ if TYPE_CHECKING:
     from .files import FileStore
 
 __all__ = [
+    "HYBRID_FUSIONS",
+    "LEXICAL_WEIGHT",
     "RETRIEVAL_MODES",
     "SEARCH_TOOL_NAME",
     "Chunk",
     "Citation",
     "Embedder",
     "Hit",
+    "HybridFusion",
     "Index",
     "RetrievalError",
     "RetrievalMode",
     "SQLiteIndex",
     "VectorStatus",
     "citations",
+    "fuse_hybrid",
+    "lexical_evidence",
+    "query_words",
     "retrieval_sources",
     "split_text",
+    "word_weight",
 ]
 
 SEARCH_TOOL_NAME = "search"
@@ -85,12 +93,19 @@ Embedder = Callable[[list[str]], Sequence[Sequence[float]]]
 """Turns texts into vectors, e.g. a Voyage AI or sentence-transformers call."""
 
 RetrievalMode = Literal["fts", "vector", "hybrid"]
-"""How an index ranks: ``fts`` full text (BM25), ``vector`` embeddings only, ``hybrid`` both (RRF)."""
+"""How an index ranks: ``fts`` full text (BM25), ``vector`` embeddings only, ``hybrid`` both."""
 RETRIEVAL_MODES: tuple[str, ...] = get_args(RetrievalMode)
+
+HybridFusion = Literal["evidence", "rrf"]
+"""How ``hybrid`` combines its two rankings: ``evidence`` (default) weighs the full-text side by how
+much of the query a chunk contains (:func:`fuse_hybrid`); ``rrf`` is the earlier reciprocal rank fusion."""
+HYBRID_FUSIONS: tuple[str, ...] = get_args(HybridFusion)
 
 _WORD = re.compile(r"\w+", re.UNICODE)
 _RRF_K = 60
 _MAX_SOURCES = 50_000
+#: The share of the full-text evidence in ``evidence`` fusion (the vector side gets the rest).
+LEXICAL_WEIGHT = 0.5
 
 
 class RetrievalError(OrkexaError, RuntimeError):
@@ -450,8 +465,70 @@ def _fts_query(query: str) -> str:
 
     BM25 then ranks chunks that match more and rarer words higher.
     """
-    words = dict.fromkeys(word.lower() for word in _WORD.findall(query))
-    return " OR ".join(f'"{word}"*' for word in words)
+    return " OR ".join(f'"{word}"*' for word in query_words(query))
+
+
+def query_words(query: str) -> list[str]:
+    """The distinct lower-case words of ``query`` that full-text search matches (each as a prefix)."""
+    return list(dict.fromkeys(word.lower() for word in _WORD.findall(query)))
+
+
+def word_weight(matching: int, total: int) -> float:
+    """The inverse document frequency of a query word that ``matching`` of ``total`` chunks contain.
+
+    The BM25 form ``ln(1 + (N - n + 0.5) / (n + 0.5))``: always positive, highest for a word no chunk
+    contains. Such a word cannot be found, so it lowers the share of every chunk (see
+    :func:`lexical_evidence`): a query in another language than the corpus has little lexical evidence.
+    """
+    matching = max(0, min(matching, total))
+    return math.log(1.0 + (total - matching + 0.5) / (matching + 0.5))
+
+
+def lexical_evidence(weights: Mapping[str, float], found: Mapping[int, Iterable[str]]) -> dict[int, float]:
+    """How strongly full text supports each chunk: the squared IDF-weighted share of the query it contains.
+
+    ``weights`` maps every query word to its :func:`word_weight`; ``found`` maps chunk ids to the query
+    words they contain. A chunk with all query words scores 1, one that shares a single common or
+    accidental word (typical of a query in another language: ``de``, ``la``, a number) almost 0. Squaring
+    keeps such partial matches from outweighing the vector ranking while a match of the whole query
+    still counts fully.
+    """
+    mass = sum(weights.values())
+    if mass <= 0:
+        return {chunk_id: 0.0 for chunk_id in found}
+    return {
+        chunk_id: (sum(weights.get(word, 0.0) for word in set(words)) / mass) ** 2
+        for chunk_id, words in found.items()
+    }
+
+
+def fuse_hybrid(
+    vector: Sequence[tuple[int, float]],
+    lexical: Mapping[int, float],
+    *,
+    lexical_weight: float = LEXICAL_WEIGHT,
+) -> list[tuple[int, float]]:
+    """Evidence-weighted hybrid ranking: ``(1 - w) * vector + w * lexical`` per chunk, best first.
+
+    ``vector`` holds the ``(chunk id, cosine similarity)`` candidates of the vector ranking; their
+    similarities are min-max normalized over these candidates (best 1, last 0; one candidate or equal
+    similarities: 1), so the scale of an embedding model does not matter. ``lexical`` holds the
+    :func:`lexical_evidence` of chunks in [0, 1]. A chunk missing from one side counts 0 there. A
+    query without lexical evidence keeps the vector order; a chunk that contains the whole query rises
+    above vector neighbours that contain only part of it. Ties go to the lower chunk id.
+    """
+    if not 0.0 <= lexical_weight <= 1.0:
+        raise ValueError("lexical_weight must be between 0 and 1")
+    similarities = dict(vector)
+    low = min(similarities.values(), default=0.0)
+    spread = max(similarities.values(), default=0.0) - low
+    scores: dict[int, float] = {}
+    for chunk_id in {*similarities, *lexical}:
+        similarity = similarities.get(chunk_id)
+        normalized = 0.0 if similarity is None else (1.0 if spread <= 0 else (similarity - low) / spread)
+        evidence = min(max(lexical.get(chunk_id, 0.0), 0.0), 1.0)
+        scores[chunk_id] = round((1.0 - lexical_weight) * normalized + lexical_weight * evidence, 9)
+    return sorted(scores.items(), key=lambda item: (-item[1], item[0]))
 
 
 class VectorStatus(BaseModel):
@@ -500,6 +577,9 @@ class SQLiteIndex(Index):
             Only used when the tables are created.
         max_chars: Chunk size, see :func:`split_text`.
         overlap: Chunk overlap, see :func:`split_text`.
+        fusion: How ``hybrid`` combines full text and vectors: ``evidence`` (default,
+            :func:`fuse_hybrid`) or ``rrf`` (reciprocal rank fusion, k=60, the earlier behavior).
+        lexical_weight: The full-text share of ``evidence`` fusion (0: vector order only).
     """
 
     def __init__(
@@ -514,10 +594,18 @@ class SQLiteIndex(Index):
         tokenizer: str = "unicode61 remove_diacritics 2",
         max_chars: int = 1500,
         overlap: int = 200,
+        fusion: HybridFusion = "evidence",
+        lexical_weight: float = LEXICAL_WEIGHT,
     ) -> None:
         super().__init__(max_chars=max_chars, overlap=overlap)
         if not namespace:
             raise ValueError("namespace must not be empty")
+        if fusion not in HYBRID_FUSIONS:
+            raise ValueError(f"fusion must be one of {', '.join(HYBRID_FUSIONS)}, not {fusion!r}")
+        if not 0.0 <= lexical_weight <= 1.0:
+            raise ValueError("lexical_weight must be between 0 and 1")
+        self.fusion: HybridFusion = fusion
+        self.lexical_weight = lexical_weight
         if not re.fullmatch(r"[\w ]+", tokenizer):
             raise ValueError(f"Invalid FTS5 tokenizer: {tokenizer!r}")
         if embeddings is not None and embedder is not None:
@@ -946,8 +1034,11 @@ class SQLiteIndex(Index):
 
         ``sources`` limits the candidates before any ranking. ``vector`` and ``hybrid``
         raise :class:`RetrievalError` when vectors are missing or belong to another
-        embedding model; they never fall back to full-text search. Scores: ``fts`` and
-        ``hybrid`` give reciprocal-rank-fusion values, ``vector`` the cosine similarity.
+        embedding model; they never fall back to full-text search. Scores: ``fts`` gives
+        reciprocal-rank values, ``vector`` the cosine similarity and ``hybrid`` its fused
+        score in [0, 1] (:func:`fuse_hybrid`; reciprocal-rank-fusion values with ``fusion="rrf"``).
+        ``hybrid`` takes ``max(4 * k, 20)`` candidates from each ranking; ``Hit.ranks`` gives a
+        hit's position in each ranking whose candidates hold it.
         """
         if k < 1:
             raise ValueError("k must be positive")
@@ -969,14 +1060,43 @@ class SQLiteIndex(Index):
                     self._hit(chunk_id, similarity, {"vector": rank + 1})
                     for rank, (chunk_id, similarity) in enumerate(ranked["vector"][:k])
                 ]
-            scores: dict[int, float] = {}
             ranks: dict[int, dict[str, int]] = {}
             for name, ranking in ranked.items():
                 for rank, (chunk_id, _) in enumerate(ranking):
-                    scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (_RRF_K + rank + 1)
                     ranks.setdefault(chunk_id, {})[name] = rank + 1
+            if mode == "hybrid" and self.fusion == "evidence":
+                lexical = self._lexical_evidence(query, list(ranks))
+                fused = fuse_hybrid(ranked["vector"], lexical, lexical_weight=self.lexical_weight)
+                return [self._hit(chunk_id, score, ranks[chunk_id]) for chunk_id, score in fused[:k]]
+            scores: dict[int, float] = {}
+            for ranking in ranked.values():
+                for rank, (chunk_id, _) in enumerate(ranking):
+                    scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (_RRF_K + rank + 1)
             best = sorted(scores, key=lambda chunk_id: (-scores[chunk_id], chunk_id))[:k]
             return [self._hit(chunk_id, scores[chunk_id], ranks[chunk_id]) for chunk_id in best]
+
+    def _lexical_evidence(self, query: str, chunk_ids: list[int]) -> dict[int, float]:
+        """:func:`lexical_evidence` of ``chunk_ids``; word weights count the chunks of this namespace."""
+        total = len(self)
+        weights: dict[str, float] = {}
+        found: dict[int, list[str]] = {chunk_id: [] for chunk_id in chunk_ids}
+        candidates = json.dumps(chunk_ids)
+        for word in query_words(query):
+            expression = f'"{word}"*'
+            matching = self._connection.execute(
+                "SELECT count(*) FROM index_fts JOIN index_chunks ON index_chunks.id = index_fts.rowid"
+                " WHERE index_fts MATCH ? AND index_chunks.namespace = ?",
+                (expression, self.namespace),
+            ).fetchone()[0]
+            weights[word] = word_weight(int(matching), total)
+            if matching:
+                for (chunk_id,) in self._connection.execute(
+                    "SELECT rowid FROM index_fts WHERE index_fts MATCH ?"
+                    " AND rowid IN (SELECT value FROM json_each(?))",
+                    (expression, candidates),
+                ):
+                    found[int(chunk_id)].append(word)
+        return lexical_evidence(weights, found)
 
     @staticmethod
     def _source_filter(allowed: list[str] | None) -> tuple[str, tuple[Any, ...]]:

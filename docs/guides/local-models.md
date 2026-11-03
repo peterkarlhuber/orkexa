@@ -144,7 +144,7 @@ callables keep working; `CallableEmbeddings` gives them an explicit identity.
 |---|---|---|
 | `fts` | SQLite FTS5 full-text search (BM25) | Nothing; the default without embeddings |
 | `vector` | Embeddings only, exact cosine similarity | An embedding model and `sqlite-vec` |
-| `hybrid` | Both, fused by reciprocal rank fusion (k=60), ties by chunk id | Both; the default with embeddings |
+| `hybrid` | Both, fused by evidence-weighted score fusion (see below), ties by chunk id | Both; the default with embeddings |
 
 ```python
 index = SQLiteIndex("kb.db", embeddings=OllamaEmbeddings("qwen3-embedding:0.6b"))
@@ -165,6 +165,20 @@ agent = Agent(model="ollama:qwen3.5:9b", tools=[index.tool(mode="hybrid")])
   the old vectors. Searches keep using the old, complete space until then. Chunk texts and the
   full-text index stay unchanged. `vector_status()` reports the state; `drop_vectors()` returns to
   full text only.
+* `hybrid` takes `max(4 * k, 20)` candidates from each ranking and scores every candidate
+  `(1 - w) * vector + w * lexical` with `w = lexical_weight` (default 0.5). `vector` is the cosine
+  similarity, min-max normalized over the vector candidates (so the scale of a model does not matter).
+  `lexical` is the squared IDF-weighted share of the query's words the chunk contains (a word no chunk
+  contains has the highest weight). A chunk that contains the whole query, such as an exact product
+  code, name or statute section, scores 1 and rises above vector neighbors that lack it; a chunk that
+  shares only a common or accidental word, as queries in another language than the documents usually
+  do (`de`, `la`, `days`), scores almost 0 and keeps the vector order. A query with no lexical
+  evidence ranks exactly as `vector`. `Hit.score` is the fused value in [0, 1]. The earlier reciprocal
+  rank fusion (k=60) is still available as `SQLiteIndex(..., fusion="rrf")`: it ignores how strong a
+  full-text match is, so in cross-lingual searches a weak full-text hit could outrank the right vector
+  hit. `fts` and `vector` are not affected by either setting. The building blocks (`query_words`,
+  `word_weight`, `lexical_evidence`, `fuse_hybrid`) are public in `orkexa.retrieval` for other index
+  backends.
 * Images and scanned PDFs have no text to embed: extract text first (OCR, or a vision model) and keep
   the origin in the chunk metadata.
 
