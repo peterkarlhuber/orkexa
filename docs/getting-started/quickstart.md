@@ -81,3 +81,38 @@ from orkexa import ClaudeAgent
 
 agent = ClaudeAgent(model="claude-opus-5-5", thinking="adaptive")
 ```
+
+## Without an API key
+
+The built-in `fake` provider answers from a script, with no SDK and no network. Use it
+to try the API, and in your own unit tests:
+
+```python
+from orkexa import Agent, Tool
+from orkexa.providers.fake import FakeModel, text, tool_calls
+
+
+@Tool
+def add(a: int, b: int) -> int:
+    """Add two integers.
+
+    Args:
+        a: First summand.
+        b: Second summand.
+
+    Returns:
+        The sum.
+    """
+    return a + b
+
+
+model = FakeModel([tool_calls(("add", {"a": 17, "b": 25})), text("42")])
+agent = Agent(model="fake:scripted", client=model, tools=[add])
+print(agent.ask("What is 17 + 25?"))  # 42, after the agent ran add(17, 25)
+print(len(model.requests))  # 2: every request the runtime sent
+```
+
+A string in the script is a text answer, an exception is raised as if the API had
+raised it, and a callable receives the request and returns the answer. Tool docstrings
+need an `Args:` and a `Returns:` section; see
+[Tools and structured output](../guides/tools-and-structured-output.md).
