@@ -33,6 +33,22 @@ First release of Orkexa.
 * `OllamaEmbeddings(document_prefix=, query_prefix=)` and `KNOWN_PREFIXES` for models trained with
   plain prefixes; `EmbeddingIdentity` records them (keys of spaces without prefixes are unchanged).
 
+### Changed: hybrid search weighs full-text hits by their evidence
+
+* `SQLiteIndex` `hybrid` mode fused BM25 and vector rankings by reciprocal rank fusion (k=60), which
+  ignores how strong a full-text match is: with queries in another language than the documents, a chunk
+  that shared one accidental word with the query (`days`, `de`, a number) outranked the right vector hit.
+  The default is now evidence-weighted score fusion: `(1 - w) * vector + w * lexical`, with the cosine
+  similarity min-max normalized over the vector candidates and `lexical` the squared IDF-weighted share
+  of the query's words a chunk contains (`orkexa.retrieval.fuse_hybrid`, `lexical_evidence`,
+  `word_weight`, `query_words`). On a 120-query eval (German/English lexical queries with codes and
+  names, paraphrases, cross-lingual queries in six languages, hard negatives; qwen3-embedding:0.6b)
+  hybrid recall@1 rose from 0.53 to 0.93 (fts 0.47, vector 0.89): as good as fts on lexical queries
+  (0.98) and close to vector on cross-lingual ones.
+* `SQLiteIndex(fusion="rrf")` keeps the earlier fusion; `lexical_weight=` sets `w` (default 0.5).
+  `hybrid` hits now carry the fused score in [0, 1] instead of a reciprocal-rank value. `fts` and
+  `vector` rank and score exactly as before.
+
 ### Changed: an unknown provider prefix raises instead of falling back to Anthropic (DX-02)
 
 * `Agent(model="OpenAI:gpt-4o")`, `"openai/gpt-4o"` or `"foo:bar"` silently went to

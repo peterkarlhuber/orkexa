@@ -12,7 +12,14 @@ import pytest
 
 from orkexa import SQLiteIndex
 from orkexa.embeddings import CallableEmbeddings, EmbeddingIdentity, EmbeddingModel
-from orkexa.retrieval import Chunk, RetrievalError
+from orkexa.retrieval import (
+    Chunk,
+    RetrievalError,
+    fuse_hybrid,
+    lexical_evidence,
+    query_words,
+    word_weight,
+)
 
 HAS_VEC = importlib.util.find_spec("sqlite_vec") is not None and hasattr(
     sqlite3.connect(":memory:"), "enable_load_extension"
@@ -214,3 +221,101 @@ def test_large_dataset_and_ties_are_deterministic(tmp_path: Path) -> None:
     first = index.retrieve("delivery", 10, mode="hybrid")
     assert first == index.retrieve("delivery", 10, mode="hybrid")
     assert len(first) == 10
+
+
+# ---- hybrid fusion ---------------------------------------------------------------------------------
+
+
+def test_fuse_hybrid_without_lexical_evidence_keeps_the_vector_order() -> None:
+    vector = [(7, 0.61), (3, 0.60), (9, 0.20)]
+    assert [chunk_id for chunk_id, _ in fuse_hybrid(vector, {})] == [7, 3, 9]
+    assert [chunk_id for chunk_id, _ in fuse_hybrid(vector, {3: 0.9}, lexical_weight=0.0)] == [7, 3, 9]
+    fused = dict(fuse_hybrid(vector, {}))
+    assert fused[7] == 0.5 and fused[9] == 0.0  # min-max normalized, half weight
+    assert fuse_hybrid([(4, 0.3)], {}) == [(4, 0.5)]  # one candidate: normalized to 1
+    assert fuse_hybrid([], {}) == []
+
+
+def test_fuse_hybrid_lets_a_whole_query_match_win_but_not_an_accidental_one() -> None:
+    vector = [(1, 0.60), (2, 0.58), (3, 0.30)]
+    # Chunk 2 contains the whole query (an exact product code): it overtakes its vector neighbour.
+    assert fuse_hybrid(vector, {2: 1.0, 1: 0.1})[0][0] == 2
+    # Chunk 2 shares one accidental word (squared share 0.03): the vector order stays.
+    assert fuse_hybrid(vector, {2: 0.03})[0][0] == 1
+    # A chunk only full text found counts 0 on the vector side.
+    assert dict(fuse_hybrid(vector, {8: 1.0}))[8] == 0.5
+
+
+def test_fuse_hybrid_breaks_ties_by_chunk_id_and_checks_the_weight() -> None:
+    assert fuse_hybrid([(5, 0.4), (2, 0.4)], {}) == [(2, 0.5), (5, 0.5)]
+    with pytest.raises(ValueError, match="lexical_weight"):
+        fuse_hybrid([(1, 0.1)], {}, lexical_weight=1.5)
+
+
+def test_lexical_evidence_counts_words_no_chunk_contains() -> None:
+    assert word_weight(0, 10) > word_weight(1, 10) > word_weight(10, 10) > 0
+    weights = {"kh": word_weight(3, 10), "2210": word_weight(1, 10), "le": word_weight(0, 10)}
+    evidence = lexical_evidence(weights, {1: ["kh", "2210"], 2: ["kh"], 3: []})
+    assert evidence[1] > evidence[2] > evidence[3] == 0.0
+    mass = sum(weights.values())
+    assert evidence[1] == pytest.approx(((weights["kh"] + weights["2210"]) / mass) ** 2)
+    assert lexical_evidence({"x": word_weight(0, 5)}, {1: ["x", "x"]}) == {1: 1.0}  # a word counts once
+    assert lexical_evidence({}, {1: []}) == {1: 0.0}
+    assert query_words("Wer ist WER? KH-2210") == ["wer", "ist", "kh", "2210"]
+
+
+CROSS_LINGUAL = [
+    Chunk(text="Jeder hat 30 Arbeitstage Urlaub pro Kalenderjahr.", source="urlaub.md"),
+    Chunk(text="Passwords are rotated every 180 days.", source="security.md"),
+    Chunk(text="Versand innerhalb von drei Werktagen.", source="versand.md"),
+]
+
+
+def test_a_weak_full_text_hit_no_longer_outranks_the_vector_hit(tmp_path: Path) -> None:
+    """The offline proof's failure: an English query shares only "days" with an English document."""
+    query = "How many vacation days do employees get?"
+    rrf = SQLiteIndex(tmp_path / "rrf.db", embeddings=ConceptEmbeddings(), fusion="rrf")
+    rrf.add_chunks(CROSS_LINGUAL)
+    assert rrf.retrieve(query, 1, mode="fts")[0].source == "security.md"
+    assert rrf.retrieve(query, 1, mode="vector")[0].source == "urlaub.md"
+    assert rrf.retrieve(query, 1, mode="hybrid")[0].source == "security.md"  # the earlier weakness
+
+    index = SQLiteIndex(tmp_path / "kb.db", embeddings=ConceptEmbeddings())
+    index.add_chunks(CROSS_LINGUAL)
+    assert index.fusion == "evidence"
+    hits = index.retrieve(query, 3, mode="hybrid")
+    assert [hit.source for hit in hits][:2] == ["urlaub.md", "security.md"]
+    assert hits[0].ranks == {"vector": 1}
+    assert hits[1].ranks == {"fts": 1, "vector": 2}
+    assert all(0.0 <= hit.score <= 1.0 for hit in hits)
+    # Full text alone is unchanged.
+    assert [(hit.source, hit.score) for hit in index.retrieve(query, 3, mode="fts")] == [
+        (hit.source, hit.score) for hit in rrf.retrieve(query, 3, mode="fts")
+    ]
+
+
+def test_hybrid_keeps_exact_codes_that_vectors_cannot_tell_apart(tmp_path: Path) -> None:
+    index = SQLiteIndex(tmp_path / "kb.db", embeddings=ConceptEmbeddings())
+    index.add_chunks(
+        Chunk(text=f"Delivery of valve KH-{code} within three days.", source=f"kh{code}.md")
+        for code in ("2201", "2102", "2210", "2120")
+    )
+    assert index.retrieve("KH-2210 delivery", 1, mode="vector")[0].source == "kh2201.md"  # all alike
+    assert index.retrieve("KH-2210 delivery", 1, mode="fts")[0].source == "kh2210.md"
+    assert index.retrieve("KH-2210 delivery", 1, mode="hybrid")[0].source == "kh2210.md"
+    pair = index.retrieve("KH-2120", 1, mode="hybrid", sources=["kh2201.md", "kh2120.md"])
+    assert pair[0].source == "kh2120.md"
+    # The scope limits the candidates before ranking in evidence fusion too.
+    scoped = index.retrieve("KH-2210 delivery", 4, mode="hybrid", sources=["kh2201.md"])
+    assert [hit.source for hit in scoped] == ["kh2201.md"]
+
+
+def test_hybrid_fusion_options_are_checked(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="fusion"):
+        SQLiteIndex(tmp_path / "a.db", fusion="max")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="lexical_weight"):
+        SQLiteIndex(tmp_path / "b.db", lexical_weight=-0.1)
+    index = SQLiteIndex(tmp_path / "c.db", embeddings=ConceptEmbeddings(), lexical_weight=0.0)
+    index.add_chunks(CROSS_LINGUAL)
+    vector = [hit.source for hit in index.retrieve("vacation days", 3, mode="vector")]
+    assert [hit.source for hit in index.retrieve("vacation days", 3, mode="hybrid")] == vector
