@@ -34,7 +34,7 @@ from .async_agent import AsyncAgent
 from .claude import AsyncClaudeAgent, ClaudeAgent, Fallbacks, ThinkingDisplay, ThinkingMode
 from .content import ContentBlock, Prompt, ToolContent, document, image, uploaded_file
 from .core.capabilities import ModelCapabilities, Support
-from .core.checkpoint import TurnCheckpoint, WaitingCall
+from .core.checkpoint import CheckpointClaims, TurnCheckpoint, WaitingCall
 from .core.conversion import HistoryConversionWarning
 from .core.types import (
     Effort,
@@ -62,8 +62,10 @@ from .errors import (
     HistoryConversionError,
     IncompleteResponseError,
     InvalidRequestError,
+    MaxToolCallsError,
     MaxToolRoundsError,
     MemoryToolError,
+    MissingCredentialsError,
     MissingDependencyError,
     OrkexaError,
     ProviderConnectionError,
@@ -124,6 +126,7 @@ __all__ = [
     "AsyncClaudeAgent",
     "AuthenticationError",
     "BedrockOptions",
+    "CheckpointClaims",
     "CheckpointError",
     "Chunk",
     "Citation",
@@ -152,10 +155,12 @@ __all__ = [
     "Index",
     "InvalidRequestError",
     "LocalFileStore",
+    "MaxToolCallsError",
     "MaxToolRoundsError",
     "MemoryBackend",
     "MemoryToolError",
     "Message",
+    "MissingCredentialsError",
     "MissingDependencyError",
     "ModelCapabilities",
     "ModelPricing",

@@ -24,7 +24,8 @@
   session token). Treat a configurable `base_url` as security-relevant: it receives
   the full conversation.
 * **Tools** run only in Orkexa, after `before_tool`; SDK automatic function calling is
-  disabled. Tool inputs are validated; tool rounds, parallelism and timeouts are limited.
+  disabled. Tool inputs are validated; tool rounds, tool calls per response
+  (`max_tool_calls_per_round`, default 64), parallelism and timeouts are limited.
 * **OpenAI** requests use `store=False` by default.
 * **No network on import** and no live API calls in the default test suite.
 
@@ -116,6 +117,10 @@ Keep stores in a directory with suitable ACLs.
 * A tool timeout does not stop a running tool thread: Python threads cannot be killed,
   so a timed-out tool may still finish its side effects. Put tools with risky side
   effects behind a process boundary (a sandbox or a service) with its own timeout.
+  A sandbox call (`orkexa.dynamic`) *is* stopped when its tool call times out
+  (`tool_timeout`) or its `AsyncAgent.ask()` task is cancelled: the agents bind a
+  per-call cancel check (linked to the caller's `cancel_scope`), so the process is
+  killed and the container removed instead of running on until the sandbox timeout.
 
 ## Migrating to the secure defaults
 

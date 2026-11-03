@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 import json
 from typing import Any
 
+from .._aio import gather_or_cancel
 from ..dynamic.errors import BudgetExceededError
 from .protocol import (
     AnyDecision,
@@ -246,16 +246,7 @@ async def _agather(
     execute: AExecute, items: list[Delegation], stop_on: tuple[type[BaseException], ...]
 ) -> list[Outcome]:
     """All assignments at the same time; a fatal error cancels the others and is raised."""
-    if len(items) == 1:
-        return [await _arun_one(execute, items[0], stop_on)]
-    tasks = [asyncio.ensure_future(_arun_one(execute, item, stop_on)) for item in items]
-    try:
-        return list(await asyncio.gather(*tasks))
-    except BaseException:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        raise
+    return await gather_or_cancel(*(_arun_one(execute, item, stop_on) for item in items))
 
 
 def _resume_items(

@@ -376,20 +376,30 @@ def stop_container(
 
     A client killed while its create request is in flight can leave the daemon to create the container a
     moment after the first ``rm -f`` found nothing, so the name is checked again for ``_SETTLE_S`` seconds
-    (the owner's deadline label and :func:`reap` remain the backstop)."""
-    for args in (["kill", name], ["rm", "-f", name]):
-        with contextlib.suppress(SandboxError):
-            _cli(docker, args, env, timeout)
+    (the owner's deadline label and :func:`reap` remain the backstop). When ``docker kill`` succeeded the
+    container existed and was running, so its create request had completed and nothing can create it
+    later: then the check ends as soon as the name is confirmed gone (ORK2-08)."""
+    killed = False
+    with contextlib.suppress(SandboxError):
+        killed = _cli(docker, ["kill", name], env, timeout).returncode == 0
+    with contextlib.suppress(SandboxError):
+        _cli(docker, ["rm", "-f", name], env, timeout)
     settle = time.monotonic() + _SETTLE_S
     while time.monotonic() < settle:
-        time.sleep(_SETTLE_POLL_S)
+        if not killed:
+            time.sleep(_SETTLE_POLL_S)
         try:
             listed = _cli(docker, ["ps", "-aq", "--filter", f"name=^/?{name}$"], env, timeout)
         except SandboxError:
             return
-        if listed.returncode == 0 and listed.stdout.strip():
+        found = listed.returncode == 0 and bool(listed.stdout.strip())
+        if killed and listed.returncode == 0 and not found:
+            return  # confirmed gone, and no create request can still be in flight
+        if found:
             with contextlib.suppress(SandboxError):
                 _cli(docker, ["rm", "-f", name], env, timeout)
+        if killed:
+            time.sleep(_SETTLE_POLL_S)
 
 
 #: How long :func:`stop_container` keeps checking for a container created after the client was killed.

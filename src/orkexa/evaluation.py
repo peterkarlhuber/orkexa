@@ -219,7 +219,7 @@ class Evaluator:
         name: str = "Evaluator",
     ) -> None:
         self.criteria: tuple[Criterion, ...] = () if criteria is None else _check_criteria(criteria)
-        provider_name, model_id = resolve_model(model, provider)
+        provider_name, model_id = resolve_model(model, provider, strict=True)
         common: dict[str, Any] = {
             "name": name,
             "system_prompt": system_prompt,

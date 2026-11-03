@@ -3,7 +3,8 @@
 > Open work for this repository: release blockers, known bugs, security follow-ups, technical debt and planned improvements.
 > GitHub issues are the source of truth for details; this file is the entry point and summary.
 >
-> **Last full review:** 2026-11-01 against `master` at `3467940`.
+> **Last full review:** 2026-11-03 against `master` at `0861c1b` (internal backend audit round 2; fixes on
+> branch `wip/a2-orkfix`, not yet merged).
 
 ## Summary
 
@@ -12,15 +13,15 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 1 |
-| P3 Low | 10 |
-| P4 Optional | 7 |
+| P3 Low | 11 |
+| P4 Optional | 9 |
 
 **Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
 Nodestro consumes it by commit SHA.
 
 The library is in good shape: no open issues or pull requests before this review, no TODO/FIXME markers in the
 code, and offline tests, strict typing, packaging, docs and dependency audits run in CI. The open work is mostly
-sandbox cancellation and container test coverage, verification against real providers and platforms, and
+verification against real providers and Docker hosts, follow-ups in Nodestro for the 2026-11-03 audit fixes, and
 release and documentation upkeep.
 
 ## Priorities and statuses
@@ -48,13 +49,24 @@ None known.
 - **Next step:** Decide on a library-level default or option and document it in the security guide (details are
   in the internal audit, not here).
 
-### ORK-004 · Independent review of DockerSandbox isolation and the static check
+### ORK-004 · Independent review of the static check
 
 - **Priority:** P3 Low · **Status:** Needs external review · **Refs:** [Security guide](guides/security.md#remaining-risks)
-- **What:** `DockerSandbox` is the default boundary for generated code, but its isolation has not been audited, and
-  the static check is a deny list on top of an import allow list, not a proof.
-- **Next step:** Include `orkexa.dynamic` (sandboxes, static check, approval) in the next independent security
-  review that covers Nodestro tool execution.
+- **What:** `DockerSandbox` isolation was reviewed (security reviews of 2026-11-02, DS and R findings, fixes in
+  #31/#34; re-checked by the internal audit of 2026-11-03). The static check (`dynamic/static_check.py`) is still
+  a deny list on top of an import allow list, not a proof, and has had no independent review.
+- **Next step:** Include the static check and the approval flow in the next independent security review that
+  covers Nodestro tool execution.
+
+### ORK-028 · Nodestro: adopt signed checkpoints and decide on single-use resume
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** internal backend audit 2026-11-03 (ORK2-03),
+  [Pausing a turn](guides/streaming-hooks-errors.md#pausing-a-turn-at-a-tool-call)
+- **What:** Turn checkpoints now carry a digest over their content, and agents accept `checkpoint_key=` (HMAC) and
+  `resume(..., claim=)`. Without a key the digest only detects accidental changes. nodestro-runtime stores
+  checkpoints and resumes them again after its own crash (by design), so it passes neither yet.
+- **Next step:** After the pin update, nodestro-runtime passes a per-installation `checkpoint_key` (from its secret
+  store) and documents why it does not pass a claim (its journal and approval gate decide on a repeat).
 
 ### ORK-005 · Optional fail-closed mode for Bedrock credentials
 
@@ -65,16 +77,6 @@ None known.
 - **Next step:** Consider a `BedrockOptions` setting that refuses to build a default session.
 
 ## Bugs and reliability
-
-### ORK-001 · Sandbox calls cannot be cancelled
-
-- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #28) · **Refs:** #22, internal backend audit 2026-11-01, finding B-03
-- **What:** `SubprocessSandbox` and `DockerSandbox` run until their timeout after the caller cancels; the `Sandbox`
-  base class has no cancellation hook (`src/orkexa/dynamic/sandbox.py`). Nodestro's own Linux sandbox stops at once.
-- **Done:** `orkexa.dynamic.lifecycle` (`cancel_scope`, `bind_cancel`, `SandboxCancelled`) and `Sandbox.cancel()`;
-  `run_bounded` kills the process group, `DockerSandbox` removes the container. Tested on Linux, macOS and
-  Windows (`tests/test_sandbox_lifecycle.py`) and against a real daemon (`tests/test_docker_sandbox.py`).
-  nodestro-runtime's `sandbox_cancel` uses the same context (nodestro-runtime #78).
 
 ### ORK-002 · Registries do not see records written by other processes
 
@@ -98,10 +100,8 @@ None known.
 - **Priority:** P3 Low · **Status:** Needs decision · **Refs:** [Releasing](development/releasing.md)
 - **What:** The release workflow is ready, but the one-time owner setup is not done or not confirmed: PyPI trusted
   publisher, protected `pypi` environment, branch protection, private vulnerability reporting (referenced by
-  `SECURITY.md`), and whether to deploy the docs site. Step 4 of the setup still lists SHA-pinning the actions as
-  open, although #20 did that.
-- **Next step:** Owner decides when to publish 0.1.0; then complete the setup and fix the stale step in
-  `releasing.md`.
+  `SECURITY.md`), and whether to deploy the docs site. (The actions are SHA-pinned, #20; `releasing.md` says so.)
+- **Next step:** Owner decides when to publish 0.1.0; then complete the setup.
 
 ### ORK-009 · Keep the Bedrock capability table current
 
@@ -130,64 +130,19 @@ None known.
 - **Next step:** Decide whether batches need a resumable form, and whether delegated agents should map their
   suspension to the outer turn (as `Pending` delegations do for orchestrations).
 
+### ORK-029 · Nodestro Studio: messages for the new Orkexa errors
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** internal backend audit 2026-11-03 (ORK2-04, DX-01)
+- **What:** nodestro-runtime reports agent errors as `run.agent.<ErrorClass>`. `MaxToolCallsError` (more than
+  `max_tool_calls_per_round`, default 64, calls in one response) has no Studio message or fix hint yet and shows the
+  generic text; the nodestro-api assistant already handles it as a `MaxToolRoundsError`. `MissingCredentialsError`
+  is an `AuthenticationError` and already maps to `run.provider_auth`.
+- **Next step:** With the pin update, add `run.agent.MaxToolCallsError` to the Studio translations and to the
+  "advanced fix" set (`RunProblem.tsx`).
+
 ## Tests and quality assurance
 
-### ORK-006 · DockerSandbox end-to-end test never runs in CI
-
-- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #28) · **Refs:** #23, internal backend audit 2026-11-01 (B-01, test gaps)
-- **What:** The only real-container test is skipped because no CI job builds the `orkexa-sandbox` image; the
-  container paths of bounded output and cleanup are tested only against a mocked `docker` CLI.
-- **Done:** The `docker` job of the `Platforms` workflow builds the image and runs the Docker tests with
-  `ORKEXA_REQUIRE_DOCKER=1` (a missing daemon or image fails the job instead of skipping).
-
-### ORK-019 · Docker preflight: the daemon's limits were not checked
-
-- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #31) · **Refs:** Docker-first sandbox plan 2026-11-02 (O1)
-- **What:** `DockerSandbox.probe()` only ran `docker info`. A daemon that cannot enforce memory, process or CPU limits
-  (rootless without cgroup delegation, cgroup v1 rootless), an unconfined seccomp default or Windows containers would
-  have run code without those limits.
-- **Done:** `orkexa.dynamic.docker.inspect_host()`/`preflight()` with the reason codes `os-type`,
-  `limits`, `seccomp`, `rootless-cgroup`; recorded `docker info` outputs of rootful/rootless cgroup v1/v2, Podman,
-  Docker Desktop, Colima, OrbStack, unconfined seccomp and Windows in the unit tests.
-- **Next step:** None here; nodestro-runtime's Docker monitor uses it. Hosts without CI evidence: ORK-024.
-
-### ORK-020 · One container shape, stdin transport, cancel and reaper
-
-- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #31) · **Refs:** plan O2
-- **What:** Orkexa and the runtime used different `docker run` shapes; Orkexa bind-mounted the host's run directory
-  and package (a remote daemon could not see them); a crashed host process left containers running.
-- **Done:** `ContainerLimits`/`run_args()` (no `-v`, no `-e`, `--pull never`, private IPC, ulimits,
-  no logging, `noexec` tmpfs `/tmp` and `/work`, owner and deadline labels); `transport="stdin"` default
-  (`"bind"` deprecated); cancel and timeout kill the container by name; `list_sandbox_containers()`/`reap()`.
-- **Next step:** None here; nodestro-runtime's `sandbox_run_args` and `StreamedSandbox` now build on them.
-
-### ORK-021 · In-container self-test before the first run
-
-- **Priority:** P2 Medium · **Status:** Done (2026-11-02, #31) · **Refs:** plan O3
-- **What:** A daemon can accept a flag and not apply it; nothing proved that the limits reached the container.
-- **Done:** `DockerSandbox.self_test()` (uid, capabilities, `NoNewPrivs`, seccomp, interfaces, read-only
-  root, `noexec`, cgroup v2 limits, rlimits, environment), remembered per host fingerprint, image id and shape;
-  images run by id; `pin_base()`; `python -m orkexa.dynamic.docker --self-test`; CI matrix (rootful, rootless, refused
-  rootless, Podman, arm64, Colima non-blocking) with real-container tests that fail instead of skipping.
-- **Next step:** None here: the matrix has passed on `master` (e.g. the Platforms run of #36 on 2026-11-02: rootful,
-  rootless, refused rootless, rootful Podman, arm64 and Colima x86-64). Hosts that never ran in CI: ORK-024.
-
-### ORK-023 · Self-test hardening: mount table, seccomp probes, AppArmor (DS-8/9/10)
-
-- **Priority:** P3 Low · **Status:** Done (2026-11-02, #34) · **Refs:** security review DS-8, DS-9, DS-10
-- **What:** The self-test checked only a few mount points (not that no other mount exists), seccomp only as mode 2
-  (not the profile) and reported AppArmor without checking it; probe errors kept raw CLI stderr; the sandbox image
-  was not pinned.
-- **Done:** the self-test reads `/proc/self/mountinfo` and refuses every mount outside an allow list
-  built from mount tables of Docker (rootful, rootless, Desktop) and Podman (rootful, rootless); `run_args()` mounts root-owned
-  `noexec` tmpfs on `/run` and `/var/tmp` (Podman's `--read-only-tmpfs` default left them writable and executable);
-  probes `add_key`, `bpf`, `perf_event_open`, `userfaultfd` and `move_pages` (blocked by the default profiles of both
-  engines) on x86-64 and arm64 and refuses other architectures; requires an enforcing AppArmor profile when the host
-  reports AppArmor (`apparmor_label` fact otherwise); `redact_docker_output()` for probe errors; base image pinned by
-  digest, requirements installed with `--require-hashes`, a test refuses unpinned `FROM`s.
-- **Next step:** Refresh the base image digest and the hashed requirements with each Python patch release. The
-  self-test (mount table included) passes in CI on rootful and rootless Docker, rootful Podman, arm64 and Colima;
-  the hosts it has never run on are tracked in ORK-024.
+None known.
 
 ## Platform coverage
 
@@ -225,25 +180,6 @@ None known.
 - **Next step:** Owner approves a small budget and credentials; add live smoke tests for the other providers and
   run all of them before a release.
 
-### ORK-013 · CI runs on Linux only
-
-- **Priority:** P3 Low · **Status:** Done (2026-11-02, #28)
-- **What:** CI uses Ubuntu only. macOS (no reliable `RLIMIT_AS`, sandbox limits) and Windows (POSIX permission
-  tests are skipped; owner-private storage relies on ACLs) are untested.
-- **Done:** The `Platforms` workflow runs the offline suite on macOS arm64 and x86-64 and Windows x64 and ARM64
-  (ARM64: no sqlite-vec wheel, cryptography pinned to 46.0.3). (The macOS sandbox it also required was removed, ORK-014.)
-
-### ORK-014 · The macOS sandbox is experimental
-
-- **Priority:** P2 Medium · **Status:** Closed – removed (2026-11-02, Docker-first) · **Refs:** #28,
-  [ADR 0012](architecture/decisions/0012-macos-sandbox-removed.md)
-- **What:** `MacOSSandbox` (Seatbelt `sandbox_init`, deny-default profile, rlimits, memory watchdog) had no
-  independent security review.
-- **Done:** The review found it not releasable (MS-1 `KERN_PROCARGS2` environment leak of same-user processes,
-  MS-2 to MS-10). Decision Docker-first: the backend, its confinement helper and tests are removed;
-  `MacOSSandbox` stays as a deprecated placeholder that always reports `removed` and never runs code, until
-  nodestro-runtime drops its reference. Untrusted code needs `DockerSandbox` on every platform.
-
 ### ORK-015 · No native sandbox on Windows
 
 - **Priority:** P3 Low · **Status:** Open
@@ -272,7 +208,7 @@ None known.
   3.14, reached through `dataclasses` and `typing`) is not reviewed for the sandbox.
 - **Next step:** Review `annotationlib` for the sandbox policy, then add 3.14 to the CI matrix and the classifiers.
 
-### ORK-014 · Small leftovers
+### ORK-025 · Small leftovers
 
 - **Priority:** P4 Optional · **Status:** Open
 - **What:** The sdist still excludes the removed `compat/` directory (`pyproject.toml`), and
@@ -281,12 +217,21 @@ None known.
 
 ## Later optimizations
 
-### ORK-015 · Freshness check for built-in prices
+### ORK-026 · Freshness check for built-in prices
 
 - **Priority:** P4 Optional · **Status:** Open · **Refs:** [Pricing engine](guides/pricing.md#known-limitations)
 - **What:** The built-in Anthropic prices are a manual snapshot (`orkexa-builtin-2026-10-31`); nothing warns when
   it ages. Nodestro syncs its own prices, so the impact is limited to direct library users.
 - **Next step:** Add a test or release checklist step that flags snapshots older than a set age.
+
+### ORK-027 · Sandbox image upkeep: build behind a TLS-intercepting proxy, digest refresh
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** internal backend audit 2026-11-03 (ORK2-10), ORK-023
+- **What:** `docker/sandbox.Dockerfile` cannot be built behind a proxy that intercepts TLS (pip fails) without
+  editing it; there is no build secret or argument for an extra CA. Separately, the pinned base image digest and the
+  hashed requirements need a refresh with each Python patch release.
+- **Next step:** Optional `--mount=type=secret` CA support in the Dockerfile (documented); add the digest refresh to
+  the release checklist.
 
 ## Accepted risks
 
@@ -301,8 +246,9 @@ None known.
 
 - **Priority:** P4 Optional · **Status:** Accepted risk · **Refs:** [Providers](getting-started/providers.md#async-and-cancellation),
   [Security guide](guides/security.md)
-- **What:** A cancelled non-streamed async Bedrock call finishes in its worker thread (boto3 limit), and a tool
-  timeout does not stop a running Python tool thread. Reason: platform limits; both are documented.
+- **What:** A cancelled non-streamed async Bedrock call finishes in its worker thread (boto3 limit), and a timed-out
+  or cancelled tool call cannot stop plain Python code running in its thread. Sandbox calls are stopped (process
+  killed, container removed) since the 2026-11-03 audit fix ORK2-01. Reason: platform limits; both are documented.
 
 ### ORK-018 · Documented unsafe opt-ins and unredacted ClaudeAgent exceptions
 
@@ -315,12 +261,12 @@ None known.
 
 | This repo item | Other repo | Other item | Relation |
 |---|---|---|---|
-| ORK-001 | nodestro-runtime | audit B-03 (runtime side) | Done: runtime #78 uses Orkexa's cancel context |
 | ORK-002 | nodestro-runtime | #57 (registry refresh workaround) | Runtime can drop its workaround after ORK-002 |
 | ORK-005 | nodestro-runtime | `require_session` guard | Runtime already enforces it; ORK-005 would add a second layer |
 | ORK-007 | nodestro-runtime | RT-022 (Python 3.14) | Runtime adds 3.14 after this review; runtime depends on Orkexa |
-| ORK-019 to ORK-021 | nodestro-runtime | R1/R2 (adopt Orkexa's container shape, re-probed sandbox status) | Runtime builds on the Orkexa API after the pin update |
-| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `544ef92`) | Changes reach Nodestro only through a coordinated pin cascade |
+| ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
+| ORK-029 | nodestro-studio | run problem messages (`errors.json`, `RunProblem.tsx`) | Studio adds `run.agent.MaxToolCallsError` |
+| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `0861c1b`) | Changes reach Nodestro only through a coordinated pin cascade; the 2026-11-03 audit fixes (ORK2-01 to ORK2-09, DX-01, DX-02) need the next one |
 
 ## Maintaining this file
 

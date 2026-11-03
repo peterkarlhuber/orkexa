@@ -387,6 +387,12 @@ class AnthropicProvider(Provider):
             turn_id=turn_id,
         )
 
+    credential_variables: ClassVar[tuple[str, ...]] = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+    def _is_missing_credentials(self, exc: BaseException) -> bool:
+        # The SDK raises this TypeError when the request is built (DX-01).
+        return isinstance(exc, TypeError) and "Could not resolve authentication method" in str(exc)
+
     def map_error(self, exc: BaseException) -> BaseException | None:
         try:
             sdk = require_module("anthropic", "anthropic")

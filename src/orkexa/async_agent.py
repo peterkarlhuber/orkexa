@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 import inspect
+import threading
 from typing import Any
 
+from ._aio import gather_or_cancel
+from ._cancel import bind_cancel, linked_check, reset_cancel
 from .content import Prompt
 from .core.checkpoint import TurnCheckpoint
 from .core.runtime import (
@@ -50,9 +53,11 @@ class AsyncAgent(AgentCore[OutputT]):
     ``max_parallel_tools`` tool calls of one response run concurrently. Hooks may be
     plain functions or coroutine functions. Memory commands run in a worker thread.
 
-    Cancelling ``ask()`` leaves the committed conversation unchanged; tools that run
-    in worker threads finish in the background. ``tool_timeout`` cancels ``async``
-    tools and abandons sync tools still running in their thread.
+    Cancelling ``ask()`` leaves the committed conversation unchanged. A cancelled or
+    timed-out (``tool_timeout``) tool call is stopped: ``async`` tools are cancelled and
+    a sandbox call (:mod:`orkexa.dynamic`) is stopped, its process killed and its
+    container removed; other sync code still running in a worker thread finishes in the
+    background.
     """
 
     _asynchronous = True
@@ -75,11 +80,16 @@ class AsyncAgent(AgentCore[OutputT]):
         finally:
             self._exit_turn()
 
-    async def resume(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> OutputT:
+    async def resume(
+        self,
+        checkpoint: TurnCheckpoint | Mapping[str, Any],
+        *,
+        claim: Callable[[str], bool] | None = None,
+    ) -> OutputT:
         """Continue a suspended turn; see :meth:`Agent.resume <orkexa.Agent.resume>`."""
         self._enter_turn()
         try:
-            return await self._drive(self._resume_turn(checkpoint))
+            return await self._drive(self._resume_turn(checkpoint, claim))
         finally:
             self._exit_turn()
 
@@ -190,7 +200,9 @@ class AsyncAgent(AgentCore[OutputT]):
         self, calls: tuple[ToolCallPart, ...], request: ModelRequest
     ) -> list[ToolResultPart | _Waiting]:
         slots = asyncio.Semaphore(self.max_parallel_tools)
-        return list(await asyncio.gather(*(self._run_tool(call, request, slots) for call in calls)))
+        # A failing call cancels its siblings and waits for them: none keeps running (and commits a side
+        # effect or calls ``after_tool``) after the turn has failed (ORK2-02).
+        return list(await gather_or_cancel(*(self._run_tool(call, request, slots) for call in calls)))
 
     async def _run_tool(
         self, part: ToolCallPart, request: ModelRequest, slots: asyncio.Semaphore
@@ -220,9 +232,20 @@ class AsyncAgent(AgentCore[OutputT]):
         if self._is_memory_call(call):
             return await asyncio.to_thread(self._run_memory, part.arguments)
         tool = self._lookup_tool(call.name)
-        if self.tool_timeout is None:
-            return await tool.aexecute(part.arguments), False
+        # The call's own cancel check (linked to the caller's), inherited by the worker thread of a sync
+        # tool: when the call times out or its task is cancelled, a sandbox call it started is stopped
+        # (its process killed, its container removed) instead of running on unseen (ORK2-01).
+        stop = threading.Event()
+        token = bind_cancel(linked_check(stop))
         try:
-            return await asyncio.wait_for(tool.aexecute(part.arguments), self.tool_timeout), False
-        except TimeoutError:
-            raise self._timeout_error(call) from None
+            if self.tool_timeout is None:
+                return await tool.aexecute(part.arguments), False
+            try:
+                return await asyncio.wait_for(tool.aexecute(part.arguments), self.tool_timeout), False
+            except TimeoutError:
+                raise self._timeout_error(call) from None
+        except BaseException:
+            stop.set()
+            raise
+        finally:
+            reset_cancel(token)

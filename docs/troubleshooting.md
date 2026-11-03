@@ -8,8 +8,9 @@ change. This page collects the common cases.
 | Exception | Usual cause | Fix |
 | --- | --- | --- |
 | `MissingDependencyError` | The provider's SDK is not installed | Install the extra named in the message, e.g. `pip install "orkexa[openai]"` |
+| `MissingCredentialsError` (an `AuthenticationError`) | No key passed and none in the provider's environment variable (same error for every provider, also in `ClaudeAgent`); nothing was sent | Set the variable the message names (`error.variables`, e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or pass `api_key=` |
 | `AuthenticationError` | Invalid or insufficient key (HTTP 401/403) | Set the provider's environment variable or pass `api_key=`; for a custom `base_url`, an explicit `api_key=` is required |
-| SDK error before the first request: `TypeError` "Could not resolve authentication method" (`anthropic`), `openai.OpenAIError` "Missing credentials" (`openai`), `ValueError` "No API key was provided" (`gemini`) | No key at all: the provider SDK refuses to build its client, and its exception is raised unchanged | Set the provider's environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or pass `api_key=` |
+| `ConfigurationError: Unknown provider prefix ...` | A mistyped provider (`OpenAI:gpt-5.5`, `openai/gpt-5.5`) or a model id with `:` or `/` without `provider=` (`llama3.1:8b`) | Use the registered lower-case prefix (`openai:gpt-5.5`), or pass `provider=` (`provider="ollama"`) |
 | `ConfigurationError` | Contradicting settings, e.g. a custom `base_url` without a key, `request_options` that collide with agent arguments, removed API parameters, OpenAI background mode | Follow the message; it names the argument |
 | `UnsupportedCapabilityError` | The model or provider cannot do what you asked (e.g. `effort` on a classic model, forced tool choice on Gemini) | Remove the feature or pick another model; `exc.capability` names the feature |
 | `UnknownCapabilityError` | Orkexa does not know whether the endpoint supports the feature (every compatible endpoint, new model families) | Declare it if you know it works: `capabilities={"tools": "supported"}` |
@@ -19,6 +20,7 @@ change. This page collects the common cases.
 | `RefusalError` | The model declined | Rephrase; or `on_refusal="return"` to get the text instead of an exception |
 | `StructuredOutputError` | The output does not validate against `output_format` | Simplify the schema, describe fields better, or use a model with native structured output |
 | `MaxToolRoundsError` | The model kept calling tools | Raise `max_tool_rounds` or improve the tool descriptions |
+| `MaxToolCallsError` | One response asked for more than `max_tool_calls_per_round` (default 64) tool calls; none ran | Raise the limit (or `None`) if that fan-out is intended |
 | `HistoryConversionError` | A history with provider-specific parts was sent to another provider | `history_policy="convert"` drops what cannot be converted, with a warning |
 | `ConcurrentTurnError` | A second `ask()`, `reset()` or `load_history()` while a turn runs | Use one agent per concurrent conversation |
 | `DataResidencyError` | `bedrock` with `data_residency="eu_only"` or `allowed_regions`: the region, an inference profile destination, the endpoint or the guardrail is outside the allowlist, or it could not be verified | See [Amazon Bedrock](#amazon-bedrock) below; nothing was sent |

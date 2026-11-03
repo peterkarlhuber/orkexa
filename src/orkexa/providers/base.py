@@ -25,6 +25,7 @@ from ..errors import (
     AuthenticationError,
     ConfigurationError,
     InvalidRequestError,
+    MissingCredentialsError,
     MissingDependencyError,
     ProviderConnectionError,
     ProviderError,
@@ -302,6 +303,30 @@ class Provider(ABC):
     def map_error(self, exc: BaseException) -> BaseException | None:
         """Translate an SDK exception into a :class:`ProviderError` (``None``: not an API error)."""
         return None
+
+    #: The environment variables this provider's SDK reads its key from (for error messages).
+    credential_variables: ClassVar[tuple[str, ...]] = ()
+
+    def credentials_error(self, exc: BaseException) -> MissingCredentialsError | None:
+        """:class:`MissingCredentialsError` when ``exc`` is the SDK's "no credentials" error.
+
+        Agents apply it to every provider failure (also in ``ClaudeAgent``, which otherwise
+        raises SDK exceptions unchanged), so a missing key is one Orkexa error everywhere."""
+        if not self._is_missing_credentials(exc):
+            return None
+        return self.missing_credentials()
+
+    def missing_credentials(self) -> MissingCredentialsError:
+        """The error for "no credentials found" (adapters raise it instead of the SDK's own)."""
+        variables = self.credential_variables
+        where = f"set {' or '.join(variables)} or pass api_key=..." if variables else "configure credentials"
+        return MissingCredentialsError(
+            f"{self.name}: no API key or credentials found; {where}", provider=self.name, variables=variables
+        )
+
+    def _is_missing_credentials(self, exc: BaseException) -> bool:
+        """Whether ``exc`` is this provider's SDK saying that it found no credentials."""
+        return False
 
     def redact(self, text: str) -> str:
         """``text`` without this provider's API key or anything that looks like a key."""

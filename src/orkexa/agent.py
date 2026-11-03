@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextvars import copy_context
+import threading
 from typing import Any
 
+from ._cancel import bind_cancel, linked_check, reset_cancel
 from .content import Prompt
 from .core.checkpoint import TurnCheckpoint
 from .core.runtime import (
@@ -50,7 +52,10 @@ class Agent(AgentCore[OutputT]):
         Agent(model="gemini:gemini-3-pro")
         Agent(provider="ollama", model="llama3.1:8b")
 
-    A model without registered prefix belongs to the default provider ``anthropic``.
+    A model name without ``prefix:`` belongs to the default provider ``anthropic``. A
+    prefix that is not a registered provider (``"OpenAI:gpt-5.5"``, ``"foo:bar"``) or a
+    ``/`` in a name without ``provider=`` raises :class:`~orkexa.ConfigurationError`
+    instead of falling back to Anthropic.
     With ``output_format=None`` :meth:`ask` returns ``str``; with a Pydantic
     ``BaseModel`` subclass ``M`` it returns an ``M`` instance (``Agent[M]``).
 
@@ -72,9 +77,14 @@ class Agent(AgentCore[OutputT]):
         max_tokens: Output token limit per request.
         max_tool_rounds: Maximum tool rounds per :meth:`ask`.
         max_parallel_tools: Tool calls of one response run in up to this many threads.
+        max_tool_calls_per_round: Tool calls one model response may ask for (default 64,
+            ``None``: no limit). A response with more raises :class:`~orkexa.MaxToolCallsError`
+            before any of its calls runs; a turn runs at most ``max_tool_rounds`` times this
+            many calls.
         raise_tool_errors: Raise tool failures (default) or send them back to the model.
         tool_timeout: Seconds per tool call; a call that takes longer fails with
-            :class:`~orkexa.ToolExecutionError` (its thread is abandoned, not killed).
+            :class:`~orkexa.ToolExecutionError`. A sandbox call it started is stopped (process
+            killed, container removed); other code in its thread is abandoned, not killed.
         stream: Stream requests (``None``: when a streaming hook is set).
         on_refusal: ``"raise"`` (:class:`~orkexa.RefusalError`) or ``"return"`` the text.
         on_text: Streamed text deltas.
@@ -102,6 +112,9 @@ class Agent(AgentCore[OutputT]):
         history_policy: ``"strict"`` (default): continuing a conversation of another
             provider raises if reasoning or native parts would be lost; ``"convert"``
             drops them with a warning.
+        checkpoint_key: A secret (at least 16 bytes) that signs turn checkpoints with an
+            HMAC; :meth:`resume` then refuses unsigned or altered checkpoints. Without it
+            the checkpoint digest only detects accidental changes.
 
     The conversation is committed only after a complete turn. Usage of every API
     response is recorded immediately, also when the turn fails later; tools that
@@ -131,7 +144,12 @@ class Agent(AgentCore[OutputT]):
         finally:
             self._exit_turn()
 
-    def resume(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> OutputT:
+    def resume(
+        self,
+        checkpoint: TurnCheckpoint | Mapping[str, Any],
+        *,
+        claim: Callable[[str], bool] | None = None,
+    ) -> OutputT:
         """Continue a suspended turn (:class:`~orkexa.TurnSuspended`).
 
         At a waiting tool call (``checkpoint.stage == "tools"``) the waiting calls go
@@ -145,10 +163,18 @@ class Agent(AgentCore[OutputT]):
         completed turn's conversation (from the checkpoint) becomes the agent's
         conversation. A turn that waits again raises :class:`~orkexa.TurnSuspended` with
         a new checkpoint.
+
+        A checkpoint changed after it was issued is refused (its ``digest``; an HMAC with
+        ``checkpoint_key``). Resuming is **not single-use** by itself: each resume of the
+        same checkpoint runs its waiting calls again. Pass ``claim`` (e.g. a shared
+        :class:`~orkexa.CheckpointClaims`, or a callable that records
+        ``checkpoint.id`` in your database and returns ``False`` if it was there) to refuse
+        a second resume with :class:`~orkexa.CheckpointError` before anything runs, or
+        consume the checkpoint atomically in your store before resuming.
         """
         self._enter_turn()
         try:
-            return self._drive(self._resume_turn(checkpoint))
+            return self._drive(self._resume_turn(checkpoint, claim))
         finally:
             self._exit_turn()
 
@@ -288,12 +314,22 @@ class Agent(AgentCore[OutputT]):
         tool = self._lookup_tool(call.name)
         if self.tool_timeout is None:
             return tool.execute(part.arguments), False
-        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{self.name}-{call.name}")
+        # The call's own cancel check (linked to the caller's): a sandbox call it starts is stopped
+        # (its process killed, its container removed) when the call times out, not abandoned (ORK2-01).
+        stop = threading.Event()
+        token = bind_cancel(linked_check(stop))
         try:
-            future = pool.submit(copy_context().run, tool.execute, part.arguments)
+            context = copy_context()
+        finally:
+            reset_cancel(token)
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{self.name}-{call.name}")
+        future = pool.submit(context.run, tool.execute, part.arguments)
+        try:
             try:
                 return future.result(timeout=self.tool_timeout), False
             except FutureTimeout:
                 raise self._timeout_error(call) from None
         finally:
+            if not future.done():
+                stop.set()
             pool.shutdown(wait=False)

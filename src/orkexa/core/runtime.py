@@ -21,6 +21,7 @@ from contextlib import contextmanager, suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 import hashlib
+import hmac
 import json
 import os
 import threading
@@ -37,6 +38,7 @@ from ..errors import (
     ConcurrentTurnError,
     ConfigurationError,
     IncompleteResponseError,
+    MaxToolCallsError,
     MaxToolRoundsError,
     MemoryToolError,
     ProviderError,
@@ -58,7 +60,7 @@ from ..retrieval import Index
 from ..tools import Tool, ToolOutput
 from ..usage import Reservation, UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
 from .capabilities import ModelCapabilities, Support
-from .checkpoint import CHECKPOINT_FORMAT, CHECKPOINT_VERSION, TurnCheckpoint, WaitingCall
+from .checkpoint import CHECKPOINT_FORMAT, CHECKPOINT_VERSION, TurnCheckpoint, WaitingCall, checkpoint_digest
 from .conversion import (
     HistoryPolicy,
     dump_history,
@@ -92,6 +94,7 @@ if TYPE_CHECKING:
     from ..providers.base import Provider
 
 __all__ = [
+    "DEFAULT_MAX_TOOL_CALLS_PER_ROUND",
     "AgentCore",
     "CallModel",
     "Emit",
@@ -104,6 +107,10 @@ __all__ = [
 
 OutputT = TypeVar("OutputT", default=str)
 RefusalMode = Literal["raise", "return"]
+
+#: Tool calls one model response may ask for (``max_tool_calls_per_round``); with
+#: ``max_tool_rounds`` it bounds the calls of a turn.
+DEFAULT_MAX_TOOL_CALLS_PER_ROUND = 64
 
 _FINAL = ("end_turn", "stop_sequence", "refusal")
 _INCOMPLETE = ("max_tokens", "context_window_exceeded")
@@ -209,6 +216,7 @@ class AgentCore(Generic[OutputT]):
         max_tokens: int = 16_000,
         max_tool_rounds: int = 8,
         max_parallel_tools: int = 1,
+        max_tool_calls_per_round: int | None = DEFAULT_MAX_TOOL_CALLS_PER_ROUND,
         raise_tool_errors: bool = True,
         tool_timeout: float | None = None,
         stream: bool | None = None,
@@ -231,6 +239,7 @@ class AgentCore(Generic[OutputT]):
         pricing: PricingInput = None,
         capabilities: Mapping[str, Support] | None = None,
         history_policy: HistoryPolicy = "strict",
+        checkpoint_key: bytes | str | None = None,
         _adapter: Provider | None = None,
     ) -> None:
         from ..providers.base import ProviderConfig
@@ -250,6 +259,10 @@ class AgentCore(Generic[OutputT]):
             raise ValueError("on_refusal must be 'raise' or 'return'")
         if history_policy not in ("strict", "convert"):
             raise ValueError("history_policy must be 'strict' or 'convert'")
+        if max_tool_calls_per_round is not None and max_tool_calls_per_round < 1:
+            raise ValueError("max_tool_calls_per_round must be positive or None")
+        if checkpoint_key is not None and len(checkpoint_key) < 16:
+            raise ValueError("checkpoint_key must have at least 16 bytes")
         if memory is not None and not isinstance(memory, MemoryBackend):
             raise TypeError("memory must be a MemoryBackend, e.g. EphemeralMemory() or FileMemory(path)")
         if files is not None and not isinstance(files, FileStore):
@@ -257,7 +270,7 @@ class AgentCore(Generic[OutputT]):
         if index is not None and not isinstance(index, Index):
             raise TypeError("index must be an Index, e.g. SQLiteIndex(path)")
 
-        provider_name, model_id = resolve_model(model, provider)
+        provider_name, model_id = resolve_model(model, provider, strict=True)
         if _adapter is None:
             config = ProviderConfig(
                 api_key=api_key,  # type: ignore[arg-type]
@@ -292,6 +305,7 @@ class AgentCore(Generic[OutputT]):
         self.max_tokens = max_tokens
         self.max_tool_rounds = max_tool_rounds
         self.max_parallel_tools = max_parallel_tools
+        self.max_tool_calls_per_round = max_tool_calls_per_round
         self.raise_tool_errors = raise_tool_errors
         self.tool_timeout = tool_timeout
         self.stream = stream
@@ -313,6 +327,10 @@ class AgentCore(Generic[OutputT]):
         self._turn_max_tokens: int | None = None
         self._turn_id: str | None = None
         self._resuming: set[str] = set()
+        #: Signs turn checkpoints (HMAC); not part of the fingerprint and never stored in a checkpoint.
+        self._checkpoint_key: bytes | None = (
+            checkpoint_key.encode() if isinstance(checkpoint_key, str) else checkpoint_key
+        )
         self._turn_lock = threading.Lock()
         for tool in tools or []:
             self.add_tool(tool)
@@ -487,8 +505,19 @@ class AgentCore(Generic[OutputT]):
     # ---- conversation -------------------------------------------------------------------
 
     def _conversation(self) -> list[Message]:
-        """A working copy of the committed conversation."""
+        """A deep copy of the committed conversation (handed out to callers)."""
         return [m.model_copy(deep=True) for m in self.messages]
+
+    def _working_conversation(self) -> list[Message]:
+        """The list a turn extends: a new list holding the committed messages (ORK2-09).
+
+        Copying every message on every turn made each ``ask()`` cost O(history). The turn
+        only appends to its own list, and the runtime and the provider adapters never change
+        a message in place (they use ``model_copy``), so a failed turn still leaves the
+        committed conversation untouched. Hooks receive these messages in
+        :class:`~orkexa.core.types.ModelRequest`; they must treat them as read-only (they
+        are the committed conversation, as after every successful turn before)."""
+        return list(self.messages)
 
     def _commit(self, history: list[Message]) -> None:
         self.messages = history
@@ -628,7 +657,7 @@ class AgentCore(Generic[OutputT]):
 
     def _next_history(self, prompt: Prompt | None) -> list[Message]:
         """History plus ``prompt`` for token counting; does not start a turn."""
-        history = self._conversation()
+        history = self._working_conversation()
         if prompt is not None:
             history.append(
                 Message(role="user", content=to_parts(to_content(prompt), self.adapter.parse_block))
@@ -734,7 +763,7 @@ class AgentCore(Generic[OutputT]):
             raise ValueError("max_tokens must be positive")
         if system is not None and not system.strip():
             raise ValueError("system must not be empty")
-        history = self._conversation()
+        history = self._working_conversation()
         self._last_turn_records = []
         self._turn_effort = effort
         self._turn_max_tokens = max_tokens
@@ -808,7 +837,7 @@ class AgentCore(Generic[OutputT]):
         waiting = [item for item in results if isinstance(item, _Waiting)]
         if waiting:
             raise TurnSuspended(
-                TurnCheckpoint(
+                self._issue_checkpoint(
                     agent=self.name,
                     model=self._model_id(),
                     fingerprint=self._checkpoint_fingerprint(),
@@ -823,6 +852,7 @@ class AgentCore(Generic[OutputT]):
                     ],
                     effort=self._turn_effort,
                     max_tokens=self._turn_max_tokens,
+                    nonce=uuid.uuid4().hex,
                 )
             )
         # All results of one assistant turn go back in a single user message.
@@ -832,7 +862,7 @@ class AgentCore(Generic[OutputT]):
         self, history: list[Message], round_number: int, exc: RequestSuspended
     ) -> TurnCheckpoint:
         """The checkpoint of a turn whose next model request the usage tracker suspended."""
-        return TurnCheckpoint(
+        return self._issue_checkpoint(
             agent=self.name,
             model=self._model_id(),
             fingerprint=self._checkpoint_fingerprint(),
@@ -844,7 +874,36 @@ class AgentCore(Generic[OutputT]):
             stage="request",
             reason=exc.reason,
             ref=exc.ref,
+            nonce=uuid.uuid4().hex,
         )
+
+    def _check_call_count(self, count: int) -> None:
+        """Refuse a response with more tool calls than ``max_tool_calls_per_round`` (none of them runs)."""
+        limit = self.max_tool_calls_per_round
+        if limit is not None and count > limit:
+            raise MaxToolCallsError(
+                f"{self.name}: the model asked for {count} tool calls in one response; "
+                f"max_tool_calls_per_round is {limit}. No call of that response ran."
+            )
+
+    def _issue_checkpoint(self, **fields: Any) -> TurnCheckpoint:
+        """A new checkpoint with its digest (an HMAC with ``checkpoint_key``)."""
+        checkpoint = TurnCheckpoint(**fields)
+        return checkpoint.model_copy(update={"digest": checkpoint_digest(checkpoint, self._checkpoint_key)})
+
+    def _check_digest(self, checkpoint: TurnCheckpoint) -> None:
+        """Refuse a checkpoint changed after it was issued (or unsigned, when this agent has a key)."""
+        if checkpoint.digest is None:
+            if self._checkpoint_key is not None:
+                raise CheckpointError(
+                    "the checkpoint is not signed (this agent requires a checkpoint_key HMAC)"
+                )
+            return  # written before checkpoints had a digest
+        expected = checkpoint_digest(checkpoint, self._checkpoint_key)
+        if not hmac.compare_digest(checkpoint.digest, expected):
+            raise CheckpointError(
+                "the checkpoint was changed after it was issued (or signed with another key)"
+            )
 
     def _checkpoint_fingerprint(self) -> str:
         """What a suspended turn depends on besides its conversation (see :mod:`orkexa.core.checkpoint`)."""
@@ -885,25 +944,42 @@ class AgentCore(Generic[OutputT]):
             raise CheckpointError("the checkpoint's results and waiting calls do not match its calls")
         if checkpoint.round > self.max_tool_rounds:
             raise CheckpointError("the checkpoint's tool round exceeds max_tool_rounds")
+        limit = self.max_tool_calls_per_round
+        if limit is not None and len(checkpoint.calls) > limit:
+            raise CheckpointError("the checkpoint has more calls than max_tool_calls_per_round")
         history = [Message.model_validate(message) for message in checkpoint.history]
         if not history:
             raise CheckpointError("the checkpoint's conversation is empty")
-        if checkpoint.stage == "tools" and history[-1].role != "assistant":
-            raise CheckpointError("the checkpoint's conversation does not end with the tool calls")
+        if checkpoint.stage == "tools":
+            last = history[-1]
+            if last.role != "assistant":
+                raise CheckpointError("the checkpoint's conversation does not end with the tool calls")
+            requested = [part for part in last.parts() if isinstance(part, ToolCallPart)]
+            if requested != list(checkpoint.calls):
+                raise CheckpointError("the checkpoint's calls differ from the calls in its conversation")
+        self._check_digest(checkpoint)
         self._last_turn_records = []
         self._turn_effort = checkpoint.effort
         self._turn_max_tokens = checkpoint.max_tokens
         self._turn_id = checkpoint.turn_id
         return checkpoint, history
 
-    def _resume_turn(self, checkpoint: TurnCheckpoint | Mapping[str, Any]) -> Generator[Effect, Any, OutputT]:
+    def _resume_turn(
+        self,
+        checkpoint: TurnCheckpoint | Mapping[str, Any],
+        claim: Callable[[str], bool] | None = None,
+    ) -> Generator[Effect, Any, OutputT]:
         """Continue a suspended turn: run the waiting calls, then the remaining rounds.
 
         A ``"request"`` checkpoint continues with the round whose request was suspended:
         the request is built from the checkpoint's conversation and admitted again.
+        ``claim(checkpoint.id)`` (optional) is asked after the checkpoint was checked and
+        before anything runs; ``False`` refuses a checkpoint that was resumed before.
         """
         try:
             restored, history = self._restore(checkpoint)
+            if claim is not None and not claim(restored.id):
+                raise CheckpointError("the checkpoint was already resumed (claimed before)")
             if restored.stage == "request":
                 resumed: OutputT = yield from self._rounds(history, restored.round)
                 return resumed
@@ -980,6 +1056,7 @@ class AgentCore(Generic[OutputT]):
             calls = tuple(response.tool_calls)
             if not calls:
                 raise UnexpectedResponseError("stop_reason='tool_use' without tool_use blocks")
+            self._check_call_count(len(calls))
             return _Step("tools", tool_calls=calls)
 
         if response.stop_reason not in _FINAL:
@@ -1033,6 +1110,9 @@ class AgentCore(Generic[OutputT]):
         SDK exception, whose text, attributes and traceback frames may hold credentials
         or request data.
         """
+        missing = self.adapter.credentials_error(exc)
+        if missing is not None:
+            return missing  # one Orkexa error for a missing key, for every provider (DX-01)
         if not self._map_errors:
             return exc
         mapped = self.adapter.map_error(exc)

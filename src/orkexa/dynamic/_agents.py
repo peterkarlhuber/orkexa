@@ -95,7 +95,7 @@ def build_agent(
     hint chosen by a model (``AgentSpec.effort``), not a requirement. A plain
     :class:`~orkexa.Agent` with ``effort=`` still raises for such a model.
     """
-    provider, _ = resolve_model(model)
+    provider, _ = resolve_model(model, strict=True)
     own = (settings or {}).get(provider)
     if provider == "anthropic":
         if own is None:

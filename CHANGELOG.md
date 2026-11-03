@@ -4,6 +4,79 @@
 
 First release of Orkexa.
 
+### Changed: an unknown provider prefix raises instead of falling back to Anthropic (DX-02)
+
+* `Agent(model="OpenAI:gpt-4o")`, `"openai/gpt-4o"` or `"foo:bar"` silently went to
+  Anthropic (and only failed with a missing `anthropic` extra or at the API). A registered
+  name in another case or with `/` now raises `ConfigurationError` with the corrected name,
+  also in `resolve_model()`. Agents, `Evaluator` and the dynamic agent factory resolve
+  `strict`: without `provider=`, any other `prefix:` or `/` raises (pass `provider="ollama"`
+  for `llama3.1:8b`). `resolve_model(model)` without `strict=True` keeps the default provider
+  for other unknown prefixes, so code that only parses stored names is unaffected.
+
+### Changed: a missing API key raises `MissingCredentialsError` for every provider (DX-01)
+
+* Without a key each SDK raised its own exception (anthropic a `TypeError` at request time,
+  openai an `openai.OpenAIError`, google-genai a `ValueError`), which `except OrkexaError` did
+  not catch. Now every provider raises `MissingCredentialsError` (a subclass of
+  `AuthenticationError`) naming the provider and the environment variables to set
+  (`error.variables`), without a link to the SDK exception; `ClaudeAgent` too.
+
+### Changed: a turn no longer deep-copies the whole conversation (audit ORK2-09)
+
+* Every `ask()` deep-copied every committed message, so the per-turn overhead grew with the
+  history (300 turns: 18 ms for the last turn, 77 % of it copying). A turn now extends a new
+  list holding the committed messages (last turn of 300: 1.5 ms). The runtime and the
+  provider adapters never change a message in place (contract-tested for every adapter), so
+  a failed turn still leaves the committed conversation untouched; `conversation()` and
+  `history()` still return copies. Hooks that receive `ModelRequest.messages` must treat
+  them as read-only.
+
+### Changed: stopping a Docker sandbox call no longer always waits 3 seconds (audit ORK2-08)
+
+* `stop_container` watched the container name for 3 s after every timeout or cancellation.
+  When `docker kill` succeeded the container existed, so no create request can still be in
+  flight: the watch now ends as soon as the name is confirmed gone. When the kill failed
+  (the client may have died while creating it) the full 3 s watch remains.
+
+### Added: a limit on tool calls per model response (audit ORK2-04)
+
+* `max_tool_rounds` did not bound tool calls: one response with 500 calls ran all of them.
+  New `max_tool_calls_per_round` (default 64, `None`: no limit): a response with more calls
+  raises `MaxToolCallsError` (a subclass of `MaxToolRoundsError`) before any of its calls
+  runs. A turn runs at most `max_tool_rounds × max_tool_calls_per_round` calls.
+
+### Changed: turn checkpoints are bound to their content; single-use resume is opt-in (audit ORK2-03)
+
+* `TurnCheckpoint` has two new optional fields, `nonce` and `digest`. The digest covers the
+  conversation, every call with its arguments, the stored results and the waiting calls;
+  `resume()` refuses a checkpoint changed after it was issued, and one whose `calls` differ
+  from the calls in its conversation. Checkpoints written before (no digest) still resume
+  on agents without a key. The checkpoint version stays 1.
+* New `checkpoint_key=` (agents): signs checkpoints with an HMAC and refuses unsigned or
+  altered ones, so approved call arguments cannot be changed in storage.
+* New `resume(..., claim=)` and `CheckpointClaims`: a claim keyed by the new
+  `TurnCheckpoint.id` refuses a second resume of the same checkpoint before anything runs.
+  Without a claim, resuming again still works (and runs the waiting calls again), as
+  before; the guide now warns about it.
+
+### Fixed: a failing parallel tool call in AsyncAgent cancels its siblings (audit ORK2-02)
+
+* With `max_parallel_tools > 1`, the first failing call ended `AsyncAgent.ask()` while its
+  siblings kept running: they committed side effects and called `after_tool` after the turn
+  had failed, even during the next turn. The siblings are now cancelled and awaited before
+  the error is raised (the orchestration driver's pattern, now shared as
+  `orkexa._aio.gather_or_cancel`), as the sync `Agent` already waited for all calls.
+
+### Fixed: a timed-out or cancelled tool call stops its sandbox call (audit ORK2-01)
+
+* `Agent(tool_timeout=...)` abandoned the worker thread and cancelling `AsyncAgent.ask()`
+  left `asyncio.to_thread` running, so a `SandboxedTool`'s process or container kept running
+  until the sandbox's own timeout (and `max_parallel_tools` no longer bounded live
+  sandboxes). The drivers now bind a per-call cancel check, linked to the caller's
+  `cancel_scope`, and set it on timeout or cancellation: the process is killed and the
+  container removed. Plain Python tool code in a thread still cannot be stopped.
+
 ### Fixed: the Docker self-test reports the container's own environment
 
 * The self-test read the environment from `os.environ`, which also holds what Python sets

@@ -22,8 +22,10 @@ __all__ = [
     "HistoryConversionError",
     "IncompleteResponseError",
     "InvalidRequestError",
+    "MaxToolCallsError",
     "MaxToolRoundsError",
     "MemoryToolError",
+    "MissingCredentialsError",
     "MissingDependencyError",
     "OrkexaError",
     "PriceNotFoundError",
@@ -147,6 +149,13 @@ class IncompleteResponseError(OrkexaError, RuntimeError):
 
 class MaxToolRoundsError(OrkexaError, RuntimeError):
     """The model kept calling tools beyond ``max_tool_rounds``."""
+
+
+class MaxToolCallsError(MaxToolRoundsError):
+    """One model response asked for more tool calls than ``max_tool_calls_per_round``.
+
+    None of that response's calls ran. A subclass of :class:`MaxToolRoundsError`, so code
+    that handles the round limit handles this limit too."""
 
 
 class RefusalError(OrkexaError, RuntimeError):
@@ -290,6 +299,22 @@ class ProviderError(OrkexaError, RuntimeError):
 
 class AuthenticationError(ProviderError):
     """Missing, invalid or insufficient credentials (HTTP 401/403)."""
+
+
+class MissingCredentialsError(AuthenticationError):
+    """No credentials were found for the provider (no API key passed or in the environment).
+
+    Raised for every provider in place of the SDK's own exception (``TypeError``,
+    ``openai.OpenAIError``, ``ValueError``, botocore's ``NoCredentialsError``), before a
+    request is sent. A subclass of :class:`AuthenticationError`.
+
+    Attributes:
+        variables: The environment variables the provider reads its key from.
+    """
+
+    def __init__(self, message: str, *, provider: str, variables: tuple[str, ...] = ()) -> None:
+        super().__init__(message, provider=provider)
+        self.variables = variables
 
 
 class RateLimitError(ProviderError):
