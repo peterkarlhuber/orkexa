@@ -14,7 +14,7 @@ from orkexa.dynamic.docker._container import stop_container
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="a shell script plays docker")
 
 # kill exits with the code in kill.rc; ps prints ps.out once per line of ps.seq (then nothing);
-# every call is logged.
+# every call is logged. (No `sed -i`: BSD sed on macOS needs a suffix argument.)
 _DOCKER = """#!/bin/sh
 dir="$(dirname "$0")"
 echo "$1" >> "$dir/log"
@@ -22,7 +22,10 @@ case "$1" in
   kill) exit "$(cat "$dir/kill.rc")" ;;
   rm) exit 0 ;;
   ps)
-    if [ -s "$dir/ps.seq" ]; then head -n 1 "$dir/ps.seq"; sed -i '1d' "$dir/ps.seq"; fi
+    if [ -s "$dir/ps.seq" ]; then
+      head -n 1 "$dir/ps.seq"
+      tail -n +2 "$dir/ps.seq" > "$dir/ps.rest"; mv "$dir/ps.rest" "$dir/ps.seq"
+    fi
     exit 0 ;;
 esac
 exit 1
