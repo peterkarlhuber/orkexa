@@ -41,6 +41,8 @@ pdf = ["pypdf>=4"]
 vector = ["sqlite-vec>=0.1.6"]
 # Unpacking the Linux Ollama runtime archive (.tar.zst) for orkexa.local.install_runtime.
 local = ["zstandard>=0.23"]
+# Building models from upstream weights (orkexa.local.convert), e.g. mDenseOn.
+convert = ["gguf>=0.17,<1"]
 docs = [
     "mkdocs>=1.6,<2",  # MkDocs 2 drops the plugin system that Material and mkdocstrings use
     "mkdocs-material>=9.5",
@@ -62,6 +64,7 @@ dev = [
     "ruff>=0.8",
     "sqlite-vec>=0.1.6",
     "zstandard>=0.23",
+    "gguf>=0.17,<1",
 ]
 
 [project.scripts]

@@ -117,6 +117,26 @@ def _cmd_import_gguf(args: argparse.Namespace) -> int:
     return 0
 
 
+_RECIPES = {"mdenseon": "MDENSEON"}
+
+
+def _cmd_build(args: argparse.Namespace) -> int:
+    from . import convert
+
+    recipe = getattr(convert, _RECIPES[args.recipe])
+    report = convert.build_model(
+        _client(args),
+        recipe,
+        weights=args.weights,
+        template=args.template,
+        download=args.download,
+        progress=lambda text: print(text, file=sys.stderr),
+    )
+    size = _size(report.gguf_bytes)
+    print(f"{report.name}: {size}, digest {report.digest[:12]}, cosine {report.min_cosine:.6f}")
+    return 0
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     report = export_package(args.models_dir, args.models, args.target, progress=_progress("export"))
     print(f"\n{len(report.models)} models, {report.files} files, {_size(report.bytes)} -> {args.target}")
@@ -184,6 +204,12 @@ def parser() -> argparse.ArgumentParser:
     gguf.add_argument("gguf", type=Path)
     gguf.add_argument("--projector", type=Path, help="vision projector GGUF")
     gguf.set_defaults(run=_cmd_import_gguf)
+    build = commands.add_parser("build", help="build a model from pinned upstream weights and verify it")
+    build.add_argument("recipe", choices=sorted(_RECIPES))
+    build.add_argument("--weights", type=Path, help="the upstream safetensors file (offline)")
+    build.add_argument("--template", type=Path, help="the template GGUF file or header (offline)")
+    build.add_argument("--download", action="store_true", help="download missing inputs (network)")
+    build.set_defaults(run=_cmd_build)
     export = commands.add_parser("export", help="write an offline model package")
     export.add_argument("target", type=Path)
     export.add_argument("models", nargs="+")

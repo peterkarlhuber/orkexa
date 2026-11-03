@@ -13,7 +13,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 2 |
-| P3 Low | 13 |
+| P3 Low | 14 |
 | P4 Optional | 11 |
 
 **Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
@@ -162,6 +162,17 @@ None known.
 - **What:** `EmbeddingModel` has one built-in implementation (`OllamaEmbeddings`) plus `CallableEmbeddings`.
   Rerankers are not covered (Ollama has no official reranker models).
 - **Next step:** Add cloud embedding providers or a reranker step when there is a concrete need.
+
+### ORK-035 · Source of the mDenseOn tokenizer metadata
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** `src/orkexa/local/convert.py` (`MDENSEON`), 2026-11-03
+- **What:** The `MDENSEON` recipe takes its tokenizer and hyperparameter metadata from the 6 MB header of a community
+  llama.cpp conversion of mmBERT-base (`mykor/mmBERT-base-GGUF`, MIT, pinned by revision and SHA-256), because
+  mDenseOn ships no GGUF and the converter was not run here. That conversion sets `add_space_prefix=false`, which
+  does not match the Hugging Face tokenizer; the recipe corrects it and the reference-vector check guards it.
+- **Next step:** Run llama.cpp's `convert_hf_to_gguf.py` on mDenseOn at a pinned llama.cpp commit, compare the
+  metadata with the template, report the `add_space_prefix` mismatch upstream, and switch the recipe's template to
+  our own conversion or to an official LightOn GGUF if one is published.
 
 ### ORK-034 · Updating the pinned Ollama runtime
 
