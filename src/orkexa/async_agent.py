@@ -8,6 +8,7 @@ import inspect
 import threading
 from typing import Any
 
+from ._aio import gather_or_cancel
 from ._cancel import bind_cancel, linked_check, reset_cancel
 from .content import Prompt
 from .core.checkpoint import TurnCheckpoint
@@ -194,7 +195,9 @@ class AsyncAgent(AgentCore[OutputT]):
         self, calls: tuple[ToolCallPart, ...], request: ModelRequest
     ) -> list[ToolResultPart | _Waiting]:
         slots = asyncio.Semaphore(self.max_parallel_tools)
-        return list(await asyncio.gather(*(self._run_tool(call, request, slots) for call in calls)))
+        # A failing call cancels its siblings and waits for them: none keeps running (and commits a side
+        # effect or calls ``after_tool``) after the turn has failed (ORK2-02).
+        return list(await gather_or_cancel(*(self._run_tool(call, request, slots) for call in calls)))
 
     async def _run_tool(
         self, part: ToolCallPart, request: ModelRequest, slots: asyncio.Semaphore

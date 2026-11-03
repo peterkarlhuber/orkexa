@@ -4,6 +4,14 @@
 
 First release of Orkexa.
 
+### Fixed: a failing parallel tool call in AsyncAgent cancels its siblings (audit ORK2-02)
+
+* With `max_parallel_tools > 1`, the first failing call ended `AsyncAgent.ask()` while its
+  siblings kept running: they committed side effects and called `after_tool` after the turn
+  had failed, even during the next turn. The siblings are now cancelled and awaited before
+  the error is raised (the orchestration driver's pattern, now shared as
+  `orkexa._aio.gather_or_cancel`), as the sync `Agent` already waited for all calls.
+
 ### Fixed: a timed-out or cancelled tool call stops its sandbox call (audit ORK2-01)
 
 * `Agent(tool_timeout=...)` abandoned the worker thread and cancelling `AsyncAgent.ask()`
