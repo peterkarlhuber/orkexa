@@ -33,7 +33,8 @@ pip install "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"
 The core needs only Pydantic. Each provider SDK is an extra: `orkexa[anthropic]`,
 `orkexa[openai]` (also for compatible endpoints), `orkexa[gemini]`, `orkexa[bedrock]`
 (Amazon Bedrock through `boto3`), or `orkexa[all]` with all of them;
-`orkexa[pdf]` and `orkexa[vector]` add PDF extraction and vector search.
+`orkexa[pdf]` and `orkexa[vector]` add PDF extraction and vector search; `orkexa[local]` and
+`orkexa-local` manage local Ollama models (see the local models guide).
 `import orkexa` never imports a provider SDK.
 
 ## Quickstart

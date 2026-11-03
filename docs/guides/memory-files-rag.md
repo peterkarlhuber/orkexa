@@ -23,8 +23,9 @@ sources. `retrieval_sources` works for every provider; API-native citations exis
 where the provider returns them (Anthropic search-result/document citations, OpenAI
 URL/file annotations).
 
-`SQLiteIndex` uses FTS5/BM25, optional vector or hybrid search with `embedder=`
-(`orkexa[vector]`) and PDF extraction (`orkexa[pdf]`).
+`SQLiteIndex` uses FTS5/BM25 by default and offers vector or hybrid search with an embedding model
+(`embeddings=`, `orkexa[vector]`; see [Local models, embeddings and retrieval modes](local-models.md))
+and PDF extraction (`orkexa[pdf]`). The older `embedder=` callables keep working.
 
 ## Deleting data
 

@@ -98,6 +98,11 @@ class UsageRecord:
         return self.total_input_tokens + self.output_tokens
 
     @property
+    def local_inference(self) -> bool:
+        """A request to a local model: no external model API billing (operating costs not recorded)."""
+        return self.pricing_source == "local"
+
+    @property
     def cost_complete(self) -> bool:
         """Whether ``estimated_cost_usd`` is a complete cost (not ``None``)."""
         return self.estimated_cost_usd is not None
@@ -167,6 +172,9 @@ class UsageSummary:
     unpriced_requests: int
     known_cost_usd: Decimal = Decimal("0")
     missing_cost_components: tuple[str, ...] = ()
+    local_requests: int = 0
+    """Requests to local models (no external model API billing; their operating costs are not
+    included in any amount here, see :mod:`orkexa.pricing`)."""
 
     @property
     def total_input_tokens(self) -> int:
@@ -212,6 +220,7 @@ def summarize_usage(records: Iterable[UsageRecord]) -> UsageSummary:
         unpriced_requests=unpriced,
         known_cost_usd=sum((record.known_cost for record in records), Decimal("0")),
         missing_cost_components=tuple(missing),
+        local_requests=sum(record.local_inference for record in records),
         **totals,
     )
 
