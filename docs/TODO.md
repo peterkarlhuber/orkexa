@@ -3,8 +3,8 @@
 > Open work for this repository: release blockers, known bugs, security follow-ups, technical debt and planned improvements.
 > GitHub issues are the source of truth for details; this file is the entry point and summary.
 >
-> **Last full review:** 2026-11-03 against `master` at `0861c1b` (internal backend audit round 2; fixes on
-> branch `wip/a2-orkfix`, not yet merged).
+> **Last full review:** 2026-11-03 against `master` at `0861c1b` (internal backend audit round 2; fixes merged
+> in #40 at `bc8c4ed`).
 
 ## Summary
 
@@ -266,7 +266,7 @@ None known.
 | ORK-007 | nodestro-runtime | RT-022 (Python 3.14) | Runtime adds 3.14 after this review; runtime depends on Orkexa |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
 | ORK-029 | nodestro-studio | run problem messages (`errors.json`, `RunProblem.tsx`) | Studio adds `run.agent.MaxToolCallsError` |
-| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `0861c1b`) | Changes reach Nodestro only through a coordinated pin cascade; the 2026-11-03 audit fixes (ORK2-01 to ORK2-09, DX-01, DX-02) need the next one |
+| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `bc8c4ed`) | Changes reach Nodestro only through a coordinated pin cascade; the 2026-11-03 audit fixes (ORK2-01 to ORK2-09, DX-01, DX-02) are pinned since runtime #96 |
 
 ## Maintaining this file
 

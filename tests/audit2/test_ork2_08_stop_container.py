@@ -71,4 +71,6 @@ def test_without_a_kill_the_name_is_watched_for_the_settle_time(
     assert time.monotonic() - started >= 0.6
     log = _log(tmp_path)
     assert log[:2] == ["kill", "rm"] and log.count("rm") == 2  # the late container was removed
-    assert log.count("ps") >= 4
+    # Empty, then the late container, then at least one more check: watching goes on after the late
+    # removal. Only a lower bound on polls, since a slow runner (macOS) fits fewer into the settle time.
+    assert log.count("ps") >= 3
