@@ -8,8 +8,8 @@ change. This page collects the common cases.
 | Exception | Usual cause | Fix |
 | --- | --- | --- |
 | `MissingDependencyError` | The provider's SDK is not installed | Install the extra named in the message, e.g. `pip install "orkexa[openai]"` |
+| `MissingCredentialsError` (an `AuthenticationError`) | No key passed and none in the provider's environment variable (same error for every provider, also in `ClaudeAgent`); nothing was sent | Set the variable the message names (`error.variables`, e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or pass `api_key=` |
 | `AuthenticationError` | Invalid or insufficient key (HTTP 401/403) | Set the provider's environment variable or pass `api_key=`; for a custom `base_url`, an explicit `api_key=` is required |
-| SDK error before the first request: `TypeError` "Could not resolve authentication method" (`anthropic`), `openai.OpenAIError` "Missing credentials" (`openai`), `ValueError` "No API key was provided" (`gemini`) | No key at all: the provider SDK refuses to build its client, and its exception is raised unchanged | Set the provider's environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or pass `api_key=` |
 | `ConfigurationError` | Contradicting settings, e.g. a custom `base_url` without a key, `request_options` that collide with agent arguments, removed API parameters, OpenAI background mode | Follow the message; it names the argument |
 | `UnsupportedCapabilityError` | The model or provider cannot do what you asked (e.g. `effort` on a classic model, forced tool choice on Gemini) | Remove the feature or pick another model; `exc.capability` names the feature |
 | `UnknownCapabilityError` | Orkexa does not know whether the endpoint supports the feature (every compatible endpoint, new model families) | Declare it if you know it works: `capabilities={"tools": "supported"}` |

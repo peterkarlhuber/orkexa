@@ -389,7 +389,13 @@ class OpenAIProvider(Provider):
         kwargs = self.config.client_kwargs()
         kwargs.setdefault("base_url", self.default_base_url)  # never the OPENAI_BASE_URL environment variable
         cls = sdk.AsyncOpenAI if self.asynchronous else sdk.OpenAI
-        return cls(**kwargs)
+        try:
+            return cls(**kwargs)
+        except sdk.OpenAIError as exc:
+            # The constructor's only error: no key passed and none in the environment (DX-01).
+            if "api_key" in kwargs or isinstance(exc, sdk.APIError):
+                raise
+        raise self.missing_credentials()  # outside the handler: no link to the SDK exception
 
     # ---- capabilities ------------------------------------------------------------------
 
@@ -592,6 +598,8 @@ class OpenAIProvider(Provider):
     async def acount_tokens(self, request: ModelRequest) -> int:
         result = await self.client.responses.input_tokens.count(**self._count_args(request))
         return int(result.input_tokens)
+
+    credential_variables: ClassVar[tuple[str, ...]] = ("OPENAI_API_KEY",)
 
     def map_error(self, exc: BaseException) -> BaseException | None:
         try:

@@ -4,6 +4,14 @@
 
 First release of Orkexa.
 
+### Changed: a missing API key raises `MissingCredentialsError` for every provider (DX-01)
+
+* Without a key each SDK raised its own exception (anthropic a `TypeError` at request time,
+  openai an `openai.OpenAIError`, google-genai a `ValueError`), which `except OrkexaError` did
+  not catch. Now every provider raises `MissingCredentialsError` (a subclass of
+  `AuthenticationError`) naming the provider and the environment variables to set
+  (`error.variables`), without a link to the SDK exception; `ClaudeAgent` too.
+
 ### Changed: a turn no longer deep-copies the whole conversation (audit ORK2-09)
 
 * Every `ask()` deep-copied every committed message, so the per-turn overhead grew with the

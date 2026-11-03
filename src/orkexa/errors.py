@@ -25,6 +25,7 @@ __all__ = [
     "MaxToolCallsError",
     "MaxToolRoundsError",
     "MemoryToolError",
+    "MissingCredentialsError",
     "MissingDependencyError",
     "OrkexaError",
     "PriceNotFoundError",
@@ -298,6 +299,22 @@ class ProviderError(OrkexaError, RuntimeError):
 
 class AuthenticationError(ProviderError):
     """Missing, invalid or insufficient credentials (HTTP 401/403)."""
+
+
+class MissingCredentialsError(AuthenticationError):
+    """No credentials were found for the provider (no API key passed or in the environment).
+
+    Raised for every provider in place of the SDK's own exception (``TypeError``,
+    ``openai.OpenAIError``, ``ValueError``, botocore's ``NoCredentialsError``), before a
+    request is sent. A subclass of :class:`AuthenticationError`.
+
+    Attributes:
+        variables: The environment variables the provider reads its key from.
+    """
+
+    def __init__(self, message: str, *, provider: str, variables: tuple[str, ...] = ()) -> None:
+        super().__init__(message, provider=provider)
+        self.variables = variables
 
 
 class RateLimitError(ProviderError):

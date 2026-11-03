@@ -142,6 +142,7 @@ requests (`Evaluator.evaluate_many(batch=True)`) cannot be suspended: there,
 | second `ask()`, `reset()` or `load_history()` while a turn runs | `ConcurrentTurnError` |
 | a tool call waits (`ToolCallSuspended`) or the usage tracker pauses a request (`RequestSuspended`) | `TurnSuspended` (with a `checkpoint`) |
 | provider API errors (generic agents) | `AuthenticationError`, `RateLimitError`, `InvalidRequestError`, `ProviderConnectionError`, `ProviderServerError` (all `ProviderError`) |
+| no API key found (every agent and provider) | `MissingCredentialsError` (an `AuthenticationError`) |
 
 `ProviderError` has `provider`, `status_code`, `request_id` and `retryable`; its message
 is redacted (API keys never appear) and names the SDK exception type. The SDK exception

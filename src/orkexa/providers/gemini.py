@@ -170,7 +170,14 @@ class GeminiProvider(Provider):
             http["timeout"] = int(self.config.timeout * 1000)  # milliseconds
         if http:
             kwargs["http_options"] = http
-        return genai.Client(**kwargs)
+        try:
+            return genai.Client(**kwargs)
+        except ValueError as exc:
+            # No key passed and none in the environment (DX-01); other ValueErrors stay as they are.
+            text = str(exc)
+            if "api_key" in kwargs or not ("API key" in text or "Missing key inputs" in text):
+                raise
+        raise self.missing_credentials()  # outside the handler: no link to the SDK exception
 
     @property
     def types(self) -> Any:
@@ -573,6 +580,8 @@ class GeminiProvider(Provider):
     async def acount_tokens(self, request: ModelRequest) -> int:
         result = await self.client.aio.models.count_tokens(**self._count_args(request))
         return int(result.total_tokens or 0)
+
+    credential_variables: ClassVar[tuple[str, ...]] = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
 
     def map_error(self, exc: BaseException) -> BaseException | None:
         try:

@@ -1110,6 +1110,9 @@ class AgentCore(Generic[OutputT]):
         SDK exception, whose text, attributes and traceback frames may hold credentials
         or request data.
         """
+        missing = self.adapter.credentials_error(exc)
+        if missing is not None:
+            return missing  # one Orkexa error for a missing key, for every provider (DX-01)
         if not self._map_errors:
             return exc
         mapped = self.adapter.map_error(exc)
