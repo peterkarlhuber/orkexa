@@ -4,6 +4,16 @@
 
 First release of Orkexa.
 
+### Changed: a turn no longer deep-copies the whole conversation (audit ORK2-09)
+
+* Every `ask()` deep-copied every committed message, so the per-turn overhead grew with the
+  history (300 turns: 18 ms for the last turn, 77 % of it copying). A turn now extends a new
+  list holding the committed messages (last turn of 300: 1.5 ms). The runtime and the
+  provider adapters never change a message in place (contract-tested for every adapter), so
+  a failed turn still leaves the committed conversation untouched; `conversation()` and
+  `history()` still return copies. Hooks that receive `ModelRequest.messages` must treat
+  them as read-only.
+
 ### Changed: stopping a Docker sandbox call no longer always waits 3 seconds (audit ORK2-08)
 
 * `stop_container` watched the container name for 3 s after every timeout or cancellation.

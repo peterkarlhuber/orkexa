@@ -505,8 +505,19 @@ class AgentCore(Generic[OutputT]):
     # ---- conversation -------------------------------------------------------------------
 
     def _conversation(self) -> list[Message]:
-        """A working copy of the committed conversation."""
+        """A deep copy of the committed conversation (handed out to callers)."""
         return [m.model_copy(deep=True) for m in self.messages]
+
+    def _working_conversation(self) -> list[Message]:
+        """The list a turn extends: a new list holding the committed messages (ORK2-09).
+
+        Copying every message on every turn made each ``ask()`` cost O(history). The turn
+        only appends to its own list, and the runtime and the provider adapters never change
+        a message in place (they use ``model_copy``), so a failed turn still leaves the
+        committed conversation untouched. Hooks receive these messages in
+        :class:`~orkexa.core.types.ModelRequest`; they must treat them as read-only (they
+        are the committed conversation, as after every successful turn before)."""
+        return list(self.messages)
 
     def _commit(self, history: list[Message]) -> None:
         self.messages = history
@@ -646,7 +657,7 @@ class AgentCore(Generic[OutputT]):
 
     def _next_history(self, prompt: Prompt | None) -> list[Message]:
         """History plus ``prompt`` for token counting; does not start a turn."""
-        history = self._conversation()
+        history = self._working_conversation()
         if prompt is not None:
             history.append(
                 Message(role="user", content=to_parts(to_content(prompt), self.adapter.parse_block))
@@ -752,7 +763,7 @@ class AgentCore(Generic[OutputT]):
             raise ValueError("max_tokens must be positive")
         if system is not None and not system.strip():
             raise ValueError("system must not be empty")
-        history = self._conversation()
+        history = self._working_conversation()
         self._last_turn_records = []
         self._turn_effort = effort
         self._turn_max_tokens = max_tokens

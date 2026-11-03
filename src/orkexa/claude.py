@@ -187,6 +187,9 @@ class _ClaudeFacade(AgentCore[OutputT]):
     def _conversation(self) -> list[Message]:
         return codec.decode_messages(self.messages)
 
+    def _working_conversation(self) -> list[Message]:
+        return self._conversation()  # decoded from the Messages API format: new objects anyway
+
     def _commit(self, history: list[Message]) -> None:
         self.messages = codec.encode_messages(history)
 
