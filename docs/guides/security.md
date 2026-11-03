@@ -116,6 +116,10 @@ Keep stores in a directory with suitable ACLs.
 * A tool timeout does not stop a running tool thread: Python threads cannot be killed,
   so a timed-out tool may still finish its side effects. Put tools with risky side
   effects behind a process boundary (a sandbox or a service) with its own timeout.
+  A sandbox call (`orkexa.dynamic`) *is* stopped when its tool call times out
+  (`tool_timeout`) or its `AsyncAgent.ask()` task is cancelled: the agents bind a
+  per-call cancel check (linked to the caller's `cancel_scope`), so the process is
+  killed and the container removed instead of running on until the sandbox timeout.
 
 ## Migrating to the secure defaults
 

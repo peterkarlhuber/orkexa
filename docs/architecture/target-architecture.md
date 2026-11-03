@@ -193,8 +193,11 @@ environment key to third-party hosts). See [ADR 0007](decisions/0007-credentials
 
 One agent = one conversation. A second concurrent `ask()` raises
 `ConcurrentTurnError`. Async cancellation leaves the committed history untouched;
-tool calls already running in threads finish in the background. `tool_timeout`
-bounds every tool call (async: cancelled; sync: abandoned thread, documented).
+plain sync tool code already running in threads finishes in the background. `tool_timeout`
+bounds every tool call (async: cancelled; sync: abandoned thread, documented). A sandbox
+call is stopped in both cases: the drivers bind a per-call cancel check (linked to the
+caller's `cancel_scope`) and set it on timeout or cancellation, so its process and
+container are killed.
 
 ### Subsystems
 

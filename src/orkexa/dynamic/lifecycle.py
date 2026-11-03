@@ -15,10 +15,10 @@ process (and removes its container), cleans up and raises :class:`SandboxCancell
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
-from contextvars import ContextVar, Token
 
+from .._cancel import CancelCheck, bind_cancel, cancel_requested, current_cancel, reset_cancel
 from .errors import SandboxError
 
 __all__ = [
@@ -31,24 +31,9 @@ __all__ = [
     "reset_cancel",
 ]
 
-#: Returns ``True`` once the caller wants its running call stopped. It must be cheap: it is polled
-#: every 50 ms.
-CancelCheck = Callable[[], bool]
-
-_CHECK: ContextVar[CancelCheck | None] = ContextVar("orkexa_sandbox_cancel", default=None)
-
 
 class SandboxCancelled(SandboxError):
     """The call was stopped because its caller cancelled it; its process is gone and its files are removed."""
-
-
-def bind_cancel(check: CancelCheck | None) -> Token[CancelCheck | None]:
-    """Bind ``check`` to the current context (thread or task); undo with :func:`reset_cancel`."""
-    return _CHECK.set(check)
-
-
-def reset_cancel(token: Token[CancelCheck | None]) -> None:
-    _CHECK.reset(token)
 
 
 @contextmanager
@@ -59,21 +44,3 @@ def cancel_scope(check: CancelCheck | None) -> Iterator[None]:
         yield
     finally:
         reset_cancel(token)
-
-
-def current_cancel() -> CancelCheck | None:
-    """The check bound to the current context, for a thread that watches a call on behalf of its caller."""
-    return _CHECK.get()
-
-
-def cancel_requested(check: CancelCheck | None = None) -> bool:
-    """Whether the caller of the current call cancelled it (``False`` without a bound check).
-
-    A check that raises counts as "not cancelled": a broken check must never stop a call by itself."""
-    found = check if check is not None else _CHECK.get()
-    if found is None:
-        return False
-    try:
-        return bool(found())
-    except Exception:
-        return False

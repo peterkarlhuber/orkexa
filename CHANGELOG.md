@@ -4,6 +4,15 @@
 
 First release of Orkexa.
 
+### Fixed: a timed-out or cancelled tool call stops its sandbox call (audit ORK2-01)
+
+* `Agent(tool_timeout=...)` abandoned the worker thread and cancelling `AsyncAgent.ask()`
+  left `asyncio.to_thread` running, so a `SandboxedTool`'s process or container kept running
+  until the sandbox's own timeout (and `max_parallel_tools` no longer bounded live
+  sandboxes). The drivers now bind a per-call cancel check, linked to the caller's
+  `cancel_scope`, and set it on timeout or cancellation: the process is killed and the
+  container removed. Plain Python tool code in a thread still cannot be stopped.
+
 ### Fixed: the Docker self-test reports the container's own environment
 
 * The self-test read the environment from `os.environ`, which also holds what Python sets

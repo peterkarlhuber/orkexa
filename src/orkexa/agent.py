@@ -6,8 +6,10 @@ from collections.abc import Generator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextvars import copy_context
+import threading
 from typing import Any
 
+from ._cancel import bind_cancel, linked_check, reset_cancel
 from .content import Prompt
 from .core.checkpoint import TurnCheckpoint
 from .core.runtime import (
@@ -74,7 +76,8 @@ class Agent(AgentCore[OutputT]):
         max_parallel_tools: Tool calls of one response run in up to this many threads.
         raise_tool_errors: Raise tool failures (default) or send them back to the model.
         tool_timeout: Seconds per tool call; a call that takes longer fails with
-            :class:`~orkexa.ToolExecutionError` (its thread is abandoned, not killed).
+            :class:`~orkexa.ToolExecutionError`. A sandbox call it started is stopped (process
+            killed, container removed); other code in its thread is abandoned, not killed.
         stream: Stream requests (``None``: when a streaming hook is set).
         on_refusal: ``"raise"`` (:class:`~orkexa.RefusalError`) or ``"return"`` the text.
         on_text: Streamed text deltas.
@@ -288,12 +291,22 @@ class Agent(AgentCore[OutputT]):
         tool = self._lookup_tool(call.name)
         if self.tool_timeout is None:
             return tool.execute(part.arguments), False
-        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{self.name}-{call.name}")
+        # The call's own cancel check (linked to the caller's): a sandbox call it starts is stopped
+        # (its process killed, its container removed) when the call times out, not abandoned (ORK2-01).
+        stop = threading.Event()
+        token = bind_cancel(linked_check(stop))
         try:
-            future = pool.submit(copy_context().run, tool.execute, part.arguments)
+            context = copy_context()
+        finally:
+            reset_cancel(token)
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{self.name}-{call.name}")
+        future = pool.submit(context.run, tool.execute, part.arguments)
+        try:
             try:
                 return future.result(timeout=self.tool_timeout), False
             except FutureTimeout:
                 raise self._timeout_error(call) from None
         finally:
+            if not future.done():
+                stop.set()
             pool.shutdown(wait=False)
