@@ -11,6 +11,13 @@ First release of Orkexa.
   folder. Every link is now checked again against the links that exist: its folder before it is
   created, and all links once the last one exists. The pinned upstream archives are not affected.
 
+### Fixed: NaN, infinite and zero vectors (audit ORK3-03)
+
+* A vector with NaN or infinity is refused (`ValueError` when it would be stored or searched;
+  `OllamaClient.embed` raises `OllamaError("invalid_response")`). Before, it was stored, and a single such
+  vector, or a zero vector, made every `vector` and `hybrid` search of the namespace fail with a
+  `TypeError`. Zero vectors have no cosine distance and are now left out of the vector ranking.
+
 ### Fixed: a chunk deleted during `reindex()` no longer leaves a vector behind (audit ORK3-02)
 
 * `reindex()` embeds a batch without holding the index lock. A chunk deleted meanwhile still got a

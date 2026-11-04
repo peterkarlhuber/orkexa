@@ -720,6 +720,8 @@ class SQLiteIndex(Index):
 
     @staticmethod
     def _vector(values: Sequence[float]) -> bytes:
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("A vector holds a value that is not a finite number (NaN or infinity)")
         return struct.pack(f"{len(values)}f", *values)
 
     def _has_vectors(self) -> bool:
@@ -1143,11 +1145,13 @@ class SQLiteIndex(Index):
         self._load_sqlite_vec()
         vector = self.embeddings.embed_query(query)
         where, extra = self._source_filter(allowed)
+        # A zero vector has no cosine distance (NULL): it is left out instead of breaking the ranking.
         rows = self._connection.execute(
-            "SELECT index_vectors.chunk_id, vec_distance_cosine(index_vectors.embedding, ?) AS distance"
+            "SELECT chunk_id, distance FROM (SELECT index_vectors.chunk_id AS chunk_id,"
+            " vec_distance_cosine(index_vectors.embedding, ?) AS distance"
             " FROM index_vectors JOIN index_chunks ON index_chunks.id = index_vectors.chunk_id"
-            f" WHERE index_vectors.space = ? AND index_chunks.namespace = ?{where}"
-            " ORDER BY distance, index_vectors.chunk_id LIMIT ?",
+            f" WHERE index_vectors.space = ? AND index_chunks.namespace = ?{where})"
+            " WHERE distance IS NOT NULL ORDER BY distance, chunk_id LIMIT ?",
             (self._vector(vector), space, self.namespace, *extra, limit),
         )
         return [(int(row[0]), round(1.0 - float(row[1]), 6)) for row in rows]

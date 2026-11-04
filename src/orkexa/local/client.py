@@ -11,6 +11,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 import hashlib
+import math
 import os
 from pathlib import Path
 import re
@@ -410,9 +411,15 @@ class OllamaClient:
         vectors = data.get("embeddings")
         if not isinstance(vectors, list) or len(vectors) != len(inputs):
             raise OllamaError("invalid_response", "Ollama returned a different number of embeddings")
+        try:
+            embeddings = [[float(x) for x in vector] for vector in vectors]
+        except (TypeError, ValueError) as exc:
+            raise OllamaError("invalid_response", "Ollama returned an embedding that is not numbers") from exc
+        if not all(math.isfinite(x) for vector in embeddings for x in vector):
+            raise OllamaError("invalid_response", "Ollama returned an embedding with NaN or infinity")
         return EmbedResult(
             model=str(data.get("model") or name),
-            embeddings=[[float(x) for x in vector] for vector in vectors],
+            embeddings=embeddings,
             prompt_tokens=_int(data.get("prompt_eval_count")),
             total_duration_ms=_ms(data.get("total_duration")),
             load_duration_ms=_ms(data.get("load_duration")),
