@@ -110,15 +110,19 @@ def artifact_for(system: str | None = None, machine: str | None = None) -> Runti
     raise OllamaError("unsupported_platform", f"No Ollama {OLLAMA_VERSION} archive for {system}/{machine}")
 
 
-def _binary_name() -> str:
-    return "ollama.exe" if platform.system() == "Windows" else "ollama"
+def _binary_name(system: str | None = None) -> str:
+    return "ollama.exe" if (system or platform.system()).lower() == "windows" else "ollama"
 
 
-def find_binary(root: Path) -> Path | None:
-    """The ``ollama`` executable inside an unpacked runtime (layouts differ per platform)."""
+def find_binary(root: Path, system: str | None = None) -> Path | None:
+    """The ``ollama`` executable inside an unpacked runtime (layouts differ per platform).
+
+    ``system`` (``linux``, ``darwin``, ``windows``) names the runtime's platform when it is not this
+    computer's, e.g. a runtime prepared for another machine (an exported application)."""
+    name = _binary_name(system)
     for candidate in (
-        root / "bin" / _binary_name(),
-        root / _binary_name(),
+        root / "bin" / name,
+        root / name,
         root / "Ollama.app/Contents/Resources/ollama",
     ):
         if candidate.is_file():
@@ -126,10 +130,12 @@ def find_binary(root: Path) -> Path | None:
     return None
 
 
-def installed_runtime(home: Path, version: str = OLLAMA_VERSION) -> Path | None:
-    """The binary of an installed runtime under ``home``, or ``None``."""
+def installed_runtime(home: Path, version: str = OLLAMA_VERSION, system: str | None = None) -> Path | None:
+    """The binary of an installed runtime under ``home``, or ``None``.
+
+    ``system``: the runtime's platform, see :func:`find_binary`."""
     root = home / "runtime" / version
-    return find_binary(root) if (root / ".complete").is_file() else None
+    return find_binary(root, system) if (root / ".complete").is_file() else None
 
 
 def _sha256(path: Path) -> str:
@@ -278,13 +284,14 @@ def install_runtime(
             only with this explicit flag).
         gpu: Unpack the NVIDIA GPU libraries (about 2 GB on Linux); ``None``: only if an
             NVIDIA driver is present. The CPU and Vulkan backends are always installed.
-        artifact: The archive to expect; defaults to the one for this platform.
+        artifact: The archive to expect; defaults to the one for this platform. Another platform's
+            archive installs a runtime for that platform (its binary is found by that platform's name).
         progress: ``(bytes, total)`` callback of the download.
         cancel: Stops a download.
     """
     base = Path(home)
     artifact = artifact or artifact_for()
-    existing = installed_runtime(base)
+    existing = installed_runtime(base, system=artifact.system)
     if existing is not None:
         return existing
     if archive is None and not download:
@@ -314,7 +321,7 @@ def install_runtime(
         target.mkdir()
         skip = () if (gpu if gpu is not None else _has_nvidia()) else artifact.gpu_dirs
         _unpack(source, artifact.name, target, skip)
-        binary = find_binary(target)
+        binary = find_binary(target, artifact.system)
         if binary is None:
             raise OllamaError("unsafe_archive", "The archive contains no ollama executable")
         binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
@@ -325,7 +332,7 @@ def install_runtime(
         if final.exists():
             shutil.rmtree(final)
         target.rename(final)
-    result = installed_runtime(base)
+    result = installed_runtime(base, system=artifact.system)
     assert result is not None
     return result
 

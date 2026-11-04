@@ -58,7 +58,9 @@ with ManagedOllama("~/.orkexa/local", models_dir="/Volumes/SSD/models") as serve
   paths, `..`, links that leave the target, devices and oversized archives; no installer script runs.
   The runtime lives in `<home>/runtime/0.40.14`, nothing is installed system-wide. On Linux the NVIDIA
   libraries (about 2 GB) are unpacked only when an NVIDIA driver is present (`gpu=True` forces them).
-  `.tar.zst` archives need the `local` extra (`zstandard`).
+  `.tar.zst` archives need the `local` extra (`zstandard`). `artifact=artifact_for("windows", "x86_64")`
+  prepares the runtime of another platform (for example for an application package built for another
+  machine); its executable is then found by that platform's name (`ollama.exe` on Windows).
 * `ManagedOllama` starts `ollama serve` as a child process on a **free loopback port** with its own model
   folder, its own home (keys and caches stay there), `OLLAMA_NO_CLOUD=1` and a minimal environment (no
   secrets of the parent process). `offline=True` removes proxy variables. It stops only the process it

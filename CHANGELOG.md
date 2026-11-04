@@ -13,6 +13,8 @@ First release of Orkexa.
   `OLLAMA_NO_CLOUD=1`; an existing Ollama is only detected), offline model packages
   (`export_package`/`import_package`/`verify_package`, every file checked by SHA-256) and the
   `orkexa-local` command. Nothing runs, installs or downloads on `import orkexa` or `Agent(...)`.
+  `install_runtime(artifact=artifact_for(system, machine))` also prepares the runtime of another
+  platform (`find_binary(root, system)` finds `ollama.exe` of a Windows runtime on any host).
 * `orkexa.embeddings`: the provider-independent `EmbeddingModel` with an `EmbeddingIdentity`
   (provider, model, digest, dimensions, instructions) and `OllamaEmbeddings` (`/api/embed`, batches,
   `truncate=false`, dimension checks, measured usage). `embedder=` callables keep working.

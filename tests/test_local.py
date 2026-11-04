@@ -42,7 +42,7 @@ from orkexa.local import (
     scan_store,
     verify_package,
 )
-from orkexa.local.install import RuntimeArtifact
+from orkexa.local.install import RuntimeArtifact, find_binary
 from orkexa.pricing import PricingBasis
 from orkexa.usage import record_token_usage, summarize_usage
 
@@ -383,6 +383,22 @@ def test_install_from_a_verified_archive(tmp_path: Path) -> None:
     binary = install_runtime(tmp_path / "home", archive=archive, artifact=_artifact(archive, archive.name))
     assert binary.name == "ollama" and os.access(binary, os.X_OK)
     assert (binary.parent.parent / "lib/ollama/libx.so").is_symlink()
+
+
+def test_install_a_runtime_for_another_platform(tmp_path: Path) -> None:
+    """A runtime for another machine (a Windows package prepared on Linux) is found by its platform's name."""
+    zipped = tmp_path / "ollama-windows-amd64.zip"
+    with zipfile.ZipFile(zipped, "w") as bundle:
+        bundle.writestr("ollama.exe", b"MZ")
+        bundle.writestr("lib/ollama/ggml-base.dll", b"x")
+    digest = hashlib.sha256(zipped.read_bytes()).hexdigest()
+    artifact = RuntimeArtifact("windows", "x86_64", zipped.name, digest)
+    binary = install_runtime(tmp_path / "home", archive=zipped, artifact=artifact)
+    assert binary.name == "ollama.exe"
+    # Installed once: a second call finds it by the same platform's name and unpacks nothing.
+    assert install_runtime(tmp_path / "home", artifact=artifact) == binary
+    assert find_binary(binary.parent, "windows") == binary
+    assert find_binary(binary.parent, "linux") is None
 
 
 def test_install_refuses_wrong_checksums_and_unsafe_archives(tmp_path: Path) -> None:
