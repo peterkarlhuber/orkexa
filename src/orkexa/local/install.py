@@ -256,9 +256,19 @@ def _unpack(archive: Path, name: str, target: Path, skip: tuple[str, ...]) -> No
                 os.chmod(destination, 0o755 if member.mode & 0o111 else 0o644)
             else:  # hard links, devices, fifos
                 raise OllamaError("unsafe_archive", f"Refusing special file {member.name!r}")
+    # The check above sees no other link of the archive yet, so a chain (``x -> .`` and then
+    # ``y -> x/../..``) passes it. Every link is checked again against the links that exist:
+    # its folder before it is created, and all of them once the last one exists.
     for destination, linkname in links:
+        if not _inside(target, destination.parent):
+            raise OllamaError(
+                "unsafe_archive", f"Refusing link {linkname!r} through a link that leaves the target"
+            )
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.symlink_to(linkname)
+    for destination, linkname in links:
+        if not _inside(target, destination):
+            raise OllamaError("unsafe_archive", f"Refusing link {linkname!r} that leaves the target")
 
 
 def _has_nvidia() -> bool:

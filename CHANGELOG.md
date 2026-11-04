@@ -4,6 +4,13 @@
 
 First release of Orkexa.
 
+### Fixed: the runtime archive cannot place links outside the runtime through other links (audit ORK3-01)
+
+* `install_runtime` checked each link of a `.tar.*` archive on its own, before any link existed, so a
+  chain of links (one pointing to `.`, another through it with `..`) could point outside the runtime
+  folder. Every link is now checked again against the links that exist: its folder before it is
+  created, and all links once the last one exists. The pinned upstream archives are not affected.
+
 ### Added: local models with Ollama, embeddings and retrieval modes
 
 * `orkexa.local`: `OllamaClient` (models, `/api/show` capabilities, downloads with progress and cancel,
