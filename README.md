@@ -34,7 +34,8 @@ The core needs only Pydantic. Each provider SDK is an extra: `orkexa[anthropic]`
 `orkexa[openai]` (also for compatible endpoints), `orkexa[gemini]`, `orkexa[bedrock]`
 (Amazon Bedrock through `boto3`), or `orkexa[all]` with all of them;
 `orkexa[pdf]` and `orkexa[vector]` add PDF extraction and vector search; `orkexa[local]` and
-`orkexa-local` manage local Ollama models (see the local models guide).
+the `orkexa-local` command manage local Ollama models (see
+[Local models, embeddings and retrieval modes](docs/guides/local-models.md)).
 `import orkexa` never imports a provider SDK.
 
 ## Quickstart
@@ -72,6 +73,11 @@ for model in ("anthropic:claude-sonnet-5-5", "openai:gpt-6.1-sol", "gemini:gemin
 # A local OpenAI-compatible server: no key is read from the environment.
 local = Agent(provider="ollama", model="llama3.1:8b", capabilities={"tools": "supported"}, tools=[add])
 ```
+
+The local agent needs a running Ollama server with that model (`ollama pull llama3.1:8b`);
+without one, `local.ask(...)` raises `ProviderConnectionError`. `orkexa-local status` shows
+whether a server answers, and the [local models guide](docs/guides/local-models.md) shows how
+Orkexa installs and runs a pinned Ollama for you.
 
 The model ids are examples; use any model your account can access. Every call above is
 a paid API request; the test suite and the [offline examples](examples/README.md) need
@@ -146,7 +152,7 @@ until you declare it (`capabilities={"tools": "supported"}`). The full matrix is
 | | |
 |---|---|
 | Getting started | [Installation](docs/getting-started/installation.md) · [Quickstart](docs/getting-started/quickstart.md) · [Providers and capabilities](docs/getting-started/providers.md) |
-| Guides | [Tools and structured output](docs/guides/tools-and-structured-output.md) · [Streaming, hooks and errors](docs/guides/streaming-hooks-errors.md) · [History](docs/guides/history.md) · [Memory, files and RAG](docs/guides/memory-files-rag.md) · [Usage and budgets](docs/guides/usage-and-budgets.md) · [Pricing engine](docs/guides/pricing.md) · [Multi-agent](docs/guides/multi-agent.md) · [Flows](docs/guides/flows.md) |
+| Guides | [Tools and structured output](docs/guides/tools-and-structured-output.md) · [Streaming, hooks and errors](docs/guides/streaming-hooks-errors.md) · [History](docs/guides/history.md) · [Memory, files and RAG](docs/guides/memory-files-rag.md) · [Local models, embeddings and retrieval modes](docs/guides/local-models.md) · [Usage and budgets](docs/guides/usage-and-budgets.md) · [Pricing engine](docs/guides/pricing.md) · [Multi-agent](docs/guides/multi-agent.md) · [Flows](docs/guides/flows.md) · [Orchestration](docs/guides/orchestration.md) |
 | Operations | [Security](docs/guides/security.md) · [Data protection and AI regulation](docs/compliance/index.md) · [Troubleshooting and FAQ](docs/troubleshooting.md) |
 | Capabilities | [Feature matrix](docs/feature-matrix.md) |
 | Internals | [Architecture and ADRs](docs/architecture/target-architecture.md) · [Changelog](CHANGELOG.md) |
