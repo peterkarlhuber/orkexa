@@ -34,6 +34,15 @@ First release of Orkexa.
   query is now embedded outside the lock, after the cheap checks; the active space is checked again under
   the lock before ranking, so a reindex that switched models meanwhile raises `reindex_required`.
 
+### Fixed: vectors of an updated embedding model are not filed under its old identity (audit ORK3-07)
+
+* `OllamaEmbeddings` resolved the model digest once per object, so after `ollama pull` (or a rebuild) a
+  long-lived index wrote vectors of the new build under the old identity, mixing two vector spaces. Indexes
+  now refresh the identity before they write (`add`, start and end of `reindex()`): adding to a space of
+  another build raises `reindex_required`, and a model that changes during `reindex()` discards the new,
+  mixed vectors (the active space stays). Searches re-resolve it after `identity_ttl` (default 60 s).
+  `EmbeddingModel.refresh_identity()` is new (a no-op by default).
+
 ### Fixed: the managed Ollama server does not outlive a stop (audit ORK3-04)
 
 * `ManagedOllama.stop()` now also ends the server's process group on POSIX, so model runners do not

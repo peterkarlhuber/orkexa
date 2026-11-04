@@ -825,6 +825,7 @@ class SQLiteIndex(Index):
         if self.embedder is not None:
             raise RetrievalError("mode_unsupported", "An index with embedder= cannot switch to vector spaces")
         self._load_sqlite_vec()
+        model.refresh_identity()  # the model's current build, not a cached one
         identity = model.identity()
         space = f"{self.namespace}:{identity.key}"
         with self._lock:
@@ -881,6 +882,16 @@ class SQLiteIndex(Index):
                 done = self._count_vectors(space)
             if progress is not None:
                 progress(done, total)
+        model.refresh_identity()
+        if model.identity().key != identity.key:
+            # The model changed on the server while it embedded: the new space may mix two builds.
+            with self._lock:
+                self._discard(space)
+            raise RetrievalError(
+                "reindex_required",
+                f"{identity.model} changed during the reindex; its new vectors were discarded,"
+                " call reindex() again",
+            )
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
@@ -949,6 +960,7 @@ class SQLiteIndex(Index):
         vectors: list[Sequence[float]] | None = None
         identity = None
         if self.embeddings is not None:
+            self.embeddings.refresh_identity()  # the model's current build, not a cached one
             identity = self.embeddings.identity()
             vectors = list(self.embeddings.embed_documents(texts))
         elif self.embedder is not None:

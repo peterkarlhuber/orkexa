@@ -21,6 +21,7 @@ import hashlib
 import json
 import math
 import threading
+import time
 from typing import Any, Literal
 
 from .local._http import DEFAULT_OLLAMA_URL, OllamaError
@@ -152,6 +153,13 @@ class EmbeddingModel(ABC):
     def identity(self) -> EmbeddingIdentity:
         """The identity of the vectors this model produces (may contact the server once)."""
 
+    def refresh_identity(self) -> None:
+        """Forget a cached identity: the next :meth:`identity` reflects the model as it is now.
+
+        Indexes call it before they write vectors, so that a model replaced on the server (a new
+        digest) is not filed under its old identity. The default caches nothing."""
+        return None
+
     def __call__(self, texts: list[str]) -> list[list[float]]:
         return self.embed_documents(texts)
 
@@ -228,6 +236,8 @@ class OllamaEmbeddings(EmbeddingModel):
         timeout: Seconds per request (the first one also loads the model).
         keep_alive: How long Ollama keeps the model loaded, e.g. ``"5m"``.
         cancel: An event that stops a running :meth:`embed_documents` between batches.
+        identity_ttl: Seconds the resolved identity (model digest) is reused before it is asked
+            again; writes to an index refresh it anyway (:meth:`refresh_identity`).
     """
 
     def __init__(
@@ -246,6 +256,7 @@ class OllamaEmbeddings(EmbeddingModel):
         allow_remote: bool = False,
         client: OllamaClient | None = None,
         cancel: threading.Event | None = None,
+        identity_ttl: float = 60.0,
     ) -> None:
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
@@ -265,7 +276,9 @@ class OllamaEmbeddings(EmbeddingModel):
         self.timeout = timeout
         self.keep_alive = keep_alive
         self.cancel = cancel
+        self.identity_ttl = identity_ttl
         self._identity: EmbeddingIdentity | None = None
+        self._resolved_at = 0.0
         self._lock = threading.Lock()
 
     def _query_text(self, text: str) -> str:
@@ -330,9 +343,12 @@ class OllamaEmbeddings(EmbeddingModel):
         return self._embed([self._query_text(text)], "query")[0]
 
     def identity(self) -> EmbeddingIdentity:
-        """Model, digest and dimensions, from the server (``model_missing`` if not installed)."""
+        """Model, digest and dimensions, from the server (``model_missing`` if not installed).
+
+        Resolved again after ``identity_ttl`` seconds or :meth:`refresh_identity`, so that a model
+        updated on the server shows its new digest."""
         with self._lock:
-            if self._identity is None:
+            if self._identity is None or time.monotonic() - self._resolved_at >= self.identity_ttl:
                 try:
                     installed = self.client.find(self.model)
                     if installed is None:
@@ -361,4 +377,9 @@ class OllamaEmbeddings(EmbeddingModel):
                     document_prefix=self.document_prefix,
                     query_prefix=self.query_prefix,
                 )
+                self._resolved_at = time.monotonic()
             return self._identity
+
+    def refresh_identity(self) -> None:
+        with self._lock:
+            self._identity = None
