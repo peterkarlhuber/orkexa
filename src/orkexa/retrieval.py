@@ -720,6 +720,8 @@ class SQLiteIndex(Index):
 
     @staticmethod
     def _vector(values: Sequence[float]) -> bytes:
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("A vector holds a value that is not a finite number (NaN or infinity)")
         return struct.pack(f"{len(values)}f", *values)
 
     def _has_vectors(self) -> bool:
@@ -823,6 +825,7 @@ class SQLiteIndex(Index):
         if self.embedder is not None:
             raise RetrievalError("mode_unsupported", "An index with embedder= cannot switch to vector spaces")
         self._load_sqlite_vec()
+        model.refresh_identity()  # the model's current build, not a cached one
         identity = model.identity()
         space = f"{self.namespace}:{identity.key}"
         with self._lock:
@@ -859,15 +862,18 @@ class SQLiteIndex(Index):
             with self._lock:
                 self._connection.execute("BEGIN IMMEDIATE")
                 try:
-                    for (chunk_id, _), vector in zip(rows, vectors, strict=True):
+                    for (chunk_id, text), vector in zip(rows, vectors, strict=True):
                         if len(vector) != identity.dimensions:
                             raise RetrievalError(
                                 "vector_unavailable", "The embedding model changed its vector size"
                             )
+                        # The batch was embedded without the lock: a chunk deleted meanwhile gets no
+                        # vector, and neither does a new chunk that reused its id (SQLite reuses the
+                        # largest rowid); the next round embeds that one with its own text.
                         self._connection.execute(
                             "INSERT OR REPLACE INTO index_vectors (space, chunk_id, embedding)"
-                            " VALUES (?, ?, ?)",
-                            (space, chunk_id, self._vector(vector)),
+                            " SELECT ?, id, ? FROM index_chunks WHERE id = ? AND namespace = ? AND text = ?",
+                            (space, self._vector(vector), chunk_id, self.namespace, text),
                         )
                 except BaseException:
                     self._connection.execute("ROLLBACK")
@@ -876,6 +882,16 @@ class SQLiteIndex(Index):
                 done = self._count_vectors(space)
             if progress is not None:
                 progress(done, total)
+        model.refresh_identity()
+        if model.identity().key != identity.key:
+            # The model changed on the server while it embedded: the new space may mix two builds.
+            with self._lock:
+                self._discard(space)
+            raise RetrievalError(
+                "reindex_required",
+                f"{identity.model} changed during the reindex; its new vectors were discarded,"
+                " call reindex() again",
+            )
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
@@ -944,6 +960,7 @@ class SQLiteIndex(Index):
         vectors: list[Sequence[float]] | None = None
         identity = None
         if self.embeddings is not None:
+            self.embeddings.refresh_identity()  # the model's current build, not a cached one
             identity = self.embeddings.identity()
             vectors = list(self.embeddings.embed_documents(texts))
         elif self.embedder is not None:
@@ -976,8 +993,10 @@ class SQLiteIndex(Index):
                     if vectors is not None and space is not None:
                         if identity is not None and len(vectors[position]) != identity.dimensions:
                             raise ValueError("The embedding model returned a vector of another size")
+                        # REPLACE: a vector left behind for this id by a deleted chunk is stale.
                         self._connection.execute(
-                            "INSERT INTO index_vectors (space, chunk_id, embedding) VALUES (?, ?, ?)",
+                            "INSERT OR REPLACE INTO index_vectors (space, chunk_id, embedding)"
+                            " VALUES (?, ?, ?)",
                             (space, chunk_id, self._vector(vectors[position])),
                         )
                     elif vectors is not None:
@@ -1049,12 +1068,16 @@ class SQLiteIndex(Index):
         if allowed is not None and len(allowed) > _MAX_SOURCES:
             raise ValueError(f"At most {_MAX_SOURCES} sources per search")
         candidates = max(k * 4, 20)
+        # The query is embedded before the lock is taken: an embedding call can take long (a
+        # network request) and must not block writes and other searches of this index.
+        vector = self._query_vector(query) if mode in ("vector", "hybrid") else None
         with self._lock:
             ranked: dict[str, list[tuple[int, float]]] = {}
             if mode in ("fts", "hybrid"):
                 ranked["fts"] = [(chunk_id, 0.0) for chunk_id in self._fts_ids(query, candidates, allowed)]
             if mode in ("vector", "hybrid"):
-                ranked["vector"] = self._vector_ranking(query, candidates, allowed)
+                assert vector is not None
+                ranked["vector"] = self._vector_ranking(vector, candidates, allowed)
             if mode == "vector":
                 return [
                     self._hit(chunk_id, similarity, {"vector": rank + 1})
@@ -1117,41 +1140,63 @@ class SQLiteIndex(Index):
         )
         return [int(row[0]) for row in rows]
 
-    def _vector_ranking(self, query: str, limit: int, allowed: list[str] | None) -> list[tuple[int, float]]:
-        if self.embeddings is None:
-            if self.query_embedder is not None and self._has_vectors():
-                return self._legacy_vector_ranking(query, limit, allowed)
-            raise RetrievalError(
-                "vector_unavailable", "This index has no embedding model; use full-text search"
-            )
+    def _active_space(self, identity: EmbeddingIdentity) -> str:
+        """The active space for ``identity``, or :class:`RetrievalError` (no vectors / other model)."""
         active = self._space("active")
         if active is None:
             raise RetrievalError("vector_unavailable", "The index has no vectors yet; run reindex() first")
         space, stored = active
-        identity = self.embeddings.identity()
         if identity.key != stored.key:
             raise RetrievalError(
                 "reindex_required",
                 f"The vectors belong to {stored.model}, the index is configured for "
                 f"{identity.model}; reindex first",
             )
+        return space
+
+    def _query_vector(self, query: str) -> Sequence[float]:
+        """The query's vector, embedded without holding the lock (after the cheap checks under it)."""
+        if self.embeddings is None:
+            with self._lock:
+                legacy = self.query_embedder is not None and self._has_vectors()
+            if not legacy:
+                raise RetrievalError(
+                    "vector_unavailable", "This index has no embedding model; use full-text search"
+                )
+            assert self.query_embedder is not None
+            return next(iter(self.query_embedder([query])))
+        identity = self.embeddings.identity()
+        with self._lock:
+            self._active_space(identity)
+        return self.embeddings.embed_query(query)
+
+    def _vector_ranking(
+        self, vector: Sequence[float], limit: int, allowed: list[str] | None
+    ) -> list[tuple[int, float]]:
+        if self.embeddings is None:
+            if self.query_embedder is not None and self._has_vectors():
+                return self._legacy_vector_ranking(vector, limit, allowed)
+            raise RetrievalError(
+                "vector_unavailable", "This index has no embedding model; use full-text search"
+            )
+        # Checked again under the lock: a reindex may have switched the space meanwhile.
+        space = self._active_space(self.embeddings.identity())
         self._load_sqlite_vec()
-        vector = self.embeddings.embed_query(query)
         where, extra = self._source_filter(allowed)
+        # A zero vector has no cosine distance (NULL): it is left out instead of breaking the ranking.
         rows = self._connection.execute(
-            "SELECT index_vectors.chunk_id, vec_distance_cosine(index_vectors.embedding, ?) AS distance"
+            "SELECT chunk_id, distance FROM (SELECT index_vectors.chunk_id AS chunk_id,"
+            " vec_distance_cosine(index_vectors.embedding, ?) AS distance"
             " FROM index_vectors JOIN index_chunks ON index_chunks.id = index_vectors.chunk_id"
-            f" WHERE index_vectors.space = ? AND index_chunks.namespace = ?{where}"
-            " ORDER BY distance, index_vectors.chunk_id LIMIT ?",
+            f" WHERE index_vectors.space = ? AND index_chunks.namespace = ?{where})"
+            " WHERE distance IS NOT NULL ORDER BY distance, chunk_id LIMIT ?",
             (self._vector(vector), space, self.namespace, *extra, limit),
         )
         return [(int(row[0]), round(1.0 - float(row[1]), 6)) for row in rows]
 
     def _legacy_vector_ranking(
-        self, query: str, limit: int, allowed: list[str] | None
+        self, vector: Sequence[float], limit: int, allowed: list[str] | None
     ) -> list[tuple[int, float]]:
-        assert self.query_embedder is not None
-        vector = next(iter(self.query_embedder([query])))
         fetch = (
             limit if allowed is None else min(max(limit * 20, 200), 4096)
         )  # vec0 k-NN cannot filter sources
@@ -1173,7 +1218,9 @@ class SQLiteIndex(Index):
         return ranking[:limit]
 
     def _vector_ids(self, query: str, limit: int) -> list[int]:
-        return [chunk_id for chunk_id, _ in self._legacy_vector_ranking(query, limit, None)]
+        assert self.query_embedder is not None
+        vector = next(iter(self.query_embedder([query])))
+        return [chunk_id for chunk_id, _ in self._legacy_vector_ranking(vector, limit, None)]
 
     def _hit(self, chunk_id: int, score: float, ranks: dict[str, int] | None = None) -> Hit:
         source, title, file_id, metadata, text = self._connection.execute(

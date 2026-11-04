@@ -3,8 +3,8 @@
 > Open work for this repository: release blockers, known bugs, security follow-ups, technical debt and planned improvements.
 > GitHub issues are the source of truth for details; this file is the entry point and summary.
 >
-> **Last full review:** 2026-11-03 against `master` at `0861c1b` (internal backend audit round 2; fixes merged
-> in #40 at `bc8c4ed`).
+> **Last full review:** 2026-11-04 against `master` at `22f2910` (internal backend audit round 3; fixes ORK3-01 to
+> ORK3-07, ORK3-09 and ORK3-11 in the PR that updates this line).
 
 ## Summary
 
@@ -14,7 +14,7 @@
 | P1 High | 0 |
 | P2 Medium | 2 |
 | P3 Low | 14 |
-| P4 Optional | 11 |
+| P4 Optional | 12 |
 
 **Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
 Nodestro consumes it by commit SHA.
@@ -46,6 +46,9 @@ None known.
 - **Priority:** P3 Low · **Status:** Open · **Refs:** internal backend audit 2026-11-01, follow-up to finding A-05
 - **What:** Hardening item. The fix for A-05 lives only in Nodestro's server path; code that uses `orkexa.Agent`
   with a `compatible` endpoint directly still relies on the HTTP client's default redirect handling.
+  `OllamaProvider` (the `Agent` path) likewise accepts any `base_url` without the loopback and no-redirect rules of
+  `OllamaClient` (internal audit 2026-11-04); Nodestro relies on a non-loopback Ollama in Local Docker, so a
+  loopback default needs an agreed opt-in.
 - **Next step:** Decide on a library-level default or option and document it in the security guide (details are
   in the internal audit, not here).
 
@@ -181,6 +184,13 @@ None known.
   table updated from the release's `sha256sum.txt`, and the live tests rerun.
 - **Next step:** Add the update to the release checklist; review with each Nodestro release.
 
+### ORK-036 · Synthetic structured-answer request in the stored conversation
+
+- **Priority:** P4 Optional · **Status:** Needs decision · **Refs:** internal backend audit 2026-11-04 (ORK3-08)
+- **What:** With providers that split tools and structured output (Ollama), the agent adds a user message that asks
+  for the JSON answer and keeps it in the conversation history, although the user never wrote it.
+- **Next step:** Mark it as synthetic or drop it on commit; agree with Nodestro how chat views show it.
+
 ## Tests and quality assurance
 
 ### ORK-030 · Live tests of the larger local models
@@ -189,7 +199,8 @@ None known.
 - **What:** Real answers, tool calls and embeddings were tested with `qwen3.5:4b` and `qwen3-embedding:0.6b` on a
   4-core CPU machine with 16 GB (no GPU). `qwen3.5:9b`, `qwen3.6:35b-a3b`, `qwen3.8:27b` and the larger embedding
   models were verified only by registry metadata; their tool calling and structured output are untested here, and
-  macOS/Windows runs of `ManagedOllama` are untested.
+  macOS/Windows runs of `ManagedOllama` are untested. The IPv6 loopback path (`host="::1"`) and the orphan reclaim
+  after a host crash (POSIX only; Windows has none) were added on 2026-11-04 without a CI run on those platforms.
 - **Next step:** Run the live tests on hardware with 32+ GB (and a GPU, and macOS/Windows) and record the results.
 
 ## Platform coverage
@@ -242,14 +253,16 @@ None known.
 - **Priority:** P3 Low · **Status:** Open · **Refs:** #26
 - **What:** The architecture page lacks the Bedrock provider and the orchestration package, still names
   `pricing.py`, and lists ADRs only up to 0009; no ADR records the Bedrock credential and residency design; the
-  removed ADR 0004 is not explained; the site description omits Bedrock.
+  removed ADR 0004 is not explained; the site description omits Bedrock. It also lacks `orkexa.local`,
+  `orkexa.embeddings` and the retrieval modes (2026-11-04).
 - **Next step:** Update the page and `mkdocs.yml`, add an ADR for Bedrock.
 
 ## Technical debt
 
 ### ORK-007 · Python 3.14 untested
 
-- **Priority:** P3 Low · **Status:** Open · **Refs:** #25, `tests/test_sandbox_policy.py`
+- **Priority:** P3 Low · **Status:** Open · **Refs:** #25 (its title still mentions 3.10, which was dropped on
+  2026-11-02), `tests/test_sandbox_policy.py`
 - **What:** Python 3.11 is the minimum since 2026-11-02 (3.10 reached end of life in October 2026). On 3.14 all
   dependencies install and the suite passes except
   `test_sandbox_policy.py::test_every_module_reachable_from_allowed_imports_is_reviewed`: `annotationlib` (new in
@@ -314,7 +327,7 @@ None known.
 | ORK-007 | nodestro-runtime | RT-022 (Python 3.14) | Runtime adds 3.14 after this review; runtime depends on Orkexa |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
 | ORK-029 | nodestro-studio | run problem messages (`errors.json`, `RunProblem.tsx`) | Studio adds `run.agent.MaxToolCallsError` |
-| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, now `bc8c4ed`) | Changes reach Nodestro only through a coordinated pin cascade; the 2026-11-03 audit fixes (ORK2-01 to ORK2-09, DX-01, DX-02) are pinned since runtime #96 |
+| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `22f2910` at the 2026-11-04 audit) | Changes reach Nodestro only through a coordinated pin cascade; the 2026-11-03 audit fixes (ORK2-01 to ORK2-09, DX-01, DX-02) are pinned since runtime #96 |
 
 ## Maintaining this file
 

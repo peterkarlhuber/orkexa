@@ -11,6 +11,7 @@ The child gets a minimal environment: ``OLLAMA_HOST`` (loopback), ``OLLAMA_MODEL
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 import json
 import os
@@ -56,7 +57,8 @@ _ENV_PASSTHROUGH = (
 
 def free_port(host: str = "127.0.0.1") -> int:
     """A TCP port nobody listens on now (the OS picks it)."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as probe:
         probe.bind((host, 0))
         return int(probe.getsockname()[1])
 
@@ -67,6 +69,65 @@ def detect_ollama(url: str = f"http://127.0.0.1:{DEFAULT_PORT}") -> str | None:
         return OllamaClient(url, timeout=2).version(timeout=1.5)
     except OllamaError:
         return None
+
+
+def _alive(pid: int) -> bool:
+    """Whether a process ``pid`` exists (POSIX; on Windows ``False``: nothing is reclaimed there)."""
+    if pid <= 0 or platform.system() == "Windows":
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _runs_serve(pid: int, binary: str) -> bool:
+    """Whether the command line of ``pid`` ends with ``<binary> serve`` (maybe after an interpreter)."""
+    proc = Path(f"/proc/{pid}/cmdline")
+    if proc.exists():
+        try:
+            args = proc.read_bytes().rstrip(b"\0").decode("utf-8", "replace").split("\0")
+        except OSError:
+            return False
+        return args[-2:] == [binary, "serve"]
+    try:  # macOS and other POSIX systems without /proc
+        out = subprocess.run(
+            # -ww: the whole command line; without it BSD ps may cut it to the screen width.
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    text = out.stdout.strip()
+    return text == f"{binary} serve" or text.endswith(f" {binary} serve")
+
+
+def _is_managed_server(pid: int, binary: str) -> bool:
+    """Whether ``pid`` is ``<binary> serve`` leading its own process group, as ManagedOllama starts it."""
+    if not _alive(pid):
+        return False
+    try:
+        if os.getpgid(pid) != pid:
+            return False
+    except OSError:
+        return False
+    return _runs_serve(pid, binary)
+
+
+def _stop_group(pid: int, timeout: float = 10.0) -> None:
+    """SIGTERM, then SIGKILL, to the process group of an orphaned server (not our child: polled)."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pid, signal.SIGTERM)
+        deadline = time.monotonic() + timeout
+        while _alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        os.killpg(pid, signal.SIGKILL)
 
 
 @dataclass(frozen=True)
@@ -141,6 +202,11 @@ class ManagedOllama:
             raise OllamaError("not_running", "The managed Ollama server is not running")
         return OllamaClient(self._base_url)
 
+    @property
+    def _authority(self) -> str:
+        """The host as it is written before ``:port`` (an IPv6 address in brackets)."""
+        return f"[{self.host}]" if ":" in self.host else self.host
+
     def _env(self, port: int) -> dict[str, str]:
         env = {key: os.environ[key] for key in _ENV_PASSTHROUGH if key in os.environ}
         if self.offline:
@@ -150,7 +216,7 @@ class ManagedOllama:
         env.update(self.environment)
         env.update(
             {
-                "OLLAMA_HOST": f"{self.host}:{port}",
+                "OLLAMA_HOST": f"{self._authority}:{port}",
                 "OLLAMA_MODELS": str(self.models_dir),
                 "OLLAMA_NO_CLOUD": "1",
                 "OLLAMA_NOHISTORY": "1",
@@ -167,6 +233,7 @@ class ManagedOllama:
             binary = self.binary
             if binary is None or not binary.is_file():
                 raise OllamaError("runtime_missing", "The Ollama runtime is not installed")
+            self._reclaim_orphan()
             try:
                 self.models_dir.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
@@ -177,7 +244,7 @@ class ManagedOllama:
             if not os.access(self.models_dir, os.W_OK):
                 raise OllamaError("models_dir", f"The model folder {self.models_dir} is not writable")
             port = self.port or free_port(self.host)
-            if self.port is not None and detect_ollama(f"http://{self.host}:{port}") is not None:
+            if self.port is not None and detect_ollama(f"http://{self._authority}:{port}") is not None:
                 raise OllamaError("port_in_use", f"Another Ollama already listens on port {port}")
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
             log = self.log_file.open("ab")
@@ -198,7 +265,7 @@ class ManagedOllama:
                 )
             finally:
                 log.close()
-            url = f"http://{self.host}:{port}"
+            url = f"http://{self._authority}:{port}"
             client = OllamaClient(url, timeout=3)
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
@@ -208,7 +275,7 @@ class ManagedOllama:
                     )
                 if client.is_running():
                     self._base_url = url
-                    self._write_state(port)
+                    self._write_state(port, binary)
                     return url
                 time.sleep(0.2)
             self._terminate()
@@ -216,15 +283,48 @@ class ManagedOllama:
                 "start_failed", f"Ollama did not answer within {timeout:.0f} s; see {self.log_file}"
             )
 
-    def _write_state(self, port: int) -> None:
-        state = {"pid": self._process.pid if self._process else None, "port": port, "version": OLLAMA_VERSION}
-        (self.home / "ollama.state.json").write_text(json.dumps(state), encoding="utf-8")
+    @property
+    def _state_file(self) -> Path:
+        return self.home / "ollama.state.json"
+
+    def _write_state(self, port: int, binary: Path) -> None:
+        state = {
+            "pid": self._process.pid if self._process else None,
+            "port": port,
+            "version": OLLAMA_VERSION,
+            "binary": str(binary),
+            "owner": os.getpid(),
+        }
+        self._state_file.write_text(json.dumps(state), encoding="utf-8")
+
+    def _reclaim_orphan(self) -> None:
+        """Stop a server that an earlier, crashed process of this application left running.
+
+        The state file names the server, its executable and the process that owned it. The
+        server is stopped only if that owner is gone and the process is still ``<binary> serve``
+        leading its own process group (POSIX); otherwise it is left alone. A state file that
+        names no such server is removed."""
+        path = self._state_file
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError):
+            state = None
+        if isinstance(state, dict):
+            pid, binary, owner = state.get("pid"), state.get("binary"), state.get("owner")
+            if isinstance(owner, int) and owner != os.getpid() and _alive(owner):
+                return  # another running process of this application owns that server
+            if isinstance(pid, int) and isinstance(binary, str) and _is_managed_server(pid, binary):
+                _stop_group(pid)
+        path.unlink(missing_ok=True)
 
     def _terminate(self, timeout: float = 10.0) -> None:
         process = self._process
         if process is None:
             return
-        if process.poll() is None:
+        running = process.poll() is None
+        if running:
             try:
                 if platform.system() == "Windows":
                     process.send_signal(signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
@@ -234,9 +334,15 @@ class ManagedOllama:
             except (subprocess.TimeoutExpired, OSError):
                 process.kill()
                 process.wait(5)
+        if running and platform.system() != "Windows":
+            # The server runs in a session of its own: its model runners are in its process group
+            # and must not outlive it (they would keep the loaded model's memory). Only right after
+            # stopping it, while the group id cannot belong to anything else yet.
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(process.pid, signal.SIGKILL)
         self._process = None
         self._base_url = None
-        (self.home / "ollama.state.json").unlink(missing_ok=True)
+        self._state_file.unlink(missing_ok=True)
 
     def stop(self, timeout: float = 10.0) -> None:
         """Stop the server this object started (never another process)."""

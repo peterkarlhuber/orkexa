@@ -114,7 +114,8 @@ their architecture from a GGUF file. `build_model(client, recipe)` builds such a
 from a `GGUFRecipe`: the upstream `safetensors` weights and a *template* GGUF header (tokenizer and
 hyperparameters of the same architecture) are both pinned by URL, size and SHA-256; the recipe's
 metadata overrides are applied; the GGUF file is created in Ollama offline; and the model is kept only
-if it reproduces the recipe's reference vectors (cosine >= 0.9999), otherwise it is deleted again.
+if it reproduces the recipe's reference vectors (cosine >= 0.9999). It is built and checked under a
+temporary name; a failed build is removed and an installed model of the same name stays as it was.
 Inputs come from local files or, only with `download=True`, from the pinned URLs (the template is
 fetched with an HTTP range request: only its 6 MB header). Needs the `convert` extra (`gguf`).
 

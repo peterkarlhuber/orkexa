@@ -4,6 +4,67 @@
 
 First release of Orkexa.
 
+### Fixed: the runtime archive cannot place links outside the runtime through other links (audit ORK3-01)
+
+* `install_runtime` checked each link of a `.tar.*` archive on its own, before any link existed, so a
+  chain of links (one pointing to `.`, another through it with `..`) could point outside the runtime
+  folder. Every link is now checked again against the links that exist: its folder before it is
+  created, and all links once the last one exists. The pinned upstream archives are not affected.
+
+### Fixed: `build_model` never removes a working model when a build fails (audit ORK3-09)
+
+* The model is built and checked against the reference vectors under a temporary name and copied to the
+  recipe's name only after it passed; the temporary model is removed in every case. Before, the build
+  replaced an installed model of the same name first and deleted it on a mismatch (and left it on an
+  unexpected error). Inputs larger than the size caps are refused (`too_large`), and malformed
+  `safetensors` headers raise `OllamaError("invalid_weights")` instead of raw Python errors.
+
+### Fixed: a managed Ollama left running by a crashed application is stopped on the next start (audit ORK3-05)
+
+* `ManagedOllama` records the server's executable and its own process in `ollama.state.json`. `start()`
+  reads that file: a server whose owner is gone and that is still `<binary> serve` leading its own process
+  group is stopped with its runners before a new one starts (POSIX), instead of a second server being
+  started next to it. A server of another running process is left alone; a stale file is removed.
+  Windows keeps the earlier behavior. Without `/proc` (macOS) the command line is read with
+  `ps -ww`, so a long install path is not cut off.
+
+### Fixed: vector search no longer blocks the index while it embeds the query (audit ORK3-06)
+
+* `SQLiteIndex.retrieve` in `vector` and `hybrid` mode embedded the query while holding the index lock, so
+  a slow embedding server blocked adds, deletes, reindexing and other searches of the same index. The
+  query is now embedded outside the lock, after the cheap checks; the active space is checked again under
+  the lock before ranking, so a reindex that switched models meanwhile raises `reindex_required`.
+
+### Fixed: vectors of an updated embedding model are not filed under its old identity (audit ORK3-07)
+
+* `OllamaEmbeddings` resolved the model digest once per object, so after `ollama pull` (or a rebuild) a
+  long-lived index wrote vectors of the new build under the old identity, mixing two vector spaces. Indexes
+  now refresh the identity before they write (`add`, start and end of `reindex()`): adding to a space of
+  another build raises `reindex_required`, and a model that changes during `reindex()` discards the new,
+  mixed vectors (the active space stays). Searches re-resolve it after `identity_ttl` (default 60 s).
+  `EmbeddingModel.refresh_identity()` is new (a no-op by default).
+
+### Fixed: the managed Ollama server does not outlive a stop (audit ORK3-04)
+
+* `ManagedOllama.stop()` now also ends the server's process group on POSIX, so model runners do not
+  outlive a server that had to be killed; `orkexa-local serve` stops the server on `SIGTERM` (e.g. from a
+  service manager), not only on Ctrl+C; `host="::1"` works (IPv6 port probe and bracketed address).
+
+### Fixed: NaN, infinite and zero vectors (audit ORK3-03)
+
+* A vector with NaN or infinity is refused (`ValueError` when it would be stored or searched;
+  `OllamaClient.embed` raises `OllamaError("invalid_response")`). Before, it was stored, and a single such
+  vector, or a zero vector, made every `vector` and `hybrid` search of the namespace fail with a
+  `TypeError`. Zero vectors have no cosine distance and are now left out of the vector ranking.
+
+### Fixed: a chunk deleted during `reindex()` no longer leaves a vector behind (audit ORK3-02)
+
+* `reindex()` embeds a batch without holding the index lock. A chunk deleted meanwhile still got a
+  vector; because SQLite reuses the largest row id, the next chunk then either could not be added
+  (`UNIQUE constraint failed`) or silently got the deleted chunk's vector. Vectors are now written only
+  for chunks that still exist with the embedded text, and adding a chunk replaces a stale vector of
+  its id left by an earlier version.
+
 ### Added: local models with Ollama, embeddings and retrieval modes
 
 * `orkexa.local`: `OllamaClient` (models, `/api/show` capabilities, downloads with progress and cancel,
