@@ -1056,12 +1056,16 @@ class SQLiteIndex(Index):
         if allowed is not None and len(allowed) > _MAX_SOURCES:
             raise ValueError(f"At most {_MAX_SOURCES} sources per search")
         candidates = max(k * 4, 20)
+        # The query is embedded before the lock is taken: an embedding call can take long (a
+        # network request) and must not block writes and other searches of this index.
+        vector = self._query_vector(query) if mode in ("vector", "hybrid") else None
         with self._lock:
             ranked: dict[str, list[tuple[int, float]]] = {}
             if mode in ("fts", "hybrid"):
                 ranked["fts"] = [(chunk_id, 0.0) for chunk_id in self._fts_ids(query, candidates, allowed)]
             if mode in ("vector", "hybrid"):
-                ranked["vector"] = self._vector_ranking(query, candidates, allowed)
+                assert vector is not None
+                ranked["vector"] = self._vector_ranking(vector, candidates, allowed)
             if mode == "vector":
                 return [
                     self._hit(chunk_id, similarity, {"vector": rank + 1})
@@ -1124,26 +1128,48 @@ class SQLiteIndex(Index):
         )
         return [int(row[0]) for row in rows]
 
-    def _vector_ranking(self, query: str, limit: int, allowed: list[str] | None) -> list[tuple[int, float]]:
-        if self.embeddings is None:
-            if self.query_embedder is not None and self._has_vectors():
-                return self._legacy_vector_ranking(query, limit, allowed)
-            raise RetrievalError(
-                "vector_unavailable", "This index has no embedding model; use full-text search"
-            )
+    def _active_space(self, identity: EmbeddingIdentity) -> str:
+        """The active space for ``identity``, or :class:`RetrievalError` (no vectors / other model)."""
         active = self._space("active")
         if active is None:
             raise RetrievalError("vector_unavailable", "The index has no vectors yet; run reindex() first")
         space, stored = active
-        identity = self.embeddings.identity()
         if identity.key != stored.key:
             raise RetrievalError(
                 "reindex_required",
                 f"The vectors belong to {stored.model}, the index is configured for "
                 f"{identity.model}; reindex first",
             )
+        return space
+
+    def _query_vector(self, query: str) -> Sequence[float]:
+        """The query's vector, embedded without holding the lock (after the cheap checks under it)."""
+        if self.embeddings is None:
+            with self._lock:
+                legacy = self.query_embedder is not None and self._has_vectors()
+            if not legacy:
+                raise RetrievalError(
+                    "vector_unavailable", "This index has no embedding model; use full-text search"
+                )
+            assert self.query_embedder is not None
+            return next(iter(self.query_embedder([query])))
+        identity = self.embeddings.identity()
+        with self._lock:
+            self._active_space(identity)
+        return self.embeddings.embed_query(query)
+
+    def _vector_ranking(
+        self, vector: Sequence[float], limit: int, allowed: list[str] | None
+    ) -> list[tuple[int, float]]:
+        if self.embeddings is None:
+            if self.query_embedder is not None and self._has_vectors():
+                return self._legacy_vector_ranking(vector, limit, allowed)
+            raise RetrievalError(
+                "vector_unavailable", "This index has no embedding model; use full-text search"
+            )
+        # Checked again under the lock: a reindex may have switched the space meanwhile.
+        space = self._active_space(self.embeddings.identity())
         self._load_sqlite_vec()
-        vector = self.embeddings.embed_query(query)
         where, extra = self._source_filter(allowed)
         # A zero vector has no cosine distance (NULL): it is left out instead of breaking the ranking.
         rows = self._connection.execute(
@@ -1157,10 +1183,8 @@ class SQLiteIndex(Index):
         return [(int(row[0]), round(1.0 - float(row[1]), 6)) for row in rows]
 
     def _legacy_vector_ranking(
-        self, query: str, limit: int, allowed: list[str] | None
+        self, vector: Sequence[float], limit: int, allowed: list[str] | None
     ) -> list[tuple[int, float]]:
-        assert self.query_embedder is not None
-        vector = next(iter(self.query_embedder([query])))
         fetch = (
             limit if allowed is None else min(max(limit * 20, 200), 4096)
         )  # vec0 k-NN cannot filter sources
@@ -1182,7 +1206,9 @@ class SQLiteIndex(Index):
         return ranking[:limit]
 
     def _vector_ids(self, query: str, limit: int) -> list[int]:
-        return [chunk_id for chunk_id, _ in self._legacy_vector_ranking(query, limit, None)]
+        assert self.query_embedder is not None
+        vector = next(iter(self.query_embedder([query])))
+        return [chunk_id for chunk_id, _ in self._legacy_vector_ranking(vector, limit, None)]
 
     def _hit(self, chunk_id: int, score: float, ranks: dict[str, int] | None = None) -> Hit:
         source, title, file_id, metadata, text = self._connection.execute(

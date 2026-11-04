@@ -27,6 +27,13 @@ First release of Orkexa.
   started next to it. A server of another running process is left alone; a stale file is removed.
   Windows keeps the earlier behavior.
 
+### Fixed: vector search no longer blocks the index while it embeds the query (audit ORK3-06)
+
+* `SQLiteIndex.retrieve` in `vector` and `hybrid` mode embedded the query while holding the index lock, so
+  a slow embedding server blocked adds, deletes, reindexing and other searches of the same index. The
+  query is now embedded outside the lock, after the cheap checks; the active space is checked again under
+  the lock before ranking, so a reindex that switched models meanwhile raises `reindex_required`.
+
 ### Fixed: the managed Ollama server does not outlive a stop (audit ORK3-04)
 
 * `ManagedOllama.stop()` now also ends the server's process group on POSIX, so model runners do not
