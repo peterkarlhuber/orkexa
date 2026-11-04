@@ -22,7 +22,15 @@ pip install "orkexa[bedrock]"     # Amazon Bedrock (boto3)
 pip install "orkexa[all]"         # all provider SDKs, including boto3
 pip install "orkexa[pdf]"         # PDF text extraction for the index (pypdf)
 pip install "orkexa[vector]"      # vector/hybrid search (sqlite-vec)
+pip install "orkexa[local]"       # unpack the pinned Ollama runtime for orkexa-local (zstandard)
+pip install "orkexa[convert]"     # build models from pinned upstream weights (gguf)
 ```
+
+`orkexa[all]` contains the provider SDKs only; add `pdf`, `vector`, `local` or `convert`
+when you need them, e.g. `pip install "orkexa[openai,vector,local]"` for local agents with
+semantic search. Every installation also gets the `orkexa-local` command (`python -m
+orkexa.local`), which manages local Ollama models; see
+[Local models, embeddings and retrieval modes](../guides/local-models.md).
 
 `import orkexa` never imports a provider SDK. Using a provider whose SDK is missing
 raises `MissingDependencyError` naming the extra, e.g. `pip install 'orkexa[openai]'`.
