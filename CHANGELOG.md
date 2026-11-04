@@ -42,6 +42,8 @@ First release of Orkexa.
   the schema and, after the first answer without a tool call, makes one more request without tools
   and with the schema (`FORMAT_PROMPT`; not counted as a tool round, resumable). Other providers
   keep the single constrained request.
+* `FORMAT_PROMPT` asks for the text in the language of the conversation: with the English request
+  alone, `qwen3.5:4b` wrote a German workflow's analysis in English.
 
 ### Changed: hybrid search weighs full-text hits by their evidence
 
