@@ -67,8 +67,10 @@ def test_oversized_inputs_and_malformed_weights_are_refused(sources: Any, tmp_pa
     assert error.value.code == "too_large"
     from orkexa.local.convert import _safetensors
 
-    for header in (b"[1, 2]", b'{"t": {"dtype": "F32", "shape": [-1, -4], "data_offsets": [0, 16]}}', b"{"):
-        bad = tmp_path / "bad.safetensors"
+    headers = (b"[1, 2]", b'{"t": {"dtype": "F32", "shape": [-1, -4], "data_offsets": [0, 16]}}', b"{")
+    for index, header in enumerate(headers):
+        # One file per case: on Windows a file that is still memory-mapped cannot be rewritten.
+        bad = tmp_path / f"bad{index}.safetensors"
         bad.write_bytes(struct.pack("<Q", len(header)) + header + b"\0" * 16)
         with pytest.raises(OllamaError) as error:
             list(_safetensors(bad))
