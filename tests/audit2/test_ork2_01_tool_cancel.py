@@ -43,7 +43,7 @@ def _tool(pid_file: Path) -> tuple[SandboxedTool, SubprocessSandbox]:
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        sandbox = SubprocessSandbox(acknowledge_unsafe=True, timeout=30)
+        sandbox = SubprocessSandbox(acknowledge_unsafe=True, timeout=180)
     tool = SandboxedTool(
         name="slow",
         description="Sleep",
@@ -64,7 +64,20 @@ def _alive(pid: int) -> bool:
     return True
 
 
-def _pid(pid_file: Path, within: float = 10.0) -> int:
+def _timeout_after_start(tool: SandboxedTool, pid_file: Path) -> float:
+    """A ``tool_timeout`` that fires only after the sandbox call has started, also on a slow runner.
+
+    The timeout must hit a *running* call (that is what these tests prove). A fixed 1 s raced the start
+    of the sandbox process on slow CI machines (macOS Intel): the call was stopped before its code ran,
+    so there was no process to check. One warm-up call measures how long a start takes here."""
+    begin = time.monotonic()
+    tool.execute({"seconds": 0})
+    startup = time.monotonic() - begin
+    pid_file.unlink()
+    return max(1.0, 4 * startup + 1.0)
+
+
+def _pid(pid_file: Path, within: float = 60.0) -> int:
     deadline = time.monotonic() + within
     while time.monotonic() < deadline:
         if pid_file.exists() and pid_file.read_text():
@@ -85,8 +98,9 @@ def _gone(pid: int, within: float = 3.0) -> bool:
 def test_agent_tool_timeout_stops_the_sandbox_call(tmp_path: Path) -> None:
     pid_file = tmp_path / "pid"
     tool, sandbox = _tool(pid_file)
-    model = FakeModel([tool_calls(("slow", {"seconds": 20})), text("ok")])
-    agent = Agent(model="fake:x", client=model, tools=[tool], tool_timeout=1.0, raise_tool_errors=False)
+    timeout = _timeout_after_start(tool, pid_file)
+    model = FakeModel([tool_calls(("slow", {"seconds": timeout + 60})), text("ok")])
+    agent = Agent(model="fake:x", client=model, tools=[tool], tool_timeout=timeout, raise_tool_errors=False)
     try:
         assert agent.ask("go") == "ok"
         assert _gone(_pid(pid_file)), "the sandbox process outlived the tool timeout"
@@ -97,8 +111,11 @@ def test_agent_tool_timeout_stops_the_sandbox_call(tmp_path: Path) -> None:
 def test_async_agent_tool_timeout_stops_the_sandbox_call(tmp_path: Path) -> None:
     pid_file = tmp_path / "pid"
     tool, sandbox = _tool(pid_file)
-    model = FakeModel([tool_calls(("slow", {"seconds": 20})), text("ok")])
-    agent = AsyncAgent(model="fake:x", client=model, tools=[tool], tool_timeout=1.0, raise_tool_errors=False)
+    timeout = _timeout_after_start(tool, pid_file)
+    model = FakeModel([tool_calls(("slow", {"seconds": timeout + 60})), text("ok")])
+    agent = AsyncAgent(
+        model="fake:x", client=model, tools=[tool], tool_timeout=timeout, raise_tool_errors=False
+    )
 
     async def main() -> bool:
         assert await agent.ask("go") == "ok"
