@@ -122,6 +122,8 @@ class StubClient:
         self.deleted: list[str] = []
         self.inputs: list[list[str]] = []
         self.embedding_length = embedding_length
+        self.copied: list[tuple[str, str]] = []
+        self.embedded_models: list[str] = []
 
     def create_from_gguf(self, name: str, path: str | os.PathLike[str], **_: Any) -> Iterator[PullProgress]:
         self.created[name] = Path(path).read_bytes()
@@ -129,11 +131,17 @@ class StubClient:
 
     def embed(self, model: str, inputs: list[str], **_: Any) -> EmbedResult:
         self.inputs.append(list(inputs))
+        self.embedded_models.append(model)
         vectors = self.vectors or [[1.0, 0.0, 0.0] for _ in inputs]
         return EmbedResult(model=model, embeddings=vectors[: len(inputs)])
 
     def delete(self, name: str) -> None:
         self.deleted.append(name)
+        self.created.pop(name, None)
+
+    def copy(self, source: str, destination: str) -> None:
+        self.copied.append((source, destination))
+        self.created[destination] = self.created[source]
 
     def find(self, name: str) -> Any:
         return SimpleNamespace(name=name, digest="d" * 64)
@@ -151,7 +159,11 @@ def test_build_writes_verified_gguf_with_overrides(
     recipe, weights, template = sources
     client = StubClient(vectors=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     report = build_model(client, recipe, weights=weights, template=template, work_dir=tmp_path)  # type: ignore[arg-type]
-    assert report.min_cosine == pytest.approx(1.0) and report.digest == "d" * 64 and not client.deleted
+    assert report.min_cosine == pytest.approx(1.0) and report.digest == "d" * 64
+    # built and verified under a temporary name, then installed under the recipe's name
+    (staging,) = client.deleted
+    assert staging.startswith("tiny-orkexa-build-") and staging.endswith(":1m")
+    assert client.embedded_models == [staging] and client.copied == [(staging, "tiny:1m")]
     built = tmp_path / "built.gguf"
     built.write_bytes(client.created["tiny:1m"])
     assert hashlib.sha256(built.read_bytes()).hexdigest() == report.gguf_sha256
@@ -174,7 +186,8 @@ def test_build_removes_model_that_misses_the_reference(sources: tuple[GGUFRecipe
     client = StubClient(vectors=[[0.9, 0.44, 0.0], [0.0, 1.0, 0.0]])
     with pytest.raises(OllamaError) as error:
         build_model(client, recipe, weights=weights, template=template)  # type: ignore[arg-type]
-    assert error.value.code == "reference_mismatch" and client.deleted == ["tiny:1m"]
+    assert error.value.code == "reference_mismatch"
+    assert not client.copied and "tiny:1m" not in client.deleted and list(client.created) == []
 
 
 def test_build_refuses_wrong_or_missing_inputs(

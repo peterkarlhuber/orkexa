@@ -25,12 +25,14 @@ Needs the ``convert`` extra (``gguf``, which brings ``numpy``).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+import contextlib
 from dataclasses import dataclass, field
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import secrets
 import struct
 import tempfile
 import threading
@@ -160,6 +162,8 @@ def _input(
     cancel: threading.Event | None,
 ) -> Path:
     """A verified copy (or the verified local file) of one recipe input."""
+    if source.size > (_MAX_HEADER if header else _MAX_WEIGHTS):
+        raise OllamaError("too_large", "A recipe input is larger than allowed")
     if local is not None:
         path = Path(local)
         if not path.is_file():
@@ -251,21 +255,34 @@ def _read_header(path: Path, size: int) -> list[tuple[str, int, Any]]:
 def _safetensors(path: Path) -> Iterator[tuple[str, Any]]:
     import numpy as np
 
-    with path.open("rb") as handle:
-        length = struct.unpack("<Q", handle.read(8))[0]
-        if length > 100 * 1024 * 1024:
-            raise OllamaError("invalid_weights", "The safetensors header is too large")
-        meta = json.loads(handle.read(length))
-    meta.pop("__metadata__", None)
+    try:
+        with path.open("rb") as handle:
+            length = struct.unpack("<Q", handle.read(8))[0]
+            if length > 100 * 1024 * 1024:
+                raise OllamaError("invalid_weights", "The safetensors header is too large")
+            meta = json.loads(handle.read(length))
+        if not isinstance(meta, dict):
+            raise ValueError("the header is not an object")
+        meta.pop("__metadata__", None)
+    except (struct.error, ValueError) as exc:
+        raise OllamaError("invalid_weights", f"The safetensors header is invalid: {exc}") from None
     base = 8 + length
     data = np.memmap(path, dtype=np.uint8, mode="r")
     for name in sorted(meta):
         info = meta[name]
-        if info.get("dtype") != "F32":
-            raise OllamaError("invalid_weights", f"{name}: only float32 weights are supported")
-        start, end = info["data_offsets"]
-        shape = tuple(int(x) for x in info["shape"])
-        if end - start != 4 * math.prod(shape) or base + end > data.size:
+        try:
+            if not isinstance(info, dict) or info.get("dtype") != "F32":
+                raise OllamaError("invalid_weights", f"{name}: only float32 weights are supported")
+            start, end = (int(x) for x in info["data_offsets"])
+            shape = tuple(int(x) for x in info["shape"])
+        except (KeyError, TypeError, ValueError):
+            raise OllamaError("invalid_weights", f"{name}: invalid tensor entry") from None
+        if (
+            start < 0
+            or any(x < 0 for x in shape)
+            or end - start != 4 * math.prod(shape)
+            or base + end > data.size
+        ):
             raise OllamaError("invalid_weights", f"{name}: inconsistent size")
         yield name, data[base + start : base + end].view(np.float32).reshape(shape)
 
@@ -338,6 +355,12 @@ def _cosine(a: list[float], b: tuple[float, ...]) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
+def _staging_name(name: str) -> str:
+    """A unique temporary model name next to ``name`` (same namespace and tag)."""
+    base, _, tag = name.partition(":")
+    return check_model_name(f"{base}-orkexa-build-{secrets.token_hex(4)}:{tag or 'latest'}")
+
+
 def build_model(
     client: OllamaClient,
     recipe: GGUFRecipe,
@@ -365,8 +388,8 @@ def build_model(
 
     Raises:
         OllamaError: ``source_missing``, ``checksum_mismatch``, ``invalid_template``,
-            ``invalid_weights``, ``reference_mismatch`` (the model is deleted again) or
-            a server error.
+            ``invalid_weights``, ``too_large``, ``reference_mismatch`` (the build is removed; a
+            model already installed under the recipe's name stays as it was) or a server error.
     """
     check_model_name(recipe.name)
     report = BuildReport(name=recipe.name, gguf_sha256="", gguf_bytes=0, min_cosine=0.0, digest="")
@@ -387,28 +410,32 @@ def build_model(
         _write_gguf(recipe, weights_path, template_path, out)
         report.gguf_sha256 = _sha256_file(out)
         report.gguf_bytes = out.stat().st_size
-        step("create model")
-        for _ in client.create_from_gguf(recipe.name, out):
-            pass
-    step("check reference vectors")
-    texts = [text for text, _ in recipe.reference]
-    if texts:
+        # Built and checked under a temporary name: an installed model of the recipe's name is
+        # replaced only by a verified build and stays as it is when the build fails.
+        staging = _staging_name(recipe.name)
         try:
-            result = client.embed(recipe.name, texts)
-        except OllamaError:
-            client.delete(recipe.name)
-            raise
-        report.min_cosine = min(
-            _cosine(list(vector), reference)
-            for vector, (_, reference) in zip(result.embeddings, recipe.reference, strict=True)
-        )
-        if report.min_cosine < recipe.min_cosine:
-            client.delete(recipe.name)
-            raise OllamaError(
-                "reference_mismatch",
-                f"{recipe.name} does not reproduce the reference vectors "
-                f"(cosine {report.min_cosine:.5f} < {recipe.min_cosine}); the model was removed",
-            )
+            step("create model")
+            for _ in client.create_from_gguf(staging, out):
+                pass
+            step("check reference vectors")
+            texts = [text for text, _ in recipe.reference]
+            if texts:
+                result = client.embed(staging, texts)
+                report.min_cosine = min(
+                    _cosine(list(vector), reference)
+                    for vector, (_, reference) in zip(result.embeddings, recipe.reference, strict=True)
+                )
+                if report.min_cosine < recipe.min_cosine:
+                    raise OllamaError(
+                        "reference_mismatch",
+                        f"{recipe.name} does not reproduce the reference vectors "
+                        f"(cosine {report.min_cosine:.5f} < {recipe.min_cosine}); it was not installed",
+                    )
+            step("install model")
+            client.copy(staging, recipe.name)
+        finally:
+            with contextlib.suppress(OllamaError):
+                client.delete(staging)
     installed = client.find(recipe.name)
     report.digest = installed.digest if installed is not None else ""
     step("done")

@@ -11,6 +11,14 @@ First release of Orkexa.
   folder. Every link is now checked again against the links that exist: its folder before it is
   created, and all links once the last one exists. The pinned upstream archives are not affected.
 
+### Fixed: `build_model` never removes a working model when a build fails (audit ORK3-09)
+
+* The model is built and checked against the reference vectors under a temporary name and copied to the
+  recipe's name only after it passed; the temporary model is removed in every case. Before, the build
+  replaced an installed model of the same name first and deleted it on a mismatch (and left it on an
+  unexpected error). Inputs larger than the size caps are refused (`too_large`), and malformed
+  `safetensors` headers raise `OllamaError("invalid_weights")` instead of raw Python errors.
+
 ### Fixed: the managed Ollama server does not outlive a stop (audit ORK3-04)
 
 * `ManagedOllama.stop()` now also ends the server's process group on POSIX, so model runners do not
