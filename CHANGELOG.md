@@ -11,6 +11,12 @@ First release of Orkexa.
   folder. Every link is now checked again against the links that exist: its folder before it is
   created, and all links once the last one exists. The pinned upstream archives are not affected.
 
+### Fixed: the managed Ollama server does not outlive a stop (audit ORK3-04)
+
+* `ManagedOllama.stop()` now also ends the server's process group on POSIX, so model runners do not
+  outlive a server that had to be killed; `orkexa-local serve` stops the server on `SIGTERM` (e.g. from a
+  service manager), not only on Ctrl+C; `host="::1"` works (IPv6 port probe and bracketed address).
+
 ### Fixed: NaN, infinite and zero vectors (audit ORK3-03)
 
 * A vector with NaN or infinity is refused (`ValueError` when it would be stored or searched;

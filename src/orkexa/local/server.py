@@ -11,6 +11,7 @@ The child gets a minimal environment: ``OLLAMA_HOST`` (loopback), ``OLLAMA_MODEL
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 import json
 import os
@@ -56,7 +57,8 @@ _ENV_PASSTHROUGH = (
 
 def free_port(host: str = "127.0.0.1") -> int:
     """A TCP port nobody listens on now (the OS picks it)."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as probe:
         probe.bind((host, 0))
         return int(probe.getsockname()[1])
 
@@ -141,6 +143,11 @@ class ManagedOllama:
             raise OllamaError("not_running", "The managed Ollama server is not running")
         return OllamaClient(self._base_url)
 
+    @property
+    def _authority(self) -> str:
+        """The host as it is written before ``:port`` (an IPv6 address in brackets)."""
+        return f"[{self.host}]" if ":" in self.host else self.host
+
     def _env(self, port: int) -> dict[str, str]:
         env = {key: os.environ[key] for key in _ENV_PASSTHROUGH if key in os.environ}
         if self.offline:
@@ -150,7 +157,7 @@ class ManagedOllama:
         env.update(self.environment)
         env.update(
             {
-                "OLLAMA_HOST": f"{self.host}:{port}",
+                "OLLAMA_HOST": f"{self._authority}:{port}",
                 "OLLAMA_MODELS": str(self.models_dir),
                 "OLLAMA_NO_CLOUD": "1",
                 "OLLAMA_NOHISTORY": "1",
@@ -177,7 +184,7 @@ class ManagedOllama:
             if not os.access(self.models_dir, os.W_OK):
                 raise OllamaError("models_dir", f"The model folder {self.models_dir} is not writable")
             port = self.port or free_port(self.host)
-            if self.port is not None and detect_ollama(f"http://{self.host}:{port}") is not None:
+            if self.port is not None and detect_ollama(f"http://{self._authority}:{port}") is not None:
                 raise OllamaError("port_in_use", f"Another Ollama already listens on port {port}")
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
             log = self.log_file.open("ab")
@@ -198,7 +205,7 @@ class ManagedOllama:
                 )
             finally:
                 log.close()
-            url = f"http://{self.host}:{port}"
+            url = f"http://{self._authority}:{port}"
             client = OllamaClient(url, timeout=3)
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
@@ -224,7 +231,8 @@ class ManagedOllama:
         process = self._process
         if process is None:
             return
-        if process.poll() is None:
+        running = process.poll() is None
+        if running:
             try:
                 if platform.system() == "Windows":
                     process.send_signal(signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
@@ -234,6 +242,12 @@ class ManagedOllama:
             except (subprocess.TimeoutExpired, OSError):
                 process.kill()
                 process.wait(5)
+        if running and platform.system() != "Windows":
+            # The server runs in a session of its own: its model runners are in its process group
+            # and must not outlive it (they would keep the loaded model's memory). Only right after
+            # stopping it, while the group id cannot belong to anything else yet.
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(process.pid, signal.SIGKILL)
         self._process = None
         self._base_url = None
         (self.home / "ollama.state.json").unlink(missing_ok=True)
