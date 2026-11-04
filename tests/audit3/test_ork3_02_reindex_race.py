@@ -10,6 +10,7 @@ import struct
 
 from orkexa import SQLiteIndex
 from orkexa.embeddings import CallableEmbeddings
+from tests.audit3._vec import needs_vec
 
 # ---- ORK3-02: a chunk deleted while reindex() embeds its batch -------------------------
 
@@ -28,6 +29,9 @@ def _filled(path: Path) -> SQLiteIndex:
     for number in range(4):
         index.add(f"document number {number} alpha", source=f"s{number}")
     return index
+
+
+pytestmark = needs_vec
 
 
 def test_reindex_leaves_no_vector_of_a_chunk_deleted_meanwhile(tmp_path: Path) -> None:

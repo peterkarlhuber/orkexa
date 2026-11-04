@@ -14,6 +14,9 @@ import pytest
 from orkexa import SQLiteIndex
 from orkexa.embeddings import CallableEmbeddings
 from orkexa.retrieval import RetrievalError
+from tests.audit3._vec import needs_vec
+
+pytestmark = needs_vec
 
 
 def _slow_queries(started: threading.Event, release: threading.Event, name: str = "s") -> CallableEmbeddings:

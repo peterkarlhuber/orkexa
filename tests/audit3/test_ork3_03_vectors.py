@@ -13,10 +13,12 @@ import pytest
 from orkexa import SQLiteIndex
 from orkexa.embeddings import CallableEmbeddings
 from orkexa.local import OllamaClient, OllamaError
+from tests.audit3._vec import needs_vec
 
 # ---- ORK3-03: non-finite and zero vectors ----------------------------------------------
 
 
+@needs_vec
 def test_non_finite_vectors_are_refused(tmp_path: Path) -> None:
     def embed(texts: list[str]) -> list[list[float]]:
         return [[float("nan"), 1.0, 0.0] for _ in texts]
@@ -28,6 +30,7 @@ def test_non_finite_vectors_are_refused(tmp_path: Path) -> None:
     index.close()
 
 
+@needs_vec
 @pytest.mark.parametrize("mode", ["vector", "hybrid"])
 def test_a_zero_vector_does_not_break_vector_search(tmp_path: Path, mode: str) -> None:
     def embed(texts: list[str]) -> list[list[float]]:

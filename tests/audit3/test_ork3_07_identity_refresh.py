@@ -15,6 +15,7 @@ from orkexa import SQLiteIndex
 from orkexa.embeddings import OllamaEmbeddings
 from orkexa.local import EmbedResult
 from orkexa.retrieval import RetrievalError
+from tests.audit3._vec import needs_vec
 
 
 class Server:
@@ -46,6 +47,7 @@ def _index(tmp_path: Path) -> tuple[SQLiteIndex, Server]:
     return index, server
 
 
+@needs_vec
 def test_an_updated_model_is_not_filed_under_its_old_identity(tmp_path: Path) -> None:
     index, server = _index(tmp_path)
     server.digest = "b" * 64  # e.g. `ollama pull emb:1` brought a new build
@@ -58,6 +60,7 @@ def test_an_updated_model_is_not_filed_under_its_old_identity(tmp_path: Path) ->
     index.close()
 
 
+@needs_vec
 def test_a_model_update_during_a_reindex_discards_the_mixed_vectors(tmp_path: Path) -> None:
     index, server = _index(tmp_path)
     for number in range(4):
