@@ -178,7 +178,10 @@ class _Step:
     result: Any = None
 
 
-FORMAT_PROMPT = "Give your final answer now, in the required JSON format."
+FORMAT_PROMPT = (
+    "Give your final answer now, in the required JSON format. "
+    "Write its text in the language of the conversation above."
+)
 """The request for the structured answer after a tool phase without it (``structured_output_with_tools``)."""
 
 
