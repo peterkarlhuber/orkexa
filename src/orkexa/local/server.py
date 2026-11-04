@@ -71,6 +71,60 @@ def detect_ollama(url: str = f"http://127.0.0.1:{DEFAULT_PORT}") -> str | None:
         return None
 
 
+def _alive(pid: int) -> bool:
+    """Whether a process ``pid`` exists (POSIX; on Windows ``False``: nothing is reclaimed there)."""
+    if pid <= 0 or platform.system() == "Windows":
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _runs_serve(pid: int, binary: str) -> bool:
+    """Whether the command line of ``pid`` ends with ``<binary> serve`` (maybe after an interpreter)."""
+    proc = Path(f"/proc/{pid}/cmdline")
+    if proc.exists():
+        try:
+            args = proc.read_bytes().rstrip(b"\0").decode("utf-8", "replace").split("\0")
+        except OSError:
+            return False
+        return args[-2:] == [binary, "serve"]
+    try:  # macOS and other POSIX systems without /proc
+        out = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True, timeout=5, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    text = out.stdout.strip()
+    return text == f"{binary} serve" or text.endswith(f" {binary} serve")
+
+
+def _is_managed_server(pid: int, binary: str) -> bool:
+    """Whether ``pid`` is ``<binary> serve`` leading its own process group, as ManagedOllama starts it."""
+    if not _alive(pid):
+        return False
+    try:
+        if os.getpgid(pid) != pid:
+            return False
+    except OSError:
+        return False
+    return _runs_serve(pid, binary)
+
+
+def _stop_group(pid: int, timeout: float = 10.0) -> None:
+    """SIGTERM, then SIGKILL, to the process group of an orphaned server (not our child: polled)."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pid, signal.SIGTERM)
+        deadline = time.monotonic() + timeout
+        while _alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        os.killpg(pid, signal.SIGKILL)
+
+
 @dataclass(frozen=True)
 class ServerState:
     """What :meth:`ManagedOllama.status` reports."""
@@ -174,6 +228,7 @@ class ManagedOllama:
             binary = self.binary
             if binary is None or not binary.is_file():
                 raise OllamaError("runtime_missing", "The Ollama runtime is not installed")
+            self._reclaim_orphan()
             try:
                 self.models_dir.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
@@ -215,7 +270,7 @@ class ManagedOllama:
                     )
                 if client.is_running():
                     self._base_url = url
-                    self._write_state(port)
+                    self._write_state(port, binary)
                     return url
                 time.sleep(0.2)
             self._terminate()
@@ -223,9 +278,41 @@ class ManagedOllama:
                 "start_failed", f"Ollama did not answer within {timeout:.0f} s; see {self.log_file}"
             )
 
-    def _write_state(self, port: int) -> None:
-        state = {"pid": self._process.pid if self._process else None, "port": port, "version": OLLAMA_VERSION}
-        (self.home / "ollama.state.json").write_text(json.dumps(state), encoding="utf-8")
+    @property
+    def _state_file(self) -> Path:
+        return self.home / "ollama.state.json"
+
+    def _write_state(self, port: int, binary: Path) -> None:
+        state = {
+            "pid": self._process.pid if self._process else None,
+            "port": port,
+            "version": OLLAMA_VERSION,
+            "binary": str(binary),
+            "owner": os.getpid(),
+        }
+        self._state_file.write_text(json.dumps(state), encoding="utf-8")
+
+    def _reclaim_orphan(self) -> None:
+        """Stop a server that an earlier, crashed process of this application left running.
+
+        The state file names the server, its executable and the process that owned it. The
+        server is stopped only if that owner is gone and the process is still ``<binary> serve``
+        leading its own process group (POSIX); otherwise it is left alone. A state file that
+        names no such server is removed."""
+        path = self._state_file
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError):
+            state = None
+        if isinstance(state, dict):
+            pid, binary, owner = state.get("pid"), state.get("binary"), state.get("owner")
+            if isinstance(owner, int) and owner != os.getpid() and _alive(owner):
+                return  # another running process of this application owns that server
+            if isinstance(pid, int) and isinstance(binary, str) and _is_managed_server(pid, binary):
+                _stop_group(pid)
+        path.unlink(missing_ok=True)
 
     def _terminate(self, timeout: float = 10.0) -> None:
         process = self._process
@@ -250,7 +337,7 @@ class ManagedOllama:
                 os.killpg(process.pid, signal.SIGKILL)
         self._process = None
         self._base_url = None
-        (self.home / "ollama.state.json").unlink(missing_ok=True)
+        self._state_file.unlink(missing_ok=True)
 
     def stop(self, timeout: float = 10.0) -> None:
         """Stop the server this object started (never another process)."""

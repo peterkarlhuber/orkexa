@@ -19,6 +19,14 @@ First release of Orkexa.
   unexpected error). Inputs larger than the size caps are refused (`too_large`), and malformed
   `safetensors` headers raise `OllamaError("invalid_weights")` instead of raw Python errors.
 
+### Fixed: a managed Ollama left running by a crashed application is stopped on the next start (audit ORK3-05)
+
+* `ManagedOllama` records the server's executable and its own process in `ollama.state.json`. `start()`
+  reads that file: a server whose owner is gone and that is still `<binary> serve` leading its own process
+  group is stopped with its runners before a new one starts (POSIX), instead of a second server being
+  started next to it. A server of another running process is left alone; a stale file is removed.
+  Windows keeps the earlier behavior.
+
 ### Fixed: the managed Ollama server does not outlive a stop (audit ORK3-04)
 
 * `ManagedOllama.stop()` now also ends the server's process group on POSIX, so model runners do not
