@@ -13,7 +13,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 2 |
-| P3 Low | 14 |
+| P3 Low | 15 |
 | P4 Optional | 12 |
 
 **Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
@@ -190,6 +190,17 @@ None known.
 - **What:** With providers that split tools and structured output (Ollama), the agent adds a user message that asks
   for the JSON answer and keeps it in the conversation history, although the user never wrote it.
 - **Next step:** Mark it as synthetic or drop it on commit; agree with Nodestro how chat views show it.
+
+### ORK-037 · Developer messages of the providers and `orkexa-local`
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** UX round 3 DX handovers B4 to B9
+- **What:** A connection error of an OpenAI-compatible provider (Ollama, vLLM) names neither the address nor what to
+  do; `orkexa-local` catches only `OllamaError`, so other Orkexa errors end in a traceback; the convert, install and
+  serve messages name no next step (`--weights`/`--template`, `install-runtime --download`, `serve`); the CLI options
+  have no help texts; a model id like `anthropic:` (prefix without a model) gets an unclear error.
+- **Next step:** Add the base URL (without credentials) and a start hint to connection errors, catch `OrkexaError` in
+  the CLI (`error (<code>): <message>`, exit 1), name the next step in those messages and in `status`, add `help=` to
+  every option, and refuse an empty model after a provider prefix with an example.
 
 ## Tests and quality assurance
 
