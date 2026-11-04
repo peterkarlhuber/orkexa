@@ -51,6 +51,11 @@ agent = Agent(
 )
 ```
 
+These agents need a server that already runs at that address; without one, the first
+`ask()` raises `ProviderConnectionError`. For Ollama, `orkexa-local status` shows whether a
+server answers, and [Local models, embeddings and retrieval modes](../guides/local-models.md)
+shows how to install and run a pinned Ollama and read a model's capabilities from it.
+
 Capabilities of compatible endpoints are *unknown* until you declare them; a request
 that needs an unknown capability fails with `UnknownCapabilityError` naming the
 `capabilities=` override. See [Providers and capabilities](providers.md).

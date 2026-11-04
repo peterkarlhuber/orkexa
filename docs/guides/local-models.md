@@ -41,6 +41,25 @@ installed model in `/api/show` (`tools`, `vision`, `completion`, `embedding`); e
 report stays `unknown`. A model name says nothing reliable about its capabilities, so Orkexa never
 derives them from it.
 
+## The `orkexa-local` command
+
+The same steps from a terminal (`orkexa-local --help` lists every command; `python -m orkexa.local`
+works the same way):
+
+```bash
+orkexa-local status                      # installed runtime, a running Ollama, its models
+orkexa-local install-runtime --download  # network; offline: --archive ollama-linux-amd64.tar.zst
+orkexa-local serve                       # runs the managed server in the foreground (Ctrl+C stops it)
+orkexa-local pull qwen3.5:4b             # in a second terminal; network
+```
+
+`serve` picks a free loopback port (or `--port`) and prints the address; the other commands find that
+server through the home folder, and `--url http://127.0.0.1:11434` points them at an Ollama you run
+yourself. The home is `~/.orkexa/local` unless `--home` or `ORKEXA_LOCAL_HOME` names another folder.
+Errors print their code, for example `error (unreachable): Ollama is not reachable at
+http://127.0.0.1:11434: ...` (no server answers: start one with `serve`) or `error (runtime_missing)` (run
+`install-runtime` first).
+
 ## Provisioning Ollama without a manual installation
 
 ```python
@@ -150,6 +169,10 @@ callables keep working; `CallableEmbeddings` gives them an explicit identity.
 | `hybrid` | Both, fused by evidence-weighted score fusion (see below), ties by chunk id | Both; the default with embeddings |
 
 ```python
+from orkexa import Agent
+from orkexa.embeddings import OllamaEmbeddings
+from orkexa.retrieval import SQLiteIndex
+
 index = SQLiteIndex("kb.db", embeddings=OllamaEmbeddings("qwen3-embedding:0.6b"))
 index.add_file("handbook.pdf")
 index.retrieve("money back?", 5, mode="vector", sources=["handbook.pdf"])
