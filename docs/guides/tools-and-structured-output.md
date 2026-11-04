@@ -56,3 +56,10 @@ invoice = Agent(model="openai:gpt-6.1-sol", output_format=Invoice).ask("Extract:
 always validated locally. If it does not validate, `StructuredOutputError` carries the
 validation error. With OpenAI strict mode, `null` for an optional field means "use the
 default".
+
+Tools and structured output together: most providers send both in one request. Ollama turns the
+JSON schema into a grammar, so a model that may only write JSON can never call a tool. For
+`provider="ollama"` (`Provider.structured_output_with_tools = False`) the agent therefore offers the
+tools without the schema; once the model answers without a tool call, it asks once more, without
+tools and with the schema, for the structured answer (`orkexa.core.runtime.FORMAT_PROMPT`). That
+extra request is not counted as a tool round and stays in the history.

@@ -155,6 +155,14 @@ class Provider(ABC):
     """The typed options class this provider accepts (``None``: none)."""
     native_responses: ClassVar[bool] = False
     """Whether hooks receive native SDK objects (only the ``ClaudeAgent`` facade)."""
+    structured_output_with_tools: ClassVar[bool] = True
+    """Whether one request may offer tools and also constrain the answer to ``output_format``.
+
+    ``False`` where the constraint suppresses tool calls (Ollama compiles the JSON schema into a
+    grammar, so the model can only write JSON and never calls a tool). The runtime then offers the
+    tools without the constraint and, once the model answers without a tool call, asks once more
+    without tools for the structured answer.
+    """
 
     def __init__(self, config: ProviderConfig | None = None, asynchronous: bool = False) -> None:
         self.config = config or ProviderConfig()
