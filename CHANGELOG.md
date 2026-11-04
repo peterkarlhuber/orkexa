@@ -11,6 +11,14 @@ First release of Orkexa.
   folder. Every link is now checked again against the links that exist: its folder before it is
   created, and all links once the last one exists. The pinned upstream archives are not affected.
 
+### Fixed: a chunk deleted during `reindex()` no longer leaves a vector behind (audit ORK3-02)
+
+* `reindex()` embeds a batch without holding the index lock. A chunk deleted meanwhile still got a
+  vector; because SQLite reuses the largest row id, the next chunk then either could not be added
+  (`UNIQUE constraint failed`) or silently got the deleted chunk's vector. Vectors are now written only
+  for chunks that still exist with the embedded text, and adding a chunk replaces a stale vector of
+  its id left by an earlier version.
+
 ### Added: local models with Ollama, embeddings and retrieval modes
 
 * `orkexa.local`: `OllamaClient` (models, `/api/show` capabilities, downloads with progress and cancel,

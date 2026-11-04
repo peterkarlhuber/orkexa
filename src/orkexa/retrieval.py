@@ -859,15 +859,18 @@ class SQLiteIndex(Index):
             with self._lock:
                 self._connection.execute("BEGIN IMMEDIATE")
                 try:
-                    for (chunk_id, _), vector in zip(rows, vectors, strict=True):
+                    for (chunk_id, text), vector in zip(rows, vectors, strict=True):
                         if len(vector) != identity.dimensions:
                             raise RetrievalError(
                                 "vector_unavailable", "The embedding model changed its vector size"
                             )
+                        # The batch was embedded without the lock: a chunk deleted meanwhile gets no
+                        # vector, and neither does a new chunk that reused its id (SQLite reuses the
+                        # largest rowid); the next round embeds that one with its own text.
                         self._connection.execute(
                             "INSERT OR REPLACE INTO index_vectors (space, chunk_id, embedding)"
-                            " VALUES (?, ?, ?)",
-                            (space, chunk_id, self._vector(vector)),
+                            " SELECT ?, id, ? FROM index_chunks WHERE id = ? AND namespace = ? AND text = ?",
+                            (space, self._vector(vector), chunk_id, self.namespace, text),
                         )
                 except BaseException:
                     self._connection.execute("ROLLBACK")
@@ -976,8 +979,10 @@ class SQLiteIndex(Index):
                     if vectors is not None and space is not None:
                         if identity is not None and len(vectors[position]) != identity.dimensions:
                             raise ValueError("The embedding model returned a vector of another size")
+                        # REPLACE: a vector left behind for this id by a deleted chunk is stale.
                         self._connection.execute(
-                            "INSERT INTO index_vectors (space, chunk_id, embedding) VALUES (?, ?, ?)",
+                            "INSERT OR REPLACE INTO index_vectors (space, chunk_id, embedding)"
+                            " VALUES (?, ?, ?)",
                             (space, chunk_id, self._vector(vectors[position])),
                         )
                     elif vectors is not None:
