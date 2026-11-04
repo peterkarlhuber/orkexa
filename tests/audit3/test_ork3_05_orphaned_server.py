@@ -17,7 +17,7 @@ import pytest
 
 from orkexa.local import ManagedOllama
 
-from .test_ork3_04_managed_server import _alive, _fake_ollama, _gone
+from .test_ork3_04_managed_server import _alive, _fake_ollama, _gone, _start
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
 
@@ -29,12 +29,22 @@ def _crashed_app(home: Path, binary: Path) -> dict[str, int]:
         import time
         from orkexa.local import ManagedOllama
         m = ManagedOllama({str(home)!r}, binary={str(binary)!r})
-        print(m.start(timeout=20), flush=True)
+        print(m.start(timeout=60), flush=True)
         time.sleep(120)
         """
     )
-    app = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
-    assert app.stdout is not None and app.stdout.readline().startswith("http://")
+    app = subprocess.Popen(
+        [sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    assert app.stdout is not None and app.stderr is not None
+    line = app.stdout.readline()
+    if not line.startswith("http://"):
+        app.kill()
+        log = home / "logs" / "ollama.log"
+        raise AssertionError(
+            f"the app did not start its server: {app.stderr.read()}\n"
+            f"--- {log} ---\n{log.read_text(errors='replace') if log.exists() else '(no log)'}"
+        )
     app.kill()
     app.wait()
     state = json.loads((home / "ollama.state.json").read_text())
@@ -48,7 +58,7 @@ def test_next_start_stops_the_orphaned_server_and_its_runners(tmp_path: Path) ->
     orphan = _crashed_app(home, binary)
     server = ManagedOllama(home, binary=binary)
     try:
-        server.start(timeout=20)
+        _start(server)
         assert _gone(orphan["server"]) and _gone(orphan["runner"])
         state = json.loads((home / "ollama.state.json").read_text())
         assert state["pid"] == server.status().pid != orphan["server"]
@@ -59,7 +69,7 @@ def test_next_start_stops_the_orphaned_server_and_its_runners(tmp_path: Path) ->
 def test_a_server_whose_owner_still_runs_is_left_alone(tmp_path: Path) -> None:
     home, binary = tmp_path / "home", _fake_ollama(tmp_path)
     other = ManagedOllama(home, binary=binary)
-    other.start(timeout=20)
+    _start(other)
     state = json.loads((home / "ollama.state.json").read_text())
     # the same state as another live process of the application would leave (owner = a live pid)
     keeper = subprocess.Popen(["sleep", "60"])

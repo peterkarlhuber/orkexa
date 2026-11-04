@@ -25,7 +25,8 @@ First release of Orkexa.
   reads that file: a server whose owner is gone and that is still `<binary> serve` leading its own process
   group is stopped with its runners before a new one starts (POSIX), instead of a second server being
   started next to it. A server of another running process is left alone; a stale file is removed.
-  Windows keeps the earlier behavior.
+  Windows keeps the earlier behavior. Without `/proc` (macOS) the command line is read with
+  `ps -ww`, so a long install path is not cut off.
 
 ### Fixed: vector search no longer blocks the index while it embeds the query (audit ORK3-06)
 

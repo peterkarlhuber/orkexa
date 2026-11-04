@@ -95,7 +95,12 @@ def _runs_serve(pid: int, binary: str) -> bool:
         return args[-2:] == [binary, "serve"]
     try:  # macOS and other POSIX systems without /proc
         out = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True, timeout=5, check=False
+            # -ww: the whole command line; without it BSD ps may cut it to the screen width.
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return False

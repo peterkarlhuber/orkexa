@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from orkexa.local import ManagedOllama
+from orkexa.local import ManagedOllama, OllamaError
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX links and process groups")
 
@@ -44,6 +44,11 @@ _FAKE = textwrap.dedent(
             pass
     class Server(http.server.HTTPServer):
         address_family = __import__("socket").AF_INET6 if ":" in host else __import__("socket").AF_INET
+        def server_bind(self):
+            # HTTPServer.server_bind asks socket.getfqdn(), a reverse DNS lookup that can take
+            # longer than a start timeout on CI machines (macOS); the fake needs no server name.
+            __import__("socketserver").TCPServer.server_bind(self)
+            self.server_name, self.server_port = "localhost", self.server_address[1]
     Server((host.strip("[]"), int(port)), Handler).serve_forever()
     """
 )
@@ -55,6 +60,19 @@ def _fake_ollama(tmp_path: Path) -> Path:
     binary.write_text(_FAKE.format(python=sys.executable))
     binary.chmod(0o755)
     return binary
+
+
+#: A slow CI machine (macOS on Intel) needs several seconds to start a Python process.
+START_TIMEOUT = 60.0
+
+
+def _start(server: ManagedOllama) -> str:
+    """``server.start()`` with a generous bound; a failure shows the fake server's log."""
+    try:
+        return server.start(timeout=START_TIMEOUT)
+    except OllamaError as exc:
+        log = server.log_file.read_text(errors="replace") if server.log_file.exists() else "(no log)"
+        raise AssertionError(f"{exc}\n--- {server.log_file} ---\n{log}") from exc
 
 
 def _alive(pid: int) -> bool:
@@ -80,7 +98,7 @@ def test_stop_also_ends_the_runners_of_a_server_that_had_to_be_killed(tmp_path: 
     server = ManagedOllama(tmp_path / "home", binary=_fake_ollama(tmp_path))
     (tmp_path / "home" / "ollama-home").mkdir(parents=True)
     (tmp_path / "home" / "ollama-home" / "ignore-term").write_text("")
-    server.start(timeout=20)
+    _start(server)
     runner = int((tmp_path / "home" / "ollama-home" / "runner.pid").read_text())
     server.stop(timeout=0.5)
     assert _gone(runner)
@@ -123,7 +141,7 @@ def test_managed_server_on_ipv6_loopback(tmp_path: Path) -> None:
         pytest.skip("no IPv6 loopback")
     server = ManagedOllama(tmp_path / "home", binary=_fake_ollama(tmp_path), host="::1")
     try:
-        url = server.start(timeout=20)
+        url = _start(server)
         assert url.startswith("http://[::1]:")
         assert server.status().running
     finally:
