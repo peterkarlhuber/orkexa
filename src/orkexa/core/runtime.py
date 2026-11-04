@@ -173,9 +173,18 @@ Effect = CallModel | RunTools | Emit | WaitForBudget
 
 @dataclass(frozen=True)
 class _Step:
-    kind: Literal["tools", "continue", "done"]
+    kind: Literal["tools", "continue", "done", "format"]
     tool_calls: tuple[ToolCallPart, ...] = ()
     result: Any = None
+
+
+FORMAT_PROMPT = "Give your final answer now, in the required JSON format."
+"""The request for the structured answer after a tool phase without it (``structured_output_with_tools``)."""
+
+
+def _asks_for_format(history: Sequence[Message]) -> bool:
+    """Whether the conversation ends with the request for the structured answer (also after a resume)."""
+    return bool(history) and history[-1].role == "user" and history[-1].content == FORMAT_PROMPT
 
 
 def _prices_itself(adapter: Any, model: str) -> bool:
@@ -600,6 +609,13 @@ class AgentCore(Generic[OutputT]):
                 native_tools.append(self.memory.definition)
             else:
                 tools.append(self.memory.tool_definition())
+        output_format = cast("type[BaseModel] | None", self.output_format)
+        if self._separate_format(tools or native_tools):
+            if _asks_for_format(history):
+                # The last request: the structured answer, no more tool calls.
+                tools, native_tools = [], []
+            else:
+                output_format = None  # the tool phase: a constrained answer could not call a tool
         request = ModelRequest(
             model=model,
             messages=prepare_history(history, self.adapter.name, self.history_policy, model),
@@ -607,7 +623,7 @@ class AgentCore(Generic[OutputT]):
             tools=tools,
             native_tools=native_tools,
             tool_choice=self._native_tool_choice() if tools or native_tools else None,
-            output_format=cast("type[BaseModel] | None", self.output_format),
+            output_format=output_format,
             max_tokens=self._max_tokens,
             stream=self._use_stream(),
             effort=self._effort,
@@ -618,6 +634,14 @@ class AgentCore(Generic[OutputT]):
         if check:
             self._check_request(request, caps)
         return request
+
+    def _separate_format(self, tools: object) -> bool:
+        """Whether tools and the structured answer go in separate requests (see the provider flag)."""
+        return (
+            self.output_format is not None
+            and bool(tools)
+            and not getattr(self.adapter, "structured_output_with_tools", True)
+        )
 
     def _check_request(self, request: ModelRequest, caps: ModelCapabilities) -> None:
         """Every feature the request uses must be ``supported`` (no silent degradation)."""
@@ -796,7 +820,8 @@ class AgentCore(Generic[OutputT]):
 
     def _rounds(self, history: list[Message], start: int) -> Generator[Effect, Any, OutputT]:
         """Request/tool rounds from round ``start`` until the turn is done."""
-        for round_number in range(start, self.max_tool_rounds + 1):
+        round_number = start
+        while round_number <= self.max_tool_rounds:
             request = self._build_request(history)
             # One pinned price basis per request: the pre-check and the bill use the
             # same snapshot even if prices are updated while the request runs.
@@ -816,7 +841,14 @@ class AgentCore(Generic[OutputT]):
                 self.usage_tracker.release(reservation)
             if record is not None:
                 yield Emit(UsageReported(record))
-            step = self._process_response(response, history, round_number)
+            step = self._process_response(
+                response, history, round_number, unformatted=request.output_format is None
+            )
+            if step.kind == "format":
+                # The model answered without a tool call while the format was withheld: one more
+                # request, without tools, for the structured answer (not counted as a tool round).
+                history.append(Message(role="user", content=FORMAT_PROMPT))
+                continue
             if step.kind == "done":
                 self._commit(history)
                 yield Emit(TurnCompleted(step.result))
@@ -824,6 +856,7 @@ class AgentCore(Generic[OutputT]):
             if step.kind == "tools":
                 results: list[ToolResultPart | _Waiting] = yield RunTools(step.tool_calls, request)
                 self._add_results(history, step.tool_calls, results, round_number)
+            round_number += 1
         raise UnexpectedResponseError("Tool loop ended unexpectedly")
 
     def _add_results(
@@ -1032,7 +1065,9 @@ class AgentCore(Generic[OutputT]):
             self._add_usage_record(record)
         return record
 
-    def _process_response(self, response: ModelResponse, history: list[Message], round_number: int) -> _Step:
+    def _process_response(
+        self, response: ModelResponse, history: list[Message], round_number: int, *, unformatted: bool = False
+    ) -> _Step:
         """Extend ``history`` and decide what the loop does next."""
         native = response.native_stop_reason or response.stop_reason
         if response.stop_reason in _INCOMPLETE:
@@ -1070,6 +1105,8 @@ class AgentCore(Generic[OutputT]):
             )
         if self.output_format is None:
             return _Step("done", result=response.text)
+        if unformatted and response.stop_reason == "end_turn":
+            return _Step("format")
         result = response.parsed
         if not isinstance(result, self.output_format):
             message = (

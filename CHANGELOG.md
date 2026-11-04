@@ -33,6 +33,16 @@ First release of Orkexa.
 * `OllamaEmbeddings(document_prefix=, query_prefix=)` and `KNOWN_PREFIXES` for models trained with
   plain prefixes; `EmbeddingIdentity` records them (keys of spaces without prefixes are unchanged).
 
+### Changed: Ollama agents with tools and structured output call their tools
+
+* Ollama compiles `response_format` into a grammar, so with tools offered a model could only write
+  JSON and never called a tool: a local agent with `output_format` and a calculator estimated every
+  number itself (measured with `qwen3.5:4b`). For providers with
+  `Provider.structured_output_with_tools = False` (now `ollama`), the agent offers the tools without
+  the schema and, after the first answer without a tool call, makes one more request without tools
+  and with the schema (`FORMAT_PROMPT`; not counted as a tool round, resumable). Other providers
+  keep the single constrained request.
+
 ### Changed: hybrid search weighs full-text hits by their evidence
 
 * `SQLiteIndex` `hybrid` mode fused BM25 and vector rankings by reciprocal rank fusion (k=60), which

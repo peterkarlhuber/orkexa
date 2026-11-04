@@ -158,6 +158,9 @@ class OllamaProvider(CompatibleProvider):
 
     name: ClassVar[str] = "ollama"
     default_base_url: ClassVar[str | None] = "http://localhost:11434/v1"
+    # Ollama turns response_format into a grammar: with tools offered, the model writes JSON and
+    # never calls one.
+    structured_output_with_tools: ClassVar[bool] = False
     preset: ClassVar[Mapping[str, Support]] = {
         "streaming": "supported",
         "system_messages": "supported",

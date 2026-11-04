@@ -278,3 +278,59 @@ def test_declared_capabilities_drive_the_encoding() -> None:
     response_format = harness.script.calls[0]["response_format"]["json_schema"]
     assert response_format["strict"] is True
     assert response_format["schema"]["required"] == ["a", "b", "c"]
+
+
+class Sum(BaseModel):
+    total: int
+
+
+def _last_user_text(call: dict[str, object]) -> object:
+    messages = call["messages"]
+    assert isinstance(messages, list)
+    return messages[-1]["content"]
+
+
+def test_ollama_offers_tools_without_the_format_and_asks_for_it_afterwards() -> None:
+    """Ollama's JSON grammar suppresses tool calls: tools and the structured answer are separate requests."""
+    from orkexa.core.runtime import FORMAT_PROMPT
+
+    harness = ChatHarness()
+    kwargs = harness.agent_kwargs()
+    kwargs["capabilities"] = {**kwargs["capabilities"], "structured_output": "supported"}
+    harness.script.responses = [
+        harness.tool_calls([("c1", "add", {"a": 2, "b": 3})]),
+        harness.text("The total is 5."),
+        harness.text('{"total": 5}'),
+    ]
+    agent = Agent(provider="ollama", client=harness.client(False), tools=[add], output_format=Sum, **kwargs)
+    assert agent.ask("Add 2 and 3.") == Sum(total=5)
+    first, second, third = harness.script.calls
+    assert "tools" in first and "response_format" not in first
+    assert "tools" in second and "response_format" not in second
+    assert "tools" not in third and third["response_format"]["json_schema"]["name"] == "Sum"
+    assert _last_user_text(third) == FORMAT_PROMPT
+    # The conversation keeps the request and the structured answer.
+    assert agent.history()[-2].content == FORMAT_PROMPT
+
+
+def test_ollama_without_tools_and_other_endpoints_keep_one_constrained_request() -> None:
+    harness = ChatHarness()
+    kwargs = harness.agent_kwargs()
+    kwargs["capabilities"] = {**kwargs["capabilities"], "structured_output": "supported"}
+    harness.script.responses = [harness.text('{"total": 5}')]
+    agent = Agent(provider="ollama", client=harness.client(False), output_format=Sum, **kwargs)
+    assert agent.ask("Five.") == Sum(total=5)
+    assert len(harness.script.calls) == 1 and "response_format" in harness.script.calls[0]
+
+    other = ChatHarness()
+    other.script.responses = [other.tool_calls([("c1", "add", {"a": 2, "b": 3})]), other.text('{"total": 5}')]
+    agent = Agent(
+        provider="compatible",
+        base_url="http://localhost:9/v1",
+        client=other.client(False),
+        tools=[add],
+        output_format=Sum,
+        **kwargs,
+    )
+    assert agent.ask("Add 2 and 3.") == Sum(total=5)
+    assert all("response_format" in call and "tools" in call for call in other.script.calls)
