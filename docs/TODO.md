@@ -12,8 +12,8 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 2 |
-| P3 Low | 15 |
-| P4 Optional | 13 |
+| P3 Low | 16 |
+| P4 Optional | 12 |
 
 **Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
@@ -295,17 +295,19 @@ None known.
   `examples/bedrock_agent.py` is outside the numbered example scheme.
 - **Next step:** Clean up with the next related change.
 
-### ORK-038 · Dependency updates are merged by hand (no auto-merge)
+### ORK-038 · Dependency updates are merged by hand; branch protection decided
 
-- **Priority:** P4 Optional · **Status:** Needs decision · **Refs:** `.github/dependabot.yml`, dependency round
-  2026-11-05
+- **Priority:** P3 Low · **Status:** Decided (owner, 2026-11-05), not implemented · **Refs:** `.github/dependabot.yml`,
+  dependency round 2026-11-05, nodestro-studio ST-052
 - **What:** Dependabot opens weekly grouped pull requests (pip minor/patch, GitHub Actions; majors of the provider
   SDKs and pydantic are ignored and reviewed by hand) with a cooldown of 3 days (7 for pip majors); security updates are
-  not delayed. Auto-merge is off: `master` has no branch protection with required status checks, so GitHub would
-  merge without waiting for CI. A new pip range in `pyproject.toml` changes what every Nodestro install resolves, so
-  it needs CI here and the next studio pin bump.
-- **Next step:** Owner decision. If wanted: protect `master` with the CI jobs as required checks, allow auto-merge,
-  then enable it only for GitHub Actions patch/minor updates; keep pip range changes manual.
+  not delayed. Auto-merge is off. A new pip range in `pyproject.toml` changes what every Nodestro install resolves,
+  so it needs CI here and the next studio pin bump.
+  **Owner decision 2026-11-05:** protect `master` with required CI checks and block force pushes and deletion,
+  without blocking the agent and pull request flow; auto-merge stays off for now.
+- **Next step:** Separate work order following nodestro-studio ST-052: required checks only from jobs that always
+  report on pull requests (the macOS and Windows jobs of `platforms.yml` only if they run on every pull request),
+  no required approvals, "up to date" off, merge commits allowed.
 
 ## Later optimizations
 
