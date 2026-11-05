@@ -13,7 +13,7 @@
 | P1 High | 0 |
 | P2 Medium | 2 |
 | P3 Low | 15 |
-| P4 Optional | 12 |
+| P4 Optional | 13 |
 
 **Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
@@ -294,6 +294,18 @@ None known.
 - **What:** The sdist still excludes the removed `compat/` directory (`pyproject.toml`), and
   `examples/bedrock_agent.py` is outside the numbered example scheme.
 - **Next step:** Clean up with the next related change.
+
+### ORK-038 · Dependency updates are merged by hand (no auto-merge)
+
+- **Priority:** P4 Optional · **Status:** Needs decision · **Refs:** `.github/dependabot.yml`, dependency round
+  2026-11-05
+- **What:** Dependabot opens weekly grouped pull requests (pip minor/patch, GitHub Actions; majors of the provider
+  SDKs and pydantic are ignored and reviewed by hand) with a cooldown of 3 days (7 for pip majors); security updates are
+  not delayed. Auto-merge is off: `master` has no branch protection with required status checks, so GitHub would
+  merge without waiting for CI. A new pip range in `pyproject.toml` changes what every Nodestro install resolves, so
+  it needs CI here and the next studio pin bump.
+- **Next step:** Owner decision. If wanted: protect `master` with the CI jobs as required checks, allow auto-merge,
+  then enable it only for GitHub Actions patch/minor updates; keep pip range changes manual.
 
 ## Later optimizations
 
