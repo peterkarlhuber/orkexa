@@ -2,12 +2,18 @@
 # Actions (the workflows pin every action by commit SHA; Dependabot keeps those pins current).
 # Major versions of the provider SDKs change the supported ranges in pyproject.toml and are
 # reviewed by hand, so they are ignored here.
+# cooldown: a new release is proposed only after a few days (a week for majors), so a broken or compromised release
+# is usually withdrawn before it reaches a pull request; security updates are not delayed. Merging stays manual
+# (no auto-merge; docs/TODO.md ORK-038).
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     open-pull-requests-limit: 5
     groups:
       python-minor-and-patch:
@@ -26,6 +32,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     open-pull-requests-limit: 5
     groups:
       github-actions:
