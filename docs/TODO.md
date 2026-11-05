@@ -3,8 +3,7 @@
 > Open work for this repository: release blockers, known bugs, security follow-ups, technical debt and planned improvements.
 > GitHub issues are the source of truth for details; this file is the entry point and summary.
 >
-> **Last full review:** 2026-11-04 against `master` at `22f2910` (internal backend audit round 3; fixes ORK3-01 to
-> ORK3-07, ORK3-09 and ORK3-11 in the PR that updates this line).
+> **Last full review:** 2026-11-05 against `master` at `4f5eda6` (quality round 3 close-out; TODO consolidated).
 
 ## Summary
 
@@ -16,13 +15,14 @@
 | P3 Low | 15 |
 | P4 Optional | 12 |
 
-**Release blockers:** None for this repository. Orkexa 0.1.0 is unreleased and no release is planned yet;
-Nodestro consumes it by commit SHA.
+**Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
+commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
+below is not a release blocker.
 
-The library is in good shape: no open issues or pull requests before this review, no TODO/FIXME markers in the
-code, and offline tests, strict typing, packaging, docs and dependency audits run in CI. The open work is mostly
-verification against real providers and Docker hosts, follow-ups in Nodestro for the 2026-11-03 audit fixes, and
-release and documentation upkeep.
+The library is in good shape: no open pull requests, the three open issues (#24 to #26) are tracked below, no
+TODO/FIXME markers in the code, and offline tests, strict typing, packaging, docs and dependency audits run in CI.
+The open work is mostly verification against real providers and Docker hosts, follow-ups in Nodestro for the
+2026-11-03 audit fixes, and release and documentation upkeep.
 
 ## Priorities and statuses
 
@@ -41,16 +41,22 @@ None known.
 
 ## Security
 
-### ORK-003 · Redirect handling on OpenAI-compatible endpoints
+Needs an independent review: ORK-004 (the static check). It belongs in the same independent review as Nodestro's
+tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off until then.
 
-- **Priority:** P3 Low · **Status:** Open · **Refs:** internal backend audit 2026-11-01, follow-up to finding A-05
+### ORK-003 · Endpoint hardening: redirects, loopback rules and the managed Ollama server
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** internal backend audit 2026-11-01, follow-up to finding A-05;
+  internal backend audit round 3 (ORK3-10)
 - **What:** Hardening item. The fix for A-05 lives only in Nodestro's server path; code that uses `orkexa.Agent`
   with a `compatible` endpoint directly still relies on the HTTP client's default redirect handling.
   `OllamaProvider` (the `Agent` path) likewise accepts any `base_url` without the loopback and no-redirect rules of
   `OllamaClient` (internal audit 2026-11-04); Nodestro relies on a non-loopback Ollama in Local Docker, so a
-  loopback default needs an agreed opt-in.
-- **Next step:** Decide on a library-level default or option and document it in the security guide (details are
-  in the internal audit, not here).
+  loopback default needs an agreed opt-in. The same audit (ORK3-10) also recorded small hardening points of the
+  managed Ollama server and the runtime installer (start checks, error mapping, log rotation) that matter mainly on
+  hosts shared by several users.
+- **Next step:** Decide on a library-level default or option and document it in the security guide; handle the
+  managed-server and installer points with the next change there (details are in the internal audit, not here).
 
 ### ORK-004 · Independent review of the static check
 
@@ -59,7 +65,7 @@ None known.
   #31/#34; re-checked by the internal audit of 2026-11-03). The static check (`dynamic/static_check.py`) is still
   a deny list on top of an import allow list, not a proof, and has had no independent review.
 - **Next step:** Include the static check and the approval flow in the next independent security review that
-  covers Nodestro tool execution.
+  covers Nodestro tool execution (nodestro-runtime RT-001).
 
 ### ORK-028 · Nodestro: adopt signed checkpoints and decide on single-use resume
 
@@ -206,12 +212,14 @@ None known.
 
 ### ORK-030 · Live tests of the larger local models
 
-- **Priority:** P2 Medium · **Status:** Open · **Refs:** `tests/test_local.py` (live tests with `ORKEXA_TEST_OLLAMA_URL`)
+- **Priority:** P2 Medium · **Status:** Open · **Refs:** `tests/test_local.py` (live tests with
+  `ORKEXA_TEST_OLLAMA_URL`); internal backend audit round 3 (ORK3-04, ORK3-05, OPS3-04)
 - **What:** Real answers, tool calls and embeddings were tested with `qwen3.5:4b` and `qwen3-embedding:0.6b` on a
   4-core CPU machine with 16 GB (no GPU). `qwen3.5:9b`, `qwen3.6:35b-a3b`, `qwen3.8:27b` and the larger embedding
   models were verified only by registry metadata; their tool calling and structured output are untested here, and
   macOS/Windows runs of `ManagedOllama` are untested. The IPv6 loopback path (`host="::1"`) and the orphan reclaim
-  after a host crash (POSIX only; Windows has none) were added on 2026-11-04 without a CI run on those platforms.
+  after a host crash (POSIX only; Windows has none) were added on 2026-11-04 (#49) without a CI run on those
+  platforms.
 - **Next step:** Run the live tests on hardware with 32+ GB (and a GPU, and macOS/Windows) and record the results.
 
 ## Platform coverage
@@ -219,7 +227,7 @@ None known.
 ### ORK-024 · Docker sandbox hosts without CI evidence (Docker Desktop, OrbStack, rootless Podman)
 
 - **Priority:** P3 Low · **Status:** Open · **Refs:** [Feature matrix](feature-matrix.md#docker-sandbox-hosts),
-  [Docker manual verification](development/docker-manual-verification.md), ORK-021, ORK-023
+  [Docker manual verification](development/docker-manual-verification.md), ORK-021 (done, #31), ORK-023 (done, #34)
 - **What:** The preflight and the self-test have run in CI only on Docker Engine (rootful x86-64 and arm64, rootless
   x86-64), rootful Podman 4.9.3 (crun 1.14.1, Ubuntu 24.04) and, non-blocking, Colima on macOS x86-64. **Docker
   Desktop has never run in CI** (macOS Apple silicon and Intel, Windows x64 and ARM64), nor have OrbStack, Colima on
@@ -298,7 +306,7 @@ None known.
 
 ### ORK-027 · Sandbox image upkeep: build behind a TLS-intercepting proxy, digest refresh
 
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** internal backend audit 2026-11-03 (ORK2-10), ORK-023
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** internal backend audit 2026-11-03 (ORK2-10), ORK-023 (done, #34)
 - **What:** `docker/sandbox.Dockerfile` cannot be built behind a proxy that intercepts TLS (pip fails) without
   editing it; there is no build secret or argument for an extra CA. Separately, the pinned base image digest and the
   hashed requirements need a refresh with each Python patch release.
@@ -338,7 +346,9 @@ None known.
 | ORK-007 | nodestro-runtime | RT-022 (Python 3.14) | Runtime adds 3.14 after this review; runtime depends on Orkexa |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
 | ORK-029 | nodestro-studio | run problem messages (`errors.json`, `RunProblem.tsx`) | Studio adds `run.agent.MaxToolCallsError` |
-| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `22f2910` at the 2026-11-04 audit) | Changes reach Nodestro only through a coordinated pin cascade; the 2026-11-03 audit fixes (ORK2-01 to ORK2-09, DX-01, DX-02) are pinned since runtime #96 |
+| ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows; orphan reclaim on Windows) | The managed server lives here; runtime and desktop rerun their tests |
+| ORK-036 | nodestro-runtime | chat views of stored conversations | Agree how chat views show the synthetic request |
+| Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
 
 ## Maintaining this file
 
