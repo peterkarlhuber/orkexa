@@ -300,7 +300,7 @@ None known.
 - **Priority:** P4 Optional · **Status:** Needs decision · **Refs:** `.github/dependabot.yml`, dependency round
   2026-11-05
 - **What:** Dependabot opens weekly grouped pull requests (pip minor/patch, GitHub Actions; majors of the provider
-  SDKs and pydantic are ignored and reviewed by hand) with a cooldown of 3 days (7 for majors); security updates are
+  SDKs and pydantic are ignored and reviewed by hand) with a cooldown of 3 days (7 for pip majors); security updates are
   not delayed. Auto-merge is off: `master` has no branch protection with required status checks, so GitHub would
   merge without waiting for CI. A new pip range in `pyproject.toml` changes what every Nodestro install resolves, so
   it needs CI here and the next studio pin bump.
