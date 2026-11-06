@@ -288,7 +288,7 @@ tests.test_private_storage::test_saved_histories_are_private_new_and_overwritten
 tests.test_private_storage::test_saved_histories_are_private_new_and_overwritten[ClaudeAgent]  # POSIX permission bits
 tests.test_private_storage::test_saved_history_replaces_a_symlink_instead_of_following_it  # POSIX permission bits
 tests.test_private_storage::test_the_process_umask_is_not_changed  # POSIX permission bits
-tests.test_rank_fixture::test_sqlite_with_sqlite_vec_reproduces_the_recorded_results  # could not import 'sqlite_vec': No module named 'sqlite_vec'
+tests.test_rank_fixture::test_sqlite_with_sqlite_vec_reproduces_the_recorded_results  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_a_weak_full_text_hit_no_longer_outranks_the_vector_hit  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_changing_the_embedding_model_needs_a_reindex  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_default_mode_is_hybrid_with_embeddings_and_fts_without  # sqlite-vec cannot be loaded here
