@@ -19,7 +19,10 @@ the automated tests.
 | truncation → `IncompleteResponseError` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | usage normalization | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | error mapping + redaction | SDK errors (`ClaudeAgent`) / `ProviderError` (`Agent`) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| native reasoning replay | thinking signatures | encrypted reasoning items | thought signatures | never replayed | reasoning items | Claude reasoning blocks |
+| live reasoning text (`ReasoningDelta.kind`) | summarized thinking (`summary`) | summaries only (`summary`, `reasoning_summary`) | thought summaries (`summary`, `include_thoughts`) | reasoning text (`thinking`) where the server separates it | summaries (Responses API) | Claude: `summary`; others: `thinking` |
+| reasoning phase without text (`ReasoningStatus`) | ✓ (also redacted) | ✓ (reasoning items) | ✗ | ✗ (first text marks it) | ✓ | ✓ (also redacted) |
+| native reasoning replay | thinking signatures | encrypted reasoning items | thought signatures | Ollama: reasoning text as `reasoning`; others never | reasoning items | Claude reasoning blocks |
+| multi-step tool loops (contract-tested: consecutive tool rounds with reasoning, a reasoning-only answer, the next turn) | ✓ | ✓ | ✓ | ✓ (messages checked before sending) | ✓ | ✓ |
 | save/load + continue | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | cross-provider continuation | `history_policy="convert"` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | token counting | ✓ | ✓ | ✓ | ✗ | ✗ | Claude 4.5/4.6 |

@@ -51,6 +51,45 @@ For `bedrock`, the capabilities follow from the foundation model behind the id
 their model (application inference profiles, provisioned throughput, custom and
 imported models) are `unknown`: declare what the model supports with `capabilities=`.
 
+## Model limits and output parameters
+
+`agent.limits` (a `ModelLimits`, from `Provider.limits(model)`) holds what Orkexa knows from
+the provider's model documentation: the context window, the maximum output per response,
+the accepted effort levels and the values of a provider's own thinking switch. A value
+Orkexa does not know is `None` and is never guessed; nothing is checked against it.
+
+Before a request is sent, `max_tokens` (the agent's or the turn's) above a documented
+maximum raises `ConfigurationError`, and an effort outside the documented levels raises
+`UnsupportedCapabilityError`. Values are never lowered silently. The cost bound a budget
+reserves before each request uses the same `max_tokens` (`orkexa.core.cost_bound`).
+
+| | anthropic | openai | gemini | bedrock | compatible / ollama / vllm |
+| --- | --- | --- | --- | --- | --- |
+| `max_tokens` is sent as | `max_tokens` | `max_output_tokens` | `config.max_output_tokens` | `inferenceConfig.maxTokens` | `max_tokens` or `max_completion_tokens` (`CompatibleOptions.max_tokens_param`); Ollama maps it to `num_predict` |
+| context window / max output | documented for current Claude models (e.g. 1M / 128K; Haiku 4.5: 200K / 64K) | unknown | unknown | unknown | unknown (`ModelLimits.declared(...)` for endpoint values) |
+| effort is sent as | `output_config.effort` | `reasoning.effort` | `thinking_config.thinking_level` (Gemini 3/4: low, medium, high) | `outputConfig.effort` (Claude 5.x) | `reasoning_effort` with `send_reasoning_effort=True` |
+| effort levels | per model (Opus/Sonnet 4.6: no `xhigh`; Haiku 4.5: none) | GPT-6: low to max; classic models: none; others unknown | low, medium, high | as the Claude model | unknown |
+| thinking switch | `AnthropicOptions(thinking=...)`: per model `adaptive`, `between_tools` (Sonnet 5.5), `disabled` | none | `GeminiOptions(thinking_budget=...)` on Gemini 2.5 | none | none |
+
+Ollama's context window (`num_ctx`) is a server setting (`OLLAMA_CONTEXT_LENGTH`); its
+OpenAI-compatible API takes no per-request context size.
+
+## Chat Completions messages
+
+Every Chat Completions request (`compatible`, `ollama`, `vllm` with `api="chat_completions"`) is
+checked against the protocol's message rules before it is sent; a violation is a local
+`HistoryConversionError` naming the message by position and role. `content` is `null` only in an
+assistant message with tool calls; an assistant turn without text and without tool calls (a
+reasoning model that only thought, or an empty answer) is sent as `""`. Ollama answers a `null`
+content elsewhere with HTTP 400 `invalid message content type: <nil>`.
+
+Reasoning is sent back only where the endpoint declares a field for it
+(`ChatCompletionsProvider.message_rules`, a `ChatMessageRules`): the `ollama` preset sends an
+assistant turn's reasoning as `reasoning`, which Ollama passes to the chat template as that turn's
+thinking (thinking models such as Qwen 3.x continue a tool loop with their own reasoning).
+`compatible` and `vllm` send none. Reasoning of another model or provider is never sent
+(`prepare_history`).
+
 ## What each adapter does
 
 **Anthropic** supports prompt caching, thinking modes, betas through

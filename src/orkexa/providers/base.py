@@ -18,13 +18,15 @@ from typing import Any, ClassVar
 from pydantic import SecretStr
 
 from ..content import ContentBlock
-from ..core.capabilities import ModelCapabilities
+from ..core.capabilities import ModelCapabilities, ModelLimits
 from ..core.conversion import parse_block
+from ..core.reasoning import ReasoningStream
 from ..core.types import ModelRequest, ModelResponse, Part, StreamEvent
 from ..errors import (
     AuthenticationError,
     ConfigurationError,
     InvalidRequestError,
+    InvalidRequestReason,
     MissingCredentialsError,
     MissingDependencyError,
     ProviderConnectionError,
@@ -93,6 +95,21 @@ def require_module(module: str, extra: str) -> Any:
 def _shown(url: str | None) -> str | None:
     """``url`` for ``repr`` and messages: credentials in it are redacted."""
     return None if url is None else redact(url)
+
+
+# Wording of provider 4xx answers (lowercased), see Provider.invalid_request_reason.
+_CONTEXT_LENGTH = re.compile(
+    r"context[ _-]?(length|window)|maximum context|too many tokens|prompt is too long|input is too long"
+    r"|exceeds? the (model'?s? )?(maximum|context)|input token count|token limit"
+)
+_MODEL_NOT_FOUND = re.compile(r"model\b[^.]*\bnot found|unknown model|model[^.]*does not exist|no such model")
+_MESSAGES = re.compile(
+    r"\bmessages?\b|tool_call_id|tool_use|tool_result|tooluse|toolresult|function_call|tool call"
+    r"|content type|\bcontents?\b|\brole\b"
+)
+_PARAMETER = re.compile(
+    r"parameter|unsupported|unrecognized|not supported|invalid value|extra (inputs|fields)"
+)
 
 
 @dataclass(repr=False)
@@ -200,6 +217,10 @@ class Provider(ABC):
     def capabilities(self, model: str) -> ModelCapabilities:
         """What ``model`` supports through this provider (before user overrides)."""
 
+    def limits(self, model: str) -> ModelLimits:
+        """Documented token limits and reasoning settings of ``model`` (all unknown by default)."""
+        return ModelLimits()
+
     def check(self, request: ModelRequest) -> None:  # noqa: B027 - optional hook
         """Provider- and model-specific validation before anything is sent."""
 
@@ -243,6 +264,17 @@ class Provider(ABC):
     def auto_stream(self, max_tokens: int) -> bool:
         """Whether requests should stream although nobody asked (e.g. long outputs)."""
         return False
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        """What the stream of ``model`` transmits of its reasoning (:mod:`orkexa.core.reasoning`).
+
+        ``capabilities`` are the model's capabilities with the caller's overrides (default: the
+        provider's own). The default follows the ``reasoning`` capability only: ``none`` for a
+        model that does not reason, else ``unknown`` (text is shown if it arrives, never assumed)."""
+        caps = capabilities or self.capabilities(model)
+        if caps.reasoning == "unsupported":
+            return ReasoningStream.none(f"{self.name}:{model} does not reason")
+        return ReasoningStream()
 
     def lenient_tool_input(self, request: ModelRequest, capabilities: ModelCapabilities) -> bool:
         """Whether invalid tool input goes back to the model even with ``raise_tool_errors``.
@@ -360,5 +392,23 @@ class Provider(ABC):
         if status_code is not None and (status_code >= 500 or status_code == 529):
             return ProviderServerError(message, retryable=True, **kwargs)
         if status_code is not None and 400 <= status_code < 500:
-            return InvalidRequestError(message, **kwargs)
+            reason = self.invalid_request_reason(status_code, message)
+            return InvalidRequestError(message, reason=reason, **kwargs)
         return ProviderError(message, **kwargs)
+
+    def invalid_request_reason(self, status_code: int, text: str) -> InvalidRequestReason | None:
+        """What a provider's 4xx answer rejected (:attr:`InvalidRequestError.reason`).
+
+        Read from the status and the text. The default reads the wording providers share
+        (context window, unknown model, the messages, a parameter); adapters whose API says
+        more precisely override it. ``None`` when the answer does not tell."""
+        lowered = text.lower()
+        if _CONTEXT_LENGTH.search(lowered) or status_code == 413:
+            return "context_length"
+        if status_code == 404 or _MODEL_NOT_FOUND.search(lowered):
+            return "model_not_found"
+        if _MESSAGES.search(lowered):
+            return "messages"
+        if _PARAMETER.search(lowered):
+            return "parameter"
+        return None

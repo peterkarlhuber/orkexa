@@ -4,6 +4,31 @@
 
 First release of Orkexa.
 
+### Fixed: multi-step Ollama runs with thinking models no longer fail with HTTP 400 (2026-11-06)
+
+* A turn in which a thinking model only reasoned (no text, no tool call) was kept as `content: null`; Ollama refuses
+  that ("invalid message content type: <nil>") when the next request (for example the structured-answer request
+  after the tool phase) sends it back. Assistant content is now text, `null` only with tool calls, and `""` only for a
+  turn with neither. Adapters declare their message rules (`ChatMessageRules`); Ollama gets its reasoning back in
+  the `reasoning` field. `check_chat_messages()` checks every Chat Completions request before it is sent and raises
+  `HistoryConversionError` naming the message index and role.
+* `InvalidRequestError.reason` (`messages`, `context_length`, `model_not_found`, `parameter`) and `.outline`, a
+  structure-only outline of a refused conversation (roles and part kinds, never content). Live tests against a real
+  Ollama: `pytest -m live` with `ORKEXA_OLLAMA_LIVE_URL`.
+
+### Added: model limits, resumable local setup and live reasoning for every provider (2026-11-06)
+
+* `ModelLimits` and `Provider.limits(model)` (context window, maximum output tokens, documented effort levels,
+  thinking modes and budget). A request whose `max_tokens` is above the documented maximum, or whose effort the
+  model does not document, is refused before it is sent; Anthropic refuses a thinking mode the model does not accept.
+* Live reasoning for every adapter: `ReasoningStatus` (started/finished, kind, redacted) and `ReasoningDelta.kind`
+  (`thinking` or `summary`) from Anthropic, OpenAI Responses, Gemini, Bedrock and Chat Completions endpoints
+  (Ollama, vLLM). `Provider.reasoning_stream()` declares what a model's stream transmits. OpenAI
+  `reasoning.summary` and Gemini `include_thoughts` are sent only to models that reason.
+* The Ollama runtime download resumes after an interruption (HTTP Range), checks free space first, reports its
+  phases (download, verify, unpack), names `network` and `disk_full` errors, and holds an install lock. Pull streams
+  can be cancelled at once, also while Ollama sends nothing.
+
 ### Fixed: the runtime archive cannot place links outside the runtime through other links (audit ORK3-01)
 
 * `install_runtime` checked each link of a `.tar.*` archive on its own, before any link existed, so a

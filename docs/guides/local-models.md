@@ -85,6 +85,20 @@ with ManagedOllama("~/.orkexa/local", models_dir="/Volumes/SSD/models") as serve
   secrets of the parent process). `offline=True` removes proxy variables. It stops only the process it
   started. An Ollama that already runs (for example on port 11434) is only detected with
   `detect_ollama()`, never stopped or reconfigured.
+* **Progress, resume and errors.** `install_runtime(..., progress=, phase=, cancel=)` reports the bytes
+  of the download and, with `phase`, the phases `download`, `verify` and `unpack` (`INSTALL_PHASES`).
+  The checksum also reports its progress. A download is kept in `<home>/runtime/.downloads/<archive>.partial`,
+  and an interrupted one continues with an HTTP `Range` request. A server that ignores ranges starts the
+  file over. A checksum mismatch deletes the partial file. Before downloading, the free space is checked
+  against the remaining bytes. The errors keep their cause:
+  - `network`: no connection, DNS or proxy, or a cut connection;
+  - `disk_full`: too little space, or "no space left on device";
+  - `install_running`: another process holds the advisory lock `runtime/.install.lock`;
+  - `cancelled`.
+* `OllamaClient.pull(name, cancel=event)` ends a waiting stream at once: a watcher shuts the socket
+  down when the event is set. Error lines of the stream are classified with `stream_error_code`
+  (`disk_full`, `network`, `model_missing`, otherwise `http_error`). `build_model(..., transferred=)`
+  reports the bytes of the weight downloads.
 * Ollama has **no authentication**. `OllamaClient` refuses non-loopback hosts unless
   `allow_remote=True`, never follows redirects and never sends credentials.
 

@@ -310,17 +310,21 @@ class OllamaClient:
         interruption continues. Set ``cancel`` to stop; the generator then raises
         :class:`OllamaError` (``cancelled``)."""
         name = self._name(model)
-        for item in self.http.stream(
-            "POST", "/api/pull", {"model": name, "stream": True}, timeout=timeout, model=name
-        ):
-            if cancel is not None and cancel.is_set():
-                raise OllamaError("cancelled", f"The download of {name} was cancelled")
-            yield PullProgress(
-                status=str(item.get("status") or ""),
-                digest=str(item.get("digest") or ""),
-                total=_int(item.get("total")),
-                completed=_int(item.get("completed")),
-            )
+        try:
+            body = {"model": name, "stream": True}
+            for item in self.http.stream(
+                "POST", "/api/pull", body, timeout=timeout, model=name, cancel=cancel
+            ):
+                yield PullProgress(
+                    status=str(item.get("status") or ""),
+                    digest=str(item.get("digest") or ""),
+                    total=_int(item.get("total")),
+                    completed=_int(item.get("completed")),
+                )
+        except OllamaError as exc:
+            if exc.code == "cancelled":
+                raise OllamaError("cancelled", f"The download of {name} was cancelled") from None
+            raise
 
     def delete(self, model: str) -> None:
         """Remove an installed model (blobs other models share stay)."""

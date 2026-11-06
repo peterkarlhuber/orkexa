@@ -25,11 +25,11 @@ from typing import Any, ClassVar
 
 from pydantic import SecretStr
 
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.types import ModelRequest, ModelResponse, StreamEvent
 from ..errors import ConfigurationError
 from .base import ProviderConfig
-from .chat_completions import ChatCompletionsProvider
+from .chat_completions import ChatCompletionsProvider, ChatMessageRules
 from .openai import OpenAIProvider, ResponsesCodec
 from .options import CompatibleOptions, OpenAIOptions
 
@@ -57,6 +57,9 @@ class _CompatibleResponses(OpenAIProvider):
 
     def capabilities(self, model: str) -> ModelCapabilities:
         return self.owner.capabilities(model)
+
+    def limits(self, model: str) -> ModelLimits:
+        return self.owner.limits(model)
 
     @staticmethod
     def _options(request: ModelRequest) -> OpenAIOptions:
@@ -161,6 +164,10 @@ class OllamaProvider(CompatibleProvider):
     # Ollama turns response_format into a grammar: with tools offered, the model writes JSON and
     # never calls one.
     structured_output_with_tools: ClassVar[bool] = False
+    # Ollama's OpenAI-compatible API reads an assistant message's ``reasoning`` as its thinking
+    # (openai/openai.go: ``Message.Reasoning`` -> ``api.Message.Thinking``); the chat templates of
+    # thinking models (Qwen 3.x, ...) show it again in the turns of the current tool loop.
+    message_rules: ClassVar[ChatMessageRules] = ChatMessageRules(reasoning_field="reasoning")
     preset: ClassVar[Mapping[str, Support]] = {
         "streaming": "supported",
         "system_messages": "supported",

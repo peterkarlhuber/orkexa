@@ -22,8 +22,9 @@ import json
 import re
 from typing import Any, ClassVar
 
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.conversion import document_text, search_result_text, validate_output
+from ..core.reasoning import ReasoningStream
 from ..core.schema import drop_null_optionals, strict_schema
 from ..core.types import (
     Citation,
@@ -36,6 +37,7 @@ from ..core.types import (
     Part,
     ReasoningDelta,
     ReasoningPart,
+    ReasoningStatus,
     RefusalDetails,
     ResponseCompleted,
     SearchResultPart,
@@ -64,6 +66,8 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 #: declared with ``capabilities=``.
 _REASONING_MODELS = re.compile(r"^(gpt-6|gpt-5|o\d)")
 _CLASSIC_MODELS = re.compile(r"^(gpt-4|gpt-3\.5|chatgpt-4o)")
+#: GPT-6 models document every effort level from low to max.
+_ALL_EFFORT_MODELS = re.compile(r"^gpt-6")
 _MULTIMODAL_MODELS = re.compile(r"^(gpt-6|gpt-5|gpt-4o|gpt-4\.1|o3|o4)")
 
 
@@ -422,6 +426,14 @@ class OpenAIProvider(Provider):
             batch="unsupported",
         )
 
+    def limits(self, model: str) -> ModelLimits:
+        """Reasoning settings by model family; Orkexa documents no token limits for OpenAI models."""
+        if _ALL_EFFORT_MODELS.match(model):
+            return ModelLimits(efforts=("low", "medium", "high", "xhigh", "max"), thinking_modes=())
+        if _CLASSIC_MODELS.match(model):
+            return ModelLimits(efforts=(), thinking_modes=())
+        return ModelLimits(thinking_modes=())
+
     def check(self, request: ModelRequest) -> None:
         for tool in request.tools:
             openai_tool(tool)  # raises ToolSchemaError for schemas strict mode cannot express
@@ -439,6 +451,18 @@ class OpenAIProvider(Provider):
 
     def server_tool_name(self, definition: Mapping[str, Any]) -> str:
         return str(definition.get("name") or definition.get("server_label") or definition.get("type") or "")
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        support = (capabilities or self.capabilities(model)).reasoning
+        if support == "unsupported":
+            return ReasoningStream.none(f"{model} is not a reasoning model")
+        # The Responses API never returns the reasoning itself; summaries only with
+        # ``OpenAIOptions(reasoning_summary=...)``. Reasoning items mark the phase in any case.
+        return ReasoningStream(
+            text="summary" if support == "supported" else "unknown",
+            status=True,
+            request_option="reasoning_summary",
+        )
 
     @staticmethod
     def _options(request: ModelRequest) -> OpenAIOptions:
@@ -466,11 +490,13 @@ class OpenAIProvider(Provider):
         reasoning: dict[str, Any] = {}
         if request.effort is not None:
             reasoning["effort"] = request.effort
-        if options.reasoning_summary is not None:
+        caps = self.request_capabilities(request)
+        if options.reasoning_summary is not None and caps.reasoning != "unsupported":
+            # Summaries are display information: a model that does not reason gets no request
+            # for them (the API would refuse the whole request).
             reasoning["summary"] = options.reasoning_summary
         if reasoning:
             args["reasoning"] = reasoning
-        caps = self.request_capabilities(request)
         if options.include_encrypted_reasoning and not options.store and caps.reasoning == "supported":
             args["include"] = ["reasoning.encrypted_content"]
         if options.service_tier is not None:
@@ -630,11 +656,24 @@ class _ResponsesStream:
             self.unfinished = event.response
         elif kind == "response.output_text.delta":
             yield TextDelta(str(event.delta))
-        elif kind in ("response.reasoning_summary_text.delta", "response.reasoning_text.delta"):
+        elif kind == "response.reasoning_summary_text.delta":
+            # OpenAI never exposes the reasoning itself, only summaries (``reasoning_summary``).
             if event.delta:
-                yield ReasoningDelta(str(event.delta))
+                yield ReasoningDelta(str(event.delta), kind="summary")
+        elif kind == "response.reasoning_text.delta":
+            # Raw reasoning text: only servers of open-weight models (gpt-oss) send it.
+            if event.delta:
+                yield ReasoningDelta(str(event.delta), kind="thinking")
+        elif kind == "response.reasoning_summary_part.added":
+            if int(getattr(event, "summary_index", 0) or 0) > 0:
+                yield ReasoningDelta("\n\n", kind="summary")  # summary parts are paragraphs
+        elif kind == "response.output_item.done":
+            if getattr(event.item, "type", None) == "reasoning":
+                yield ReasoningStatus("finished", kind="summary")
         elif kind == "response.output_item.added":
             item = event.item
+            if getattr(item, "type", None) == "reasoning":
+                yield ReasoningStatus("started", kind="summary")
             if getattr(item, "type", None) == "function_call":
                 self.calls[str(item.id)] = str(item.call_id)
                 yield ToolCallStarted(

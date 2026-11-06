@@ -29,7 +29,9 @@ from ..core.types import (
     ModelResponse,
     Part,
     ReasoningDelta,
+    ReasoningKind,
     ReasoningPart,
+    ReasoningStatus,
     ResponseCompleted,
     StopReason,
     StreamEvent,
@@ -68,11 +70,22 @@ def response(
     )
 
 
-def text(value: str, *, stop_reason: StopReason = "end_turn", reasoning: str | None = None) -> ModelResponse:
-    """A text answer (optionally preceded by visible reasoning)."""
+def text(
+    value: str,
+    *,
+    stop_reason: StopReason = "end_turn",
+    reasoning: str | None = None,
+    reasoning_kind: ReasoningKind = "thinking",
+) -> ModelResponse:
+    """A text answer (optionally preceded by visible reasoning of ``reasoning_kind``; ``""`` is a
+    reasoning phase without transmitted text, like Anthropic's omitted thinking)."""
     parts: list[Part] = []
     if reasoning is not None:
-        parts.append(ReasoningPart(text=reasoning))
+        parts.append(
+            ReasoningPart(text=reasoning or None, redacted=not reasoning).with_native(
+                "fake", {"kind": reasoning_kind}
+            )
+        )
     parts.append(TextPart(text=value))
     return response(parts, stop_reason=stop_reason)
 
@@ -225,8 +238,12 @@ def _events(final: ModelResponse) -> Iterator[StreamEvent]:
             for piece in (part.text[:middle], part.text[middle:]):
                 if piece:
                     yield TextDelta(piece)
-        elif isinstance(part, ReasoningPart) and part.text:
-            yield ReasoningDelta(part.text)
+        elif isinstance(part, ReasoningPart):
+            kind = part.native("fake").get("kind", "thinking")
+            yield ReasoningStatus("started", kind=kind, redacted=part.redacted)
+            if part.text:
+                yield ReasoningDelta(part.text, kind=kind)
+            yield ReasoningStatus("finished", kind=kind)
         elif isinstance(part, ToolCallPart):
             yield ToolCallStarted(call_id=part.id, name=part.name, index=index)
             yield ToolCallDelta(call_id=part.id, index=index, arguments_delta=json.dumps(part.arguments))

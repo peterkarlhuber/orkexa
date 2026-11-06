@@ -7,13 +7,41 @@ is set, or (Anthropic, `stream=None`) when `max_tokens` exceeds 16,000. The comm
 history of a streamed turn is identical to the non-streamed one (contract-tested for
 every adapter).
 
+## Live reasoning
+
+Two events carry a model's reasoning while it streams, in the order the provider sends them
+(between, before or after text and tool call events):
+
+- `ReasoningStatus(state, kind, redacted)`: a reasoning phase `started` or `finished`. Emitted
+  where the stream marks reasoning as such, also when no text is transmitted, so an
+  interface can show that the model is thinking. `redacted=True`: the provider sent the
+  reasoning only encrypted or omitted it (Anthropic `redacted_thinking`, Bedrock
+  `redactedContent`).
+- `ReasoningDelta(text, kind)`: reasoning text **the provider transmitted**. `kind` is
+  `"thinking"` (the model's reasoning text as generated) or `"summary"` (a summary the provider
+  writes of reasoning it keeps to itself). Orkexa never generates or fills in reasoning text.
+
+`adapter.reasoning_stream(model, capabilities=None)` declares what a model's stream transmits
+(`orkexa.ReasoningStream`: `text` is `thinking`, `summary`, `none` or `unknown`; `status`, the
+`request_option` that asks for the text, and the `reason` when there is none):
+
+| Provider | Text while streaming | Phase marked without text | How to get the text |
+| --- | --- | --- | --- |
+| Anthropic (Claude 4 and later) | `summary` (summarized thinking) | yes (thinking blocks; `redacted_thinking`) | `AnthropicOptions(thinking_display="summarized")`; `"omitted"` sends blocks without text |
+| OpenAI Responses | `summary` (reasoning summaries); the reasoning itself is never exposed | yes (reasoning items) | `OpenAIOptions(reasoning_summary="auto")` (may require a verified organization) |
+| Gemini 2.5, 3, 4 | `summary` (thought summaries) | no (`thoughts_token_count` afterwards) | `GeminiOptions(include_thoughts=True)` |
+| Bedrock, Claude models | `summary` | yes (`reasoningContent`, also redacted) | thinking enabled through `additional_model_request_fields` |
+| Bedrock, other reasoning models | `thinking` (DeepSeek, gpt-oss) when the model sends `reasoningContent` | yes | none |
+| Ollama, vLLM, compatible | `thinking` (`reasoning`, `reasoning_content`, `thinking` deltas) for models declared `reasoning: supported`, else `unknown` | no (the first text marks the phase) | the server separates it (Ollama: thinking models; vLLM: a reasoning parser) |
+| models without reasoning | `none` | no | — |
+
 ## Hooks
 
 | Hook | Receives |
 | --- | --- |
 | `on_text(text)` | streamed text deltas |
-| `on_thinking(text)` | streamed reasoning deltas (Anthropic thinking, OpenAI reasoning summaries, Gemini thoughts) |
-| `on_event(event)` | neutral events: `TextDelta`, `ReasoningDelta`, `ToolCallStarted`, `ToolCallDelta`, `ResponseCompleted`, `UsageReported`, `TurnCompleted`, `TurnFailed` |
+| `on_thinking(text)` | streamed reasoning text the provider transmitted (see [Live reasoning](#live-reasoning)) |
+| `on_event(event)` | neutral events: `TextDelta`, `ReasoningDelta`, `ReasoningStatus`, `ToolCallStarted`, `ToolCallDelta`, `ResponseCompleted`, `UsageReported`, `TurnCompleted`, `TurnFailed` |
 | `on_request(args)` | the native request arguments |
 | `on_response(response)` | the native SDK response |
 | `before_tool(call)` | `None`/`True` runs the call, a string/`False` denies it (the reason goes back to the model) |
@@ -145,7 +173,11 @@ requests (`Evaluator.evaluate_many(batch=True)`) cannot be suspended: there,
 | no API key found (every agent and provider) | `MissingCredentialsError` (an `AuthenticationError`) |
 
 `ProviderError` has `provider`, `status_code`, `request_id` and `retryable`; its message
-is redacted (API keys never appear) and names the SDK exception type. The SDK exception
+is redacted (API keys never appear) and names the SDK exception type. `InvalidRequestError` also has `reason` (`messages`, `context_length`, `model_not_found`,
+`parameter` or `None`, read from the status and the provider's answer, see
+`Provider.invalid_request_reason()`) and, for `messages`, `outline`: the refused conversation as
+roles and part kinds (`#3 assistant[reasoning]`), never its content; the message ends with it.
+An invalid request is never retryable. The SDK exception
 itself is not attached: `__cause__` and `__context__` are `None`, so a traceback or
 `logging.exception()` cannot print the request or its headers.
 `ClaudeAgent` raises the Anthropic SDK exceptions unchanged. The

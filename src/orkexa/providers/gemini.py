@@ -23,8 +23,9 @@ from copy import deepcopy
 import re
 from typing import Any, ClassVar
 
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.conversion import document_text, search_result_text, validate_output
+from ..core.reasoning import ReasoningStream
 from ..core.schema import inline_refs
 from ..core.types import (
     DocumentPart,
@@ -36,6 +37,7 @@ from ..core.types import (
     Part,
     ReasoningDelta,
     ReasoningPart,
+    ReasoningStatus,
     RefusalDetails,
     ResponseCompleted,
     SearchResultPart,
@@ -71,6 +73,8 @@ _REFUSALS = frozenset(
 )
 _THINKING_LEVEL = re.compile(r"^(models/)?gemini-[34]([.-]|$)")  # Gemini 3.x and 4 (e.g. gemini-4-argon)
 _GEMINI_2 = re.compile(r"^(models/)?gemini-(2|1)\.")
+#: Gemini 2.5 models think with a token budget (``thinking_budget``); older ones do not think.
+_THINKING_BUDGET = re.compile(r"^(models/)?gemini-2\.5([.-]|$)")
 _RESERVED = frozenset(
     {
         "system_instruction",
@@ -212,6 +216,25 @@ class GeminiProvider(Provider):
             batch="unsupported",
             caching="supported",
         )
+
+    def limits(self, model: str) -> ModelLimits:
+        """Reasoning settings by model generation; Orkexa documents no token limits for Gemini models."""
+        if _THINKING_LEVEL.match(model):
+            return ModelLimits(efforts=tuple(_LEVELS), thinking_modes=(), thinking_budget=False)
+        if _GEMINI_2.match(model):
+            return ModelLimits(
+                efforts=(), thinking_modes=(), thinking_budget=bool(_THINKING_BUDGET.match(model))
+            )
+        return ModelLimits(thinking_modes=())
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        if _THINKING_LEVEL.match(model) or _THINKING_BUDGET.match(model):
+            # Thought summaries only with ``GeminiOptions(include_thoughts=True)``; without them the
+            # stream has no sign of the thinking phase (only ``thoughts_token_count`` afterwards).
+            return ReasoningStream(text="summary", request_option="include_thoughts")
+        if _GEMINI_2.match(model):
+            return ReasoningStream.none(f"{model} does not think")
+        return ReasoningStream(request_option="include_thoughts")
 
     def check(self, request: ModelRequest) -> None:
         options = self._options(request)
@@ -423,7 +446,8 @@ class GeminiProvider(Provider):
             thinking["thinking_level"] = _LEVELS[request.effort]
         if options.thinking_budget is not None:
             thinking["thinking_budget"] = options.thinking_budget
-        if options.include_thoughts:
+        if options.include_thoughts and self.reasoning_stream(request.model).text != "none":
+            # Thought summaries are display information: not asked of a model that does not think.
             thinking["include_thoughts"] = True
         if thinking:
             config["thinking_config"] = thinking
@@ -548,6 +572,7 @@ class GeminiProvider(Provider):
         state = _GeminiStream()
         for chunk in self.client.models.generate_content_stream(**native):
             yield from state.translate(chunk)
+        yield from state.close()
         yield ResponseCompleted(state.final(self, request))
 
     async def astream(self, native: dict[str, Any], request: ModelRequest) -> AsyncIterator[StreamEvent]:
@@ -555,6 +580,8 @@ class GeminiProvider(Provider):
         async for chunk in await self.client.aio.models.generate_content_stream(**native):
             for event in state.translate(chunk):
                 yield event
+        for event in state.close():
+            yield event
         yield ResponseCompleted(state.final(self, request))
 
     # ---- token counting and errors ----------------------------------------------------------
@@ -611,6 +638,8 @@ class _GeminiStream:
         self.block: str | None = None
         self.calls = 0
         self.grounding: Any = None
+        #: A thought summary is being streamed (between its first part and the next other part).
+        self.thinking = False
 
     def translate(self, chunk: Any) -> Iterator[StreamEvent]:
         self.usage = _value(chunk, "usage_metadata") or self.usage
@@ -627,6 +656,9 @@ class _GeminiStream:
         for raw in _value(_value(candidate, "content"), "parts") or []:
             data = raw if isinstance(raw, dict) else raw.model_dump(mode="json", exclude_none=True)
             if data.get("function_call"):
+                if self.thinking:
+                    self.thinking = False
+                    yield ReasoningStatus("finished", kind="summary")
                 call = data["function_call"]
                 call_id = str(call.get("id") or f"gemini_call_{len(self.parts)}_{call.get('name')}")
                 yield ToolCallStarted(call_id=call_id, name=str(call.get("name", "")), index=len(self.parts))
@@ -637,8 +669,15 @@ class _GeminiStream:
                 continue
             text = data.get("text")
             if isinstance(text, str):
+                if data.get("thought") and not self.thinking:
+                    self.thinking = True
+                    yield ReasoningStatus("started", kind="summary")
+                elif not data.get("thought") and self.thinking:
+                    self.thinking = False
+                    yield ReasoningStatus("finished", kind="summary")
                 if text:
-                    yield ReasoningDelta(text) if data.get("thought") else TextDelta(text)
+                    # Gemini returns thought summaries (``include_thoughts``), never the thoughts.
+                    yield ReasoningDelta(text, kind="summary") if data.get("thought") else TextDelta(text)
                 previous = self.parts[-1] if self.parts else None
                 if (
                     previous is not None
@@ -654,6 +693,12 @@ class _GeminiStream:
                 self.parts[-1].setdefault("thought_signature", data["thought_signature"])
                 continue
             self.parts.append(data)
+
+    def close(self) -> Iterator[StreamEvent]:
+        """End a thought summary the stream ended in."""
+        if self.thinking:
+            self.thinking = False
+            yield ReasoningStatus("finished", kind="summary")
 
     def final(self, provider: GeminiProvider, request: ModelRequest) -> ModelResponse:
         return provider.build(

@@ -2,19 +2,28 @@
 
 Used by :class:`~orkexa.providers.compatible.CompatibleProvider` (and its Ollama and
 vLLM presets) in the default ``api="chat_completions"`` mode. The protocol has no
-field for replaying reasoning, so reasoning a server returns (``reasoning_content``)
-is shown in streaming and kept in the history, but not sent back.
+standard field for replaying reasoning: reasoning a server returns (``reasoning_content``,
+``reasoning``) is shown in streaming and kept in the history, and sent back only to
+endpoints that declare a field for it (:class:`ChatMessageRules`).
+
+Every encoded conversation is checked against the protocol's message rules before it is
+sent (:func:`check_chat_messages`): a message the protocol does not allow (for example an
+assistant message with ``content: null`` and no tool calls, which Ollama answers with
+HTTP 400 ``invalid message content type: <nil>``) is a local
+:class:`~orkexa.errors.HistoryConversionError` that names the message, never a request.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 import json
 from typing import Any, ClassVar
 
 from ..core.capabilities import ModelCapabilities
 from ..core.conversion import document_text, search_result_text, validate_output
+from ..core.reasoning import ReasoningStream
 from ..core.schema import drop_null_optionals, strict_schema
 from ..core.types import (
     DocumentPart,
@@ -26,6 +35,7 @@ from ..core.types import (
     Part,
     ReasoningDelta,
     ReasoningPart,
+    ReasoningStatus,
     RefusalDetails,
     ResponseCompleted,
     SearchResultPart,
@@ -45,7 +55,81 @@ from ..errors import ConfigurationError, HistoryConversionError, UnexpectedRespo
 from .base import Provider, require_module
 from .options import CompatibleOptions
 
-__all__ = ["ChatCompletionsProvider"]
+__all__ = ["ChatCompletionsProvider", "ChatMessageRules", "check_chat_messages"]
+
+
+@dataclass(frozen=True)
+class ChatMessageRules:
+    """How an endpoint reads the messages of a Chat Completions request (declared per adapter).
+
+    Attributes:
+        reasoning_field: The field of an assistant message in which the endpoint accepts the
+            model's earlier reasoning, so a reasoning model continues a tool loop with its own
+            thoughts (Ollama: ``reasoning``, which it passes to the chat template as the
+            message's thinking). ``None``: the endpoint has no such field and reasoning is not
+            sent back (the protocol default).
+    """
+
+    reasoning_field: str | None = None
+
+
+_ROLES = frozenset({"system", "developer", "user", "assistant", "tool"})
+
+
+def _problem(index: int, role: object, text: str) -> HistoryConversionError:
+    return HistoryConversionError(f"Chat Completions message {index} ({role}): {text}")
+
+
+def check_chat_messages(messages: Sequence[dict[str, Any]]) -> None:
+    """Refuse an encoded conversation the Chat Completions protocol does not allow.
+
+    The rules are the protocol's own, the same for every server: ``content`` is a string or
+    a list of typed parts; it may be ``null`` (or missing) only in an assistant message with
+    tool calls; every tool call has an id and a function name; every tool message answers a
+    tool call of the assistant message before it. The error names the message by position
+    and role, never its content.
+    """
+    open_calls: set[str] = set()
+    for index, message in enumerate(messages):
+        role = message.get("role")
+        if role not in _ROLES:
+            raise _problem(index, role, "unknown role")
+        content = message.get("content")
+        calls = message.get("tool_calls")
+        if calls is not None and (role != "assistant" or not isinstance(calls, list)):
+            raise _problem(index, role, "tool_calls must be a list on an assistant message")
+        if content is None:
+            if role != "assistant" or not calls:
+                raise _problem(
+                    index, role, "content is missing; only an assistant message with tool calls may omit it"
+                )
+        elif isinstance(content, list):
+            if not content and role != "assistant":
+                raise _problem(index, role, "content is an empty list")
+            if not all(isinstance(item, dict) and isinstance(item.get("type"), str) for item in content):
+                raise _problem(index, role, "every content part needs a type")
+        elif not isinstance(content, str):
+            raise _problem(index, role, f"content of type {type(content).__name__} is not allowed")
+        if role == "tool":
+            call_id = message.get("tool_call_id")
+            if not isinstance(call_id, str) or not call_id:
+                raise _problem(index, role, "a tool message needs the tool_call_id it answers")
+            if call_id not in open_calls:
+                raise _problem(index, role, "it answers no tool call of the assistant message before it")
+            open_calls.discard(call_id)
+            continue
+        open_calls = set()
+        for call in calls or []:
+            function = call.get("function") if isinstance(call, dict) else None
+            call_id = call.get("id") if isinstance(call, dict) else None
+            if not isinstance(call_id, str) or not call_id:
+                raise _problem(index, role, "a tool call has no id")
+            if not isinstance(function, dict) or not function.get("name"):
+                raise _problem(index, role, "a tool call has no function name")
+            if not isinstance(function.get("arguments"), str):
+                raise _problem(index, role, "tool call arguments must be a JSON string")
+            open_calls.add(call_id)
+
 
 _FINISH: dict[str, StopReason] = {
     "stop": "end_turn",
@@ -119,6 +203,8 @@ class ChatCompletionsProvider(Provider):
 
     name: ClassVar[str] = "chat_completions"
     options_type: ClassVar[type | None] = CompatibleOptions
+    #: How the endpoint reads replayed messages (presets declare what their server accepts).
+    message_rules: ClassVar[ChatMessageRules] = ChatMessageRules()
 
     @staticmethod
     def _options(request: ModelRequest) -> CompatibleOptions:
@@ -132,6 +218,14 @@ class ChatCompletionsProvider(Provider):
 
     def capabilities(self, model: str) -> ModelCapabilities:
         return ModelCapabilities()
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        support = (capabilities or self.capabilities(model)).reasoning
+        if support == "unsupported":
+            return ReasoningStream.none(f"{model} does not reason (as declared for this endpoint)")
+        # A reasoning model's server streams its reasoning text as it is generated (Ollama:
+        # ``reasoning``; vLLM: ``reasoning_content``); servers that do not separate it send none.
+        return ReasoningStream(text="thinking" if support == "supported" else "unknown")
 
     def check(self, request: ModelRequest) -> None:
         options = self._options(request)
@@ -241,6 +335,7 @@ class ChatCompletionsProvider(Provider):
 
     def _assistant(self, message: Message) -> dict[str, Any]:
         texts: list[str] = []
+        thoughts: list[str] = []
         calls: list[dict[str, Any]] = []
         for part in message.parts():
             if isinstance(part, TextPart):
@@ -257,10 +352,18 @@ class ChatCompletionsProvider(Provider):
                     }
                 )
             elif isinstance(part, ReasoningPart):
-                continue  # Chat Completions has no field to replay reasoning
+                if part.text and not part.redacted:
+                    thoughts.append(part.text)
             else:
                 raise HistoryConversionError(f"A {part.type!r} part cannot be sent to {self.name}")
-        encoded: dict[str, Any] = {"role": "assistant", "content": "\n".join(texts) if texts else None}
+        # The protocol allows ``content: null`` only next to tool calls. A turn without visible
+        # text and without tool calls (a reasoning model that only thought, or an empty answer)
+        # said nothing, which is the empty string; with tool calls ``null`` stays the canonical form.
+        content: str | None = "\n".join(texts) if texts else (None if calls else "")
+        encoded: dict[str, Any] = {"role": "assistant", "content": content}
+        field = self.message_rules.reasoning_field
+        if field and thoughts:
+            encoded[field] = "\n".join(thoughts)
         if calls:
             encoded["tool_calls"] = calls
         return encoded
@@ -291,6 +394,7 @@ class ChatCompletionsProvider(Provider):
                     },
                 }
         args["messages"] = self.messages(request, system)
+        check_chat_messages(args["messages"])
         args[options.max_tokens_param] = request.max_tokens
         if request.tools:
             strict = caps.strict_tool_schemas == "supported"
@@ -418,6 +522,7 @@ class ChatCompletionsProvider(Provider):
             close = getattr(stream, "close", None)
             if close is not None:
                 close()
+        yield from state.close()
         yield ResponseCompleted(state.final(self, request))
 
     async def astream(self, native: dict[str, Any], request: ModelRequest) -> AsyncIterator[StreamEvent]:
@@ -431,6 +536,8 @@ class ChatCompletionsProvider(Provider):
             close = getattr(stream, "close", None)
             if close is not None:
                 await close()
+        for event in state.close():
+            yield event
         yield ResponseCompleted(state.final(self, request))
 
     def map_error(self, exc: BaseException) -> BaseException | None:
@@ -455,11 +562,34 @@ class _ChatStream:
         self.reasoning: list[str] = []
         self.refusal: list[str] = []
         self.calls: dict[int, dict[str, Any]] = {}
+        #: The entry that a server's tool call index currently continues (see :meth:`_slot`).
+        self.aliases: dict[int, int] = {}
         self.finish: str | None = None
         self.usage: Any = None
         self.model: str | None = None
         self.id: str | None = None
         self.service_tier: str | None = None
+        #: Reasoning text is being streamed (until the first answer text or tool call).
+        self.thinking = False
+
+    def _slot(self, index: int, call_id: Any) -> int:
+        """The entry a tool call delta belongs to.
+
+        Deltas are merged by ``index``; servers that send every call complete in its own chunk
+        may number each one ``0``. A delta that names a new id at an index whose call already
+        has another id starts a call of its own, so two calls are never merged into one."""
+        slot = self.aliases.get(index, index)
+        entry = self.calls.get(slot)
+        if call_id and entry is not None and entry["id"] and entry["id"] != call_id:
+            slot = max(self.calls) + 1
+            self.aliases[index] = slot
+        return slot
+
+    def close(self) -> Iterator[StreamEvent]:
+        """End the reasoning phase (answer text or a tool call follows, or the stream ended)."""
+        if self.thinking:
+            self.thinking = False
+            yield ReasoningStatus("finished", kind="thinking")
 
     def translate(self, chunk: Any) -> Iterator[StreamEvent]:
         self.model = _get(chunk, "model") or self.model
@@ -471,19 +601,26 @@ class _ChatStream:
             delta = _get(choice, "delta")
             if _get(choice, "finish_reason"):
                 self.finish = _get(choice, "finish_reason")
+            # Servers of open-weight models send the reasoning text itself: ``reasoning_content``
+            # (vLLM, DeepSeek), ``reasoning`` (Ollama, newer vLLM) or ``thinking``.
+            thought = _get(delta, "reasoning_content") or _get(delta, "reasoning") or _get(delta, "thinking")
+            if thought and isinstance(thought, str):
+                if not self.thinking:
+                    self.thinking = True
+                    yield ReasoningStatus("started", kind="thinking")
+                self.reasoning.append(thought)
+                yield ReasoningDelta(thought, kind="thinking")
             text = _get(delta, "content")
+            if text or _get(delta, "tool_calls"):
+                yield from self.close()
             if text:
                 self.content.append(text)
                 yield TextDelta(text)
-            thought = _get(delta, "reasoning_content") or _get(delta, "reasoning")
-            if thought:
-                self.reasoning.append(thought)
-                yield ReasoningDelta(thought)
             refusal = _get(delta, "refusal")
             if refusal:
                 self.refusal.append(refusal)
             for call in _get(delta, "tool_calls") or []:
-                index = int(_get(call, "index") or 0)
+                index = self._slot(int(_get(call, "index") or 0), _get(call, "id"))
                 entry = self.calls.setdefault(index, {"id": None, "name": "", "arguments": ""})
                 function = _get(call, "function")
                 if _get(call, "id"):

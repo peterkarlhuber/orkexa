@@ -33,15 +33,18 @@ from .agent import Agent, RefusalMode, ToolCall
 from .async_agent import AsyncAgent
 from .claude import AsyncClaudeAgent, ClaudeAgent, Fallbacks, ThinkingDisplay, ThinkingMode
 from .content import ContentBlock, Prompt, ToolContent, document, image, uploaded_file
-from .core.capabilities import ModelCapabilities, Support
+from .core.capabilities import ModelCapabilities, ModelLimits, Support
 from .core.checkpoint import CheckpointClaims, TurnCheckpoint, WaitingCall
 from .core.conversion import HistoryConversionWarning
+from .core.reasoning import ReasoningStream, ReasoningText
 from .core.types import (
     Effort,
     Message,
     ModelRequest,
     ModelResponse,
     ReasoningDelta,
+    ReasoningKind,
+    ReasoningStatus,
     ResponseCompleted,
     StreamEvent,
     TextDelta,
@@ -62,6 +65,7 @@ from .errors import (
     HistoryConversionError,
     IncompleteResponseError,
     InvalidRequestError,
+    InvalidRequestReason,
     MaxToolCallsError,
     MaxToolRoundsError,
     MemoryToolError,
@@ -154,6 +158,7 @@ __all__ = [
     "IncompleteResponseError",
     "Index",
     "InvalidRequestError",
+    "InvalidRequestReason",
     "LocalFileStore",
     "MaxToolCallsError",
     "MaxToolRoundsError",
@@ -163,6 +168,7 @@ __all__ = [
     "MissingCredentialsError",
     "MissingDependencyError",
     "ModelCapabilities",
+    "ModelLimits",
     "ModelPricing",
     "ModelRequest",
     "ModelResponse",
@@ -176,6 +182,10 @@ __all__ = [
     "ProviderServerError",
     "RateLimitError",
     "ReasoningDelta",
+    "ReasoningKind",
+    "ReasoningStatus",
+    "ReasoningStream",
+    "ReasoningText",
     "Refinement",
     "RefusalError",
     "RefusalMode",

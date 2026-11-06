@@ -24,7 +24,7 @@ from orkexa import (
 from orkexa.core.conversion import dump_history
 
 from ..helpers import add, async_add, lookup
-from .harness import EXPECTED_USAGE, HARNESSES, SECRET, Harness, OpenAIHarness
+from .harness import EXPECTED_USAGE, HARNESSES, SECRET, AnthropicHarness, Harness, OpenAIHarness
 
 pytestmark = pytest.mark.filterwarnings("ignore::orkexa.HistoryConversionWarning")
 
@@ -232,3 +232,53 @@ def test_agent_class_is_shared() -> None:
     agents = [h().agent([]) for h in HARNESSES]
     assert {type(a) for a in agents} == {Agent}
     assert len({a.adapter.name for a in agents}) == len(agents)
+
+
+# ---- multi-step agent runs (Ollama 400 "invalid message content type: <nil>") ----------------
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_consecutive_tool_rounds_with_reasoning_then_a_reasoning_only_answer(
+    harness: Harness, stream: bool
+) -> None:
+    """Three tool rounds, each with reasoning and no text, an answer with only reasoning, then
+    the next turn: every request is one the provider's server accepts."""
+    rounds = [harness.tool_calls([(f"c{n}", "add", {"a": n, "b": 1})]) for n in range(1, 4)]
+    agent = harness.agent(
+        [*rounds, harness.thinking_only(), harness.text("ok")],
+        tools=[add],
+        **({"stream": True} if stream else {}),
+    )
+    assert agent.ask("add three times") == ""
+    assert agent.ask("and now?") == "ok"
+    calls = harness.script.calls
+    assert len(calls) == 5
+    for call in calls:
+        harness.check_wire(call)
+    for number, call in enumerate(calls[1:4], start=1):
+        assert harness.tool_results(call)[-1][:2] == (f"c{number}", str(number + 1))
+    assert harness.native_replayed(calls[3])
+    assert [m.role for m in agent.messages][-3:] == ["assistant", "user", "assistant"]
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end(
+    harness: Harness, stream: bool
+) -> None:
+    """The flow of an agent with tools and an output format. Where the provider takes tools and
+    the format in separate requests (Ollama), the tool phase may end with reasoning only; the
+    request for the structured answer then repeats that turn in a form the server accepts."""
+    if stream and isinstance(harness, AnthropicHarness):
+        pytest.skip("the scripted Anthropic stream has no parsed output (covered by tests/anthropic)")
+    agent = harness.agent([], tools=[add], output_format=City, **({"stream": True} if stream else {}))
+    separate = not agent.adapter.structured_output_with_tools
+    answer = harness.text('{"name": "Graz", "population": 3}')
+    rounds = [
+        harness.tool_calls([("c1", "add", {"a": 1, "b": 1})]),
+        harness.tool_calls([("c2", "add", {"a": 1, "b": 2})]),
+    ]
+    harness.script.responses = [*rounds, *([harness.thinking_only()] if separate else []), answer]
+    assert agent.ask("How many?") == City(name="Graz", population=3)
+    for call in harness.script.calls:
+        harness.check_wire(call)
+    assert len(harness.script.calls) == (4 if separate else 3)

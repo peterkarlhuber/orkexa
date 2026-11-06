@@ -7,13 +7,21 @@ release's ``sha256sum.txt``). :func:`install_runtime` installs from a local arch
 must match before anything is unpacked, and unpacking refuses absolute paths, ``..``,
 links that leave the target, device files and oversized archives. Nothing is installed
 system-wide and no installer script is run: the runtime lives in ``<home>/runtime/<version>``.
+
+A download that breaks (network, cancel, a full disk) keeps its partial archive in
+``<home>/runtime/.downloads`` and continues from there the next time (an HTTP range request);
+the SHA-256 check decides as before. One installation runs at a time per ``home`` (a lock file),
+also across processes.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+import contextlib
 from dataclasses import dataclass
+import errno
 import hashlib
+import http.client
 import os
 from pathlib import Path, PurePosixPath
 import platform
@@ -22,12 +30,14 @@ import stat
 import tarfile
 import tempfile
 import threading
+import urllib.error
 import urllib.request
 import zipfile
 
 from ._http import OllamaError
 
 __all__ = [
+    "INSTALL_PHASES",
     "OLLAMA_VERSION",
     "RUNTIME_ARTIFACTS",
     "RuntimeArtifact",
@@ -43,6 +53,11 @@ _RELEASE = f"https://github.com/ollama/ollama/releases/download/v{OLLAMA_VERSION
 _MAX_ARCHIVE = 4 * 1024**3
 _MAX_UNPACKED = 8 * 1024**3
 _MAX_MEMBERS = 20_000
+_DOWNLOADS = ".downloads"
+_LOCK = ".install.lock"
+
+#: The phases :func:`install_runtime` reports through ``phase`` (``download`` only without an archive).
+INSTALL_PHASES = ("download", "verify", "unpack")
 
 
 @dataclass(frozen=True)
@@ -138,12 +153,36 @@ def installed_runtime(home: Path, version: str = OLLAMA_VERSION, system: str | N
     return find_binary(root, system) if (root / ".complete").is_file() else None
 
 
-def _sha256(path: Path) -> str:
+def _sha256(
+    path: Path,
+    progress: Callable[[int, int | None], None] | None = None,
+    cancel: threading.Event | None = None,
+) -> str:
     digest = hashlib.sha256()
+    total = path.stat().st_size
+    done = 0
     with path.open("rb") as handle:
         while block := handle.read(4 * 1024 * 1024):
+            if cancel is not None and cancel.is_set():
+                raise OllamaError("cancelled", "The installation was cancelled")
             digest.update(block)
+            done += len(block)
+            if progress is not None:
+                progress(done, total)
     return digest.hexdigest()
+
+
+def _free_bytes(folder: Path) -> int | None:
+    try:
+        return shutil.disk_usage(folder).free
+    except OSError:
+        return None
+
+
+def _disk_full(exc: OSError, where: Path) -> OllamaError | None:
+    if exc.errno in (errno.ENOSPC, getattr(errno, "EDQUOT", -1)):
+        return OllamaError("disk_full", f"No space left on the drive of {where}")
+    return None
 
 
 def _download(
@@ -152,24 +191,93 @@ def _download(
     progress: Callable[[int, int | None], None] | None,
     cancel: threading.Event | None,
 ) -> None:
-    request = urllib.request.Request(artifact.url, headers={"User-Agent": "orkexa-local"})
-    with urllib.request.urlopen(request, timeout=60) as response, target.open("wb") as out:
+    """Download the archive to ``target``, continuing a partial file there (range request).
+
+    Raises ``network`` when the release page cannot be reached or the connection breaks, ``disk_full``
+    when the drive has less free space than the rest of the archive (checked before, and when writing
+    fails), ``cancelled`` and ``too_large``. The partial file stays for the next attempt."""
+    have = target.stat().st_size if target.is_file() else 0
+    headers = {"User-Agent": "orkexa-local"}
+    if have:
+        headers["Range"] = f"bytes={have}-"
+    request = urllib.request.Request(artifact.url, headers=headers)
+    try:
+        response = urllib.request.urlopen(request, timeout=60)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 416 and have:  # the partial file is complete (or longer): the checksum decides
+            if progress is not None:
+                progress(have, have)
+            return
+        raise OllamaError("network", f"The download of {artifact.name} failed: HTTP {exc.code}") from None
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+        reason = getattr(exc, "reason", exc)
+        raise OllamaError("network", f"{artifact.url} cannot be reached: {reason}") from None
+    with response:
         final = response.geturl()
         if not final.startswith("https://"):
             raise OllamaError("redirect", "The download was redirected to a non-https URL")
-        total = response.length
+        resumed = response.status == 206 and have > 0
+        if not resumed:
+            have = 0  # the server sends the whole file: start over
+        length = response.length
+        total = have + length if length is not None else None
         if total is not None and total > _MAX_ARCHIVE:
             raise OllamaError("too_large", "The runtime archive is larger than allowed")
-        done = 0
-        while block := response.read(1024 * 1024):
-            if cancel is not None and cancel.is_set():
-                raise OllamaError("cancelled", "The runtime download was cancelled")
-            done += len(block)
-            if done > _MAX_ARCHIVE:
-                raise OllamaError("too_large", "The runtime archive is larger than allowed")
-            out.write(block)
-            if progress is not None:
-                progress(done, total)
+        free = _free_bytes(target.parent)
+        if length is not None and free is not None and free < length:
+            raise OllamaError(
+                "disk_full",
+                f"{target.parent} has {free} bytes free; the rest of the download needs {length}",
+            )
+        done = have
+        if progress is not None:
+            progress(done, total)
+        try:
+            with target.open("ab" if resumed else "wb") as out:
+                while True:
+                    if cancel is not None and cancel.is_set():
+                        raise OllamaError("cancelled", "The runtime download was cancelled")
+                    try:
+                        block = response.read(1024 * 1024)
+                    except (OSError, http.client.HTTPException) as exc:
+                        raise OllamaError("network", f"The download broke: {exc}") from None
+                    if not block:
+                        break
+                    done += len(block)
+                    if done > _MAX_ARCHIVE:
+                        raise OllamaError("too_large", "The runtime archive is larger than allowed")
+                    out.write(block)
+                    if progress is not None:
+                        progress(done, total)
+        except OSError as exc:
+            raise (_disk_full(exc, target.parent) or exc) from None
+        if total is not None and done < total:
+            raise OllamaError("network", f"The download ended after {done} of {total} bytes")
+
+
+@contextlib.contextmanager
+def _install_lock(runtime: Path) -> Iterator[None]:
+    """One installation at a time per runtime folder, also across processes (an advisory lock)."""
+    path = runtime / _LOCK
+    handle = path.open("a+b")
+    try:
+        try:
+            if os.name == "nt":  # pragma: no cover - Windows
+                import msvcrt
+
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise OllamaError(
+                "install_running", "Another installation of the Ollama runtime is running"
+            ) from None
+        yield
+    finally:
+        handle.close()  # releases the lock
 
 
 def _safe_member(name: str) -> PurePosixPath:
@@ -198,13 +306,26 @@ def _tar_stream(archive: Path, name: str) -> tarfile.TarFile:
     return tarfile.open(archive, mode="r:gz")
 
 
-def _unpack(archive: Path, name: str, target: Path, skip: tuple[str, ...]) -> None:
+def _unpack(
+    archive: Path, name: str, target: Path, skip: tuple[str, ...], cancel: threading.Event | None = None
+) -> None:
+    try:
+        _unpack_members(archive, name, target, skip, cancel)
+    except OSError as exc:
+        raise (_disk_full(exc, target) or exc) from None
+
+
+def _unpack_members(
+    archive: Path, name: str, target: Path, skip: tuple[str, ...], cancel: threading.Event | None
+) -> None:
     unpacked = 0
     members = 0
     links: list[tuple[Path, str]] = []
     if name.endswith(".zip"):
         with zipfile.ZipFile(archive) as bundle:
             for info in bundle.infolist():
+                if cancel is not None and cancel.is_set():
+                    raise OllamaError("cancelled", "The installation was cancelled")
                 members += 1
                 path = _safe_member(info.filename)
                 if members > _MAX_MEMBERS:
@@ -227,6 +348,8 @@ def _unpack(archive: Path, name: str, target: Path, skip: tuple[str, ...]) -> No
         return
     with _tar_stream(archive, name) as bundle:
         for member in bundle:
+            if cancel is not None and cancel.is_set():
+                raise OllamaError("cancelled", "The installation was cancelled")
             members += 1
             if members > _MAX_MEMBERS:
                 raise OllamaError("unsafe_archive", "The archive has too many files")
@@ -284,6 +407,7 @@ def install_runtime(
     artifact: RuntimeArtifact | None = None,
     progress: Callable[[int, int | None], None] | None = None,
     cancel: threading.Event | None = None,
+    phase: Callable[[str], None] | None = None,
 ) -> Path:
     """Install the pinned Ollama runtime under ``home`` and return its binary.
 
@@ -291,13 +415,21 @@ def install_runtime(
         home: Orkexa's local directory (the runtime goes to ``<home>/runtime/<version>``).
         archive: A release archive already on this computer (offline installation).
         download: Download the archive from the Ollama release page (needs the network;
-            only with this explicit flag).
+            only with this explicit flag). A partial download of an earlier attempt continues.
         gpu: Unpack the NVIDIA GPU libraries (about 2 GB on Linux); ``None``: only if an
             NVIDIA driver is present. The CPU and Vulkan backends are always installed.
         artifact: The archive to expect; defaults to the one for this platform. Another platform's
             archive installs a runtime for that platform (its binary is found by that platform's name).
-        progress: ``(bytes, total)`` callback of the download.
-        cancel: Stops a download.
+        progress: ``(bytes, total)`` callback of the download; with ``phase`` also of the checksum
+            (bytes read of the archive).
+        cancel: Stops the download, the checksum and the unpacking.
+        phase: Called with each phase as it starts: ``download`` (only without ``archive``),
+            ``verify`` and ``unpack`` (:data:`INSTALL_PHASES`).
+
+    Raises:
+        OllamaError: ``runtime_missing``, ``network``, ``disk_full``, ``cancelled``,
+            ``checksum_mismatch``, ``unsafe_archive``, ``too_large``, ``redirect`` or
+            ``install_running`` (another installation holds the lock).
     """
     base = Path(home)
     artifact = artifact or artifact_for()
@@ -311,37 +443,54 @@ def install_runtime(
         )
     runtime = base / "runtime"
     runtime.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=runtime, prefix=".install-") as scratch:
-        work = Path(scratch)
-        source = Path(archive) if archive is not None else work / artifact.name
+
+    def enter(name: str) -> None:
+        if phase is not None:
+            phase(name)
+
+    with _install_lock(runtime):
+        # Another process may have finished meanwhile.
+        existing = installed_runtime(base, system=artifact.system)
+        if existing is not None:
+            return existing
+        partial = runtime / _DOWNLOADS / f"{artifact.name}.partial"
         if archive is None:
-            _download(artifact, source, progress, cancel)
+            partial.parent.mkdir(exist_ok=True)
+            enter("download")
+            _download(artifact, partial, progress, cancel)
+        source = Path(archive) if archive is not None else partial
         if not source.is_file():
             raise OllamaError("runtime_missing", f"{source} is not a file")
         if source.stat().st_size > _MAX_ARCHIVE:
             raise OllamaError("too_large", "The runtime archive is larger than allowed")
-        actual = _sha256(source)
+        enter("verify")
+        actual = _sha256(source, progress if phase is not None else None, cancel)
         if actual != artifact.sha256:
+            if archive is None:
+                partial.unlink(missing_ok=True)  # a broken download is not continued
             raise OllamaError(
                 "checksum_mismatch",
                 f"{source.name}: SHA-256 {actual[:16]}… does not match "
                 f"Ollama {OLLAMA_VERSION}'s {artifact.name}",
             )
-        target = work / "unpacked"
-        target.mkdir()
-        skip = () if (gpu if gpu is not None else _has_nvidia()) else artifact.gpu_dirs
-        _unpack(source, artifact.name, target, skip)
-        binary = find_binary(target, artifact.system)
-        if binary is None:
-            raise OllamaError("unsafe_archive", "The archive contains no ollama executable")
-        binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
-        (target / ".complete").write_text(
-            f"version={OLLAMA_VERSION}\narchive={artifact.name}\nsha256={artifact.sha256}\n", encoding="utf-8"
-        )
-        final = runtime / OLLAMA_VERSION
-        if final.exists():
-            shutil.rmtree(final)
-        target.rename(final)
+        enter("unpack")
+        with tempfile.TemporaryDirectory(dir=runtime, prefix=".install-") as scratch:
+            target = Path(scratch) / "unpacked"
+            target.mkdir()
+            skip = () if (gpu if gpu is not None else _has_nvidia()) else artifact.gpu_dirs
+            _unpack(source, artifact.name, target, skip, cancel)
+            binary = find_binary(target, artifact.system)
+            if binary is None:
+                raise OllamaError("unsafe_archive", "The archive contains no ollama executable")
+            binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+            marker = f"version={OLLAMA_VERSION}\narchive={artifact.name}\nsha256={artifact.sha256}\n"
+            (target / ".complete").write_text(marker, encoding="utf-8")
+            final = runtime / OLLAMA_VERSION
+            if final.exists():
+                shutil.rmtree(final)
+            target.rename(final)
+        if archive is None:
+            partial.unlink(missing_ok=True)
     result = installed_runtime(base, system=artifact.system)
     assert result is not None
     return result
