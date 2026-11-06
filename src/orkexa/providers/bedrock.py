@@ -215,9 +215,16 @@ _NOVA_TEXT_ONLY = re.compile(r"^amazon\.nova-micro")
 #: Converse feature table and the model cards). Reviewed with each boto3 update and before a
 #: release (docs/development/releasing.md); tests/test_upkeep.py flags it after 90 days.
 BEDROCK_CAPABILITIES_CHECKED_AT = date(2026, 11, 1)
-BEDROCK_CAPABILITIES_SOURCE = (
-    "https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html"
-)
+BEDROCK_CAPABILITIES_SOURCE = "https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html"
+
+#: Context window and maximum output per base model, from the Bedrock model cards
+#: (``model-card-anthropic-<model>.html``, checked 2026-11-06: "1M tokens", "128K", the same
+#: 1,000,000 and 128,000 that Anthropic documents for these models). Other models: unknown.
+_DOCUMENTED_LIMITS: dict[str, tuple[int, int]] = {
+    "anthropic.claude-opus-5-5": (1_000_000, 128_000),
+    "anthropic.claude-sonnet-5-5": (1_000_000, 128_000),
+    "anthropic.claude-haiku-5-5": (1_000_000, 128_000),
+}
 
 _COMMON_REASONS = {
     "system_messages": "Converse has no system messages inside the conversation; use system_prompt",
@@ -573,9 +580,17 @@ class BedrockProvider(Provider):
         return bedrock_capabilities(parse_model_id(model).base_model)
 
     def limits(self, model: str) -> ModelLimits:
-        """The effort levels of the Claude model behind the id; Anthropic's ``thinking`` options
-        are not part of Converse. Token limits on Bedrock are not documented to Orkexa (unknown)."""
+        """The effort levels of the Claude model behind the id (Anthropic's ``thinking`` options
+        are not part of Converse) and the token limits of the model cards Orkexa lists."""
         base = parse_model_id(model).base_model or ""
+        documented = _DOCUMENTED_LIMITS.get(base)
+        tokens: dict[str, Any] = {}
+        if documented is not None:
+            tokens = {
+                "context_window": documented[0],
+                "max_output_tokens": documented[1],
+                "source": "documented",
+            }
         efforts = None
         if _CLAUDE.match(base):
             from .anthropic import model_limits
@@ -583,7 +598,7 @@ class BedrockProvider(Provider):
             efforts = model_limits(base).efforts
             if efforts is None and not _CLAUDE_5.match(base):
                 efforts = ()  # Converse sends no effort for older Claude models
-        return ModelLimits(efforts=efforts, thinking_modes=(), thinking_budget=False)
+        return ModelLimits(efforts=efforts, thinking_modes=(), thinking_budget=False, **tokens)
 
     def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
         # Converse marks reasoning blocks (``reasoningContent``), also redacted ones.

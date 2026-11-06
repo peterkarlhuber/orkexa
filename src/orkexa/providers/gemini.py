@@ -75,6 +75,19 @@ _THINKING_LEVEL = re.compile(r"^(models/)?gemini-[34]([.-]|$)")  # Gemini 3.x an
 _GEMINI_2 = re.compile(r"^(models/)?gemini-(2|1)\.")
 #: Gemini 2.5 models think with a token budget (``thinking_budget``); older ones do not think.
 _THINKING_BUDGET = re.compile(r"^(models/)?gemini-2\.5([.-]|$)")
+#: Documented output token limit per model code, from each model's page of
+#: https://aistudio.google.com/docs/models (checked 2026-11-06; every one listed has an input
+#: limit of 1,048,576). Models not listed are unknown: nothing is guessed (gemini-4-argon
+#: documents two output maxima, depending on long decode).
+_DOCUMENTED_MAX_OUTPUT: dict[str, int] = {
+    "gemini-3.8-flash": 65_536,
+    "gemini-3.6-flash": 65_536,
+    "gemini-3.5-flash-lite": 65_536,
+    "gemini-3.1-pro-preview": 65_536,
+    "gemini-2.5-pro": 65_536,
+    "gemini-2.5-flash": 65_536,
+    "gemini-2.5-flash-lite": 65_536,
+}
 _RESERVED = frozenset(
     {
         "system_instruction",
@@ -218,14 +231,22 @@ class GeminiProvider(Provider):
         )
 
     def limits(self, model: str) -> ModelLimits:
-        """Reasoning settings by model generation; Orkexa documents no token limits for Gemini models."""
+        """Reasoning settings by model generation and the documented token limits of listed models.
+
+        Gemini documents an input and an output limit, not a shared context window, so
+        ``context_window`` stays unknown.
+        """
+        documented = _DOCUMENTED_MAX_OUTPUT.get(model.removeprefix("models/"))
+        tokens: dict[str, Any] = {}
+        if documented is not None:
+            tokens = {"max_output_tokens": documented, "source": "documented"}
         if _THINKING_LEVEL.match(model):
-            return ModelLimits(efforts=tuple(_LEVELS), thinking_modes=(), thinking_budget=False)
+            return ModelLimits(efforts=tuple(_LEVELS), thinking_modes=(), thinking_budget=False, **tokens)
         if _GEMINI_2.match(model):
             return ModelLimits(
-                efforts=(), thinking_modes=(), thinking_budget=bool(_THINKING_BUDGET.match(model))
+                efforts=(), thinking_modes=(), thinking_budget=bool(_THINKING_BUDGET.match(model)), **tokens
             )
-        return ModelLimits(thinking_modes=())
+        return ModelLimits(thinking_modes=(), **tokens)
 
     def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
         if _THINKING_LEVEL.match(model) or _THINKING_BUDGET.match(model):

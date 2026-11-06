@@ -45,10 +45,36 @@ def test_documented_claude_limits() -> None:
 
 
 def test_unknown_limits_are_never_guessed() -> None:
-    for provider, model in (("openai", "gpt-5.5"), ("gemini", "gemini-3-pro"), ("compatible", "my-model")):
+    for provider, model in (
+        ("openai", "gpt-5"),
+        ("gemini", "gemini-3-pro"),
+        ("gemini", "gemini-4-argon"),  # two documented output maxima: not guessed
+        ("bedrock", "anthropic.claude-sonnet-4-5-20250929-v1:0"),
+        ("compatible", "my-model"),
+    ):
         limits = _limits(provider, model)
         assert limits.max_output_tokens is None and limits.context_window is None
     assert _limits("compatible", "my-model") == ModelLimits()
+
+
+@pytest.mark.parametrize(
+    ("provider", "model", "context", "output"),
+    [
+        ("openai", "gpt-6.1-sol", 1_050_000, 128_000),
+        ("openai", "gpt-6-astra", 1_050_000, 128_000),
+        ("openai", "gpt-5.5-2026-04-23", 1_050_000, 128_000),  # a dated snapshot
+        ("gemini", "gemini-3.8-flash", None, 65_536),  # Gemini documents input and output limits only
+        ("gemini", "models/gemini-2.5-pro", None, 65_536),
+        ("bedrock", "eu.anthropic.claude-sonnet-5-5", 1_000_000, 128_000),
+        ("bedrock", "anthropic.claude-haiku-5-5", 1_000_000, 128_000),
+    ],
+)
+def test_documented_output_maxima_of_other_providers(
+    provider: str, model: str, context: int | None, output: int
+) -> None:
+    """ORK-039: documented limits with their source; unlisted models stay unknown."""
+    limits = _limits(provider, model)
+    assert (limits.context_window, limits.max_output_tokens, limits.source) == (context, output, "documented")
 
 
 def test_reasoning_settings_by_provider() -> None:
@@ -197,3 +223,13 @@ def test_bedrock_sends_max_tokens_in_inference_config() -> None:
 def test_agent_exposes_its_limits() -> None:
     agent = Agent(model="claude-opus-5-5", client=object())
     assert agent.limits.max_output_tokens == 128_000
+
+
+def test_openai_and_gemini_maxima_are_checked_before_sending() -> None:
+    from orkexa import Agent
+
+    with pytest.raises(ConfigurationError, match="128000"):
+        Agent(model="openai:gpt-6.1-sol", client=object(), max_tokens=200_000)
+    with pytest.raises(ConfigurationError, match="65536"):
+        Agent(model="gemini:gemini-3.8-flash", client=object(), max_tokens=100_000)
+    Agent(model="openai:gpt-5", client=object(), max_tokens=200_000)  # unknown: not checked
