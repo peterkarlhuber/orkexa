@@ -246,9 +246,10 @@ class OllamaHTTP:
                             with contextlib.suppress(OSError):
                                 sock.shutdown(socket.SHUT_RDWR)
                             if sys.platform == "win32":
-                                # Windows wakes a blocking recv() on close, not on shutdown.
+                                # Windows wakes a blocking recv() only when its handle is closed. sock.close()
+                                # waits for the response's file object, so detach and close the handle itself.
                                 with contextlib.suppress(OSError):
-                                    sock.close()
+                                    socket.close(sock.detach())
                         return
 
             threading.Thread(target=watch, name="orkexa-ollama-cancel", daemon=True).start()
