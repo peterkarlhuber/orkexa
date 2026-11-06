@@ -3,7 +3,7 @@
 > Open work for this repository: release blockers, known bugs, security follow-ups, technical debt and planned improvements.
 > GitHub issues are the source of truth for details; this file is the entry point and summary.
 >
-> **Last full review:** 2026-11-06 against `master` at `c1e2f0f` (TODO abatement round).
+> **Last full review:** 2026-11-06 against `master` at `80b95e5` (TODO abatement round 3).
 
 ## Summary
 
@@ -13,7 +13,7 @@
 | P1 High | 0 |
 | P2 Medium | 2 |
 | P3 Low | 10 |
-| P4 Optional | 8 |
+| P4 Optional | 7 |
 
 **Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
@@ -113,16 +113,6 @@ None known.
   checkpoint for it (this applies to tool-stage suspension as well).
 - **Next step:** Decide whether batches need a resumable form, and whether delegated agents should map their
   suspension to the outer turn (as `Pending` delegations do for orchestrations).
-
-### ORK-029 · Nodestro Studio: messages for the new Orkexa errors
-
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** internal backend audit 2026-11-03 (ORK2-04, DX-01)
-- **What:** nodestro-runtime reports agent errors as `run.agent.<ErrorClass>`. `MaxToolCallsError` (more than
-  `max_tool_calls_per_round`, default 64, calls in one response) has no Studio message or fix hint yet and shows the
-  generic text; the nodestro-api assistant already handles it as a `MaxToolRoundsError`. `MissingCredentialsError`
-  is an `AuthenticationError` and already maps to `run.provider_auth`.
-- **Next step:** With the pin update, add `run.agent.MaxToolCallsError` to the Studio translations and to the
-  "advanced fix" set (`RunProblem.tsx`).
 
 ### ORK-031 · Signed offline model packages
 
@@ -277,7 +267,6 @@ None known.
 |---|---|---|---|
 | ORK-003 | nodestro-runtime | Local Docker Ollama URL (non-loopback) | A loopback default needs the runtime's opt-in first |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
-| ORK-029 | nodestro-studio | run problem messages (`errors.json`, `RunProblem.tsx`) | Studio adds `run.agent.MaxToolCallsError` |
 | ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows; orphan reclaim on Windows) | The managed server lives here; runtime and desktop rerun their tests |
 | ORK-036 | nodestro-runtime | chat views of stored conversations | Agree how chat views show the synthetic request |
 | (done 2026-11-06) | nodestro-runtime | #57 workaround, `require_session` guard, RT-022, Bedrock caching option | With the next pin: `ToolRegistry.refresh()`/`AgentRegistry.refresh()`, `BedrockOptions(require_session=True)`, Python 3.14, `BedrockOptions(prompt_caching=True)` are available |
