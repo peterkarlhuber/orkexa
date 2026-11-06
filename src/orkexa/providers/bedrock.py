@@ -38,6 +38,7 @@ import base64
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import suppress
 from copy import deepcopy
+from datetime import date
 import hashlib
 import json
 import re
@@ -209,6 +210,14 @@ _CLAUDE_CACHING = re.compile(r"^anthropic\.claude-(?:3-7-sonnet|(?:opus|sonnet|h
 _CLAUDE_NO_VISION = re.compile(r"^anthropic\.claude-3-5-haiku")
 _NOVA = re.compile(r"^amazon\.nova-(?:micro|lite|pro|premier|2-lite)(?:[-.:]|$)")
 _NOVA_TEXT_ONLY = re.compile(r"^amazon\.nova-micro")
+
+#: When :func:`bedrock_capabilities` was last checked against the AWS documentation (the
+#: Converse feature table and the model cards). Reviewed with each boto3 update and before a
+#: release (docs/development/releasing.md); tests/test_upkeep.py flags it after 90 days.
+BEDROCK_CAPABILITIES_CHECKED_AT = date(2026, 11, 1)
+BEDROCK_CAPABILITIES_SOURCE = (
+    "https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html"
+)
 
 _COMMON_REASONS = {
     "system_messages": "Converse has no system messages inside the conversation; use system_prompt",
