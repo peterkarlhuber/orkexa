@@ -48,6 +48,9 @@ class AgentRegistry:
     Agents are instantiated by the :class:`AgentFactory` for each task, so they
     always start with a clean history and the current policy.
 
+    Several processes may share ``path``; each registry works on the snapshot it read
+    and sees the changes of the others after :meth:`refresh`.
+
     Args:
         path: Directory for persistence (one JSON file per version), or ``None``.
     """
@@ -56,7 +59,7 @@ class AgentRegistry:
         self.path = Path(path) if path is not None else None
         self._records: dict[str, list[AgentRecord]] = {}
         if self.path is not None:
-            self._load()
+            self._records = self._load()
 
     def _save(self, record: AgentRecord) -> None:
         if self.path is None:
@@ -75,8 +78,10 @@ class AgentRegistry:
         }
         _write_json_atomic(file, data)
 
-    def _load(self) -> None:
+    def _load(self) -> dict[str, list[AgentRecord]]:
+        """The valid records in :attr:`path`, by name, versions in ascending order."""
         assert self.path is not None
+        records: dict[str, list[AgentRecord]] = {}
         for file in sorted(self.path.glob("*/v*.json")):
             try:
                 data = json.loads(file.read_text(encoding="utf-8"))
@@ -93,9 +98,30 @@ class AgentRegistry:
             if not AGENT_NAME.fullmatch(record.name) or record.name != file.parent.name:
                 logger.warning("Skipping agent record %s: name does not match its directory", file)
                 continue
-            self._records.setdefault(record.name, []).append(record)
-        for versions in self._records.values():
+            records.setdefault(record.name, []).append(record)
+        for versions in records.values():
             versions.sort(key=lambda r: r.version)
+        return records
+
+    def refresh(self) -> None:
+        """Read the registry directory again, e.g. after another process changed it.
+
+        A registry reads its directory once when it is created and then works on that
+        snapshot: specs that another process (sharing the directory) registered or
+        revoked become visible only after ``refresh()``. Without a ``path`` nothing happens.
+        """
+        if self.path is not None:
+            self._records = self._load()
+
+    def _next_version(self, name: str) -> int:
+        """One more than the newest version of ``name`` in memory or on disk (see ToolRegistry)."""
+        versions = [r.version for r in self._records.get(name, [])]
+        if self.path is not None:
+            for file in (self.path / name).glob("v*.json"):
+                number = file.stem[1:]
+                if number.isdigit():
+                    versions.append(int(number))
+        return max(versions, default=0) + 1
 
     def register(self, spec: AgentSpec, requirement: str | None = None) -> AgentRecord:
         """Store an approved spec as the newest version under its name.
@@ -103,10 +129,9 @@ class AgentRegistry:
         The name must match ``[A-Za-z][A-Za-z0-9_-]{0,63}`` (it is a directory name).
         """
         _check_name(spec.name)
-        versions = self._records.get(spec.name, [])
         record = AgentRecord(
             spec=spec,
-            version=(versions[-1].version + 1) if versions else 1,
+            version=self._next_version(spec.name),
             status="approved",
             created_at=datetime.now(UTC).isoformat(timespec="seconds"),
             requirement=requirement,
