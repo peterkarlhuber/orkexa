@@ -42,12 +42,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 import io
 import json
 import math
 import os
 from pathlib import Path
 import re
+import signal
 import sqlite3
 import struct
 import threading
@@ -78,6 +80,7 @@ __all__ = [
     "Hit",
     "HybridFusion",
     "Index",
+    "PdfLimits",
     "RetrievalError",
     "RetrievalMode",
     "SQLiteIndex",
@@ -85,6 +88,8 @@ __all__ = [
     "citations",
     "fuse_hybrid",
     "lexical_evidence",
+    "pdf_pages",
+    "pdf_pages_isolated",
     "query_words",
     "retrieval_sources",
     "split_text",
@@ -133,13 +138,19 @@ class RetrievalError(OrkexaError, RuntimeError):
       refuse it.
     * ``storage.corrupt``: a SQLite database file is damaged or not a database; the
       ``sqlite3.DatabaseError`` is the ``__cause__``.
+    * ``document.too_complex``: a PDF exceeds a :class:`PdfLimits` budget (:func:`pdf_pages`,
+      :func:`pdf_pages_isolated`, :meth:`Index.add_file`); ``reason`` says which: ``pages``, ``chars``,
+      ``timeout``, ``memory``, ``limit`` (a limit of pypdf itself) or ``crash`` (the isolated extraction
+      ended without a result).
 
     Messages never contain file paths.
     """
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, *, reason: str | None = None) -> None:
         super().__init__(message)
         self.code = code
+        self.reason = reason
+        """Which limit was hit, for ``document.too_complex``; otherwise ``None``."""
 
 
 def check_mode(mode: str) -> RetrievalMode:
@@ -302,12 +313,128 @@ def _split_long(paragraph: str, limit: int) -> list[str]:
     return parts
 
 
-def _pdf_pages(data: bytes) -> list[str]:
+@dataclass(frozen=True)
+class PdfLimits:
+    """Budgets for extracting the text of one PDF (:func:`pdf_pages`, :func:`pdf_pages_isolated`).
+
+    ``max_pages`` and ``max_chars`` are checked between pages by both functions; ``timeout`` (seconds, wall
+    clock) and ``max_memory_mb`` only by :func:`pdf_pages_isolated`, which enforces them on a separate
+    process (the memory limit on Linux only). Exceeding one raises :class:`RetrievalError`
+    (``document.too_complex``) with ``reason`` ``pages``, ``chars``, ``timeout`` or ``memory``.
+    """
+
+    max_pages: int = 2000
+    max_chars: int = 5_000_000
+    timeout: float = 30.0
+    max_memory_mb: int = 512
+
+    def __post_init__(self) -> None:
+        if self.max_pages < 1 or self.max_chars < 1 or self.timeout <= 0 or self.max_memory_mb < 16:
+            raise ValueError("PDF limits must be positive (max_memory_mb at least 16)")
+
+
+def _too_complex(reason: str, message: str) -> RetrievalError:
+    return RetrievalError("document.too_complex", message, reason=reason)
+
+
+def pdf_pages(
+    data: bytes, *, max_pages: int = PdfLimits.max_pages, max_chars: int = PdfLimits.max_chars
+) -> list[str]:
+    """The text of each page of a PDF, in this process, within a page and a character budget.
+
+    Raises :class:`RetrievalError` (``document.too_complex``, ``reason`` ``pages``, ``chars`` or ``limit``
+    for a limit of pypdf itself) between pages; a PDF that pypdf cannot read raises pypdf's error. The
+    budgets are cooperative: a single page that makes pypdf loop or allocate cannot be stopped here. Use
+    :func:`pdf_pages_isolated` for untrusted files. Needs ``pypdf`` (``pip install "orkexa[pdf]"``).
+    """
+    PdfLimits(max_pages=max_pages, max_chars=max_chars)  # validate
     try:
         from pypdf import PdfReader  # type: ignore[import-not-found,unused-ignore]
+        from pypdf.errors import LimitReachedError  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         raise ImportError('Indexing PDFs needs pypdf: pip install "orkexa[pdf]"') from None
-    return [page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages]
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        trailer: Any = reader.trailer
+        declared = trailer["/Root"]["/Pages"].get("/Count", 0)  # checked before the page tree is read
+        if isinstance(declared, int) and declared > max_pages:
+            raise _too_complex("pages", f"The PDF declares {declared} pages; at most {max_pages} are allowed")
+        pages: list[str] = []
+        total = 0
+        for number, page in enumerate(reader.pages, start=1):
+            if number > max_pages:
+                raise _too_complex("pages", f"The PDF has more than {max_pages} pages")
+            text = page.extract_text() or ""
+            total += len(text)
+            if total > max_chars:
+                raise _too_complex("chars", f"The PDF has more than {max_chars} characters of text")
+            pages.append(text)
+    except LimitReachedError as exc:
+        raise _too_complex("limit", f"pypdf refused the PDF: {exc}") from exc
+    return pages
+
+
+_pdf_pages = pdf_pages
+"""The former private name of :func:`pdf_pages`, kept as an alias (Nodestro imports it). It is removed no
+earlier than in the next-but-one minor version, announced in the CHANGELOG."""
+
+
+def pdf_pages_isolated(
+    data: bytes,
+    *,
+    timeout: float = PdfLimits.timeout,
+    max_memory_mb: int = PdfLimits.max_memory_mb,
+    max_pages: int = PdfLimits.max_pages,
+    max_chars: int = PdfLimits.max_chars,
+) -> list[str]:
+    """The text of each page of a PDF, extracted in a separate process that is stopped at the budget.
+
+    Unlike :func:`pdf_pages`, termination does not depend on pypdf cooperating: the extraction runs in a new
+    interpreter (``python -I -m orkexa._pdf_worker``) with a minimal environment (no credentials, keys or
+    proxies), no inherited file descriptors, an empty private working directory and lowered resource limits;
+    after ``timeout`` seconds its process group gets ``SIGTERM`` and two seconds later ``SIGKILL``. Exceeding
+    a budget, running out of memory, a crash or an oversized output raise :class:`RetrievalError`
+    (``document.too_complex``) with ``reason`` ``timeout``, ``memory``, ``pages``, ``chars``, ``limit`` or
+    ``crash``; a PDF that pypdf cannot read raises ``ValueError``.
+
+    Remaining limits, by design: the child runs as the same operating-system user, so a code-execution flaw
+    in pypdf could still reach that user's files and the network (no namespaces, seccomp or containers);
+    macOS does not enforce the memory limit (CPU, open-file and file-size limits apply); Windows has no
+    resource limits or process groups (the time budget still applies, the child is killed). Starting the
+    interpreter costs roughly 0.1-0.3 seconds per document. Needs ``pypdf`` (``pip install "orkexa[pdf]"``).
+    """
+    from ._pdf_launch import run_worker
+
+    limits = PdfLimits(max_pages=max_pages, max_chars=max_chars, timeout=timeout, max_memory_mb=max_memory_mb)
+    run = run_worker(
+        data,
+        timeout=limits.timeout,
+        max_memory_mb=limits.max_memory_mb,
+        max_pages=limits.max_pages,
+        max_chars=limits.max_chars,
+    )
+    if run.timed_out:
+        raise _too_complex("timeout", f"Extracting the PDF took longer than {limits.timeout:g} seconds")
+    if run.output_exceeded:
+        raise _too_complex("chars", "The PDF text is larger than the character budget allows")
+    result = run.result
+    if result is None:
+        cpu_signal = getattr(signal, "SIGXCPU", None)
+        if run.returncode is not None and cpu_signal is not None and run.returncode == -cpu_signal:
+            raise _too_complex("timeout", "Extracting the PDF used more CPU time than allowed")
+        raise _too_complex("crash", f"The PDF extraction ended without a result (exit code {run.returncode})")
+    if result.get("ok") is True:
+        pages = result.get("pages")
+        if isinstance(pages, list) and all(isinstance(page, str) for page in pages):
+            return pages
+        raise _too_complex("crash", "The PDF extraction returned an invalid result")
+    reason = str(result.get("reason", "crash"))
+    message = str(result.get("message", "The PDF cannot be extracted"))
+    if reason == "invalid":
+        raise ValueError(message)
+    if reason not in ("pages", "chars", "memory", "limit"):
+        reason = "crash"
+    raise _too_complex(reason, message)
 
 
 class Index(ABC):
@@ -413,6 +540,8 @@ class Index(ABC):
         title = title or file.name
         file_id = store.add(data, name=file.name, description=description).id if store is not None else None
         if file.suffix.lower() == ".pdf":
+            # pdf_pages with its default budgets (PdfLimits), called by its alias so that code which replaces
+            # retrieval._pdf_pages (tests, older integrations) keeps working.
             pages = [(number, page) for number, page in enumerate(_pdf_pages(data), start=1) if page.strip()]
         else:
             try:
