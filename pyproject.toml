@@ -107,7 +107,7 @@ replacement = '](https://github.com/peterkarlhuber/orkexa/blob/master/\1)'
 packages = ["src/orkexa"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["compat/", ".github/", "assets/", "docs/assets/"]
+exclude = [".github/", "assets/", "docs/assets/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

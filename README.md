@@ -106,7 +106,7 @@ print(agent.ask("What is 17 + 25?"))
 Claude on Bedrock is billed by AWS and processed under AWS terms; it is a different
 provider from `anthropic`, with a subset of its features. See
 [Providers and capabilities](docs/getting-started/providers.md#amazon-bedrock) and
-[`examples/bedrock_agent.py`](examples/bedrock_agent.py).
+[`examples/14_bedrock_agent.py`](examples/14_bedrock_agent.py).
 
 ## Provider support
 

@@ -2,8 +2,8 @@
 
     pip install "orkexa[bedrock]"
     aws sso login --profile my-profile        # or any other AWS credential source
-    AWS_PROFILE=my-profile python examples/bedrock_agent.py
-    ORKEXA_BEDROCK_IMAGE=photo.png python examples/bedrock_agent.py      # adds an image turn
+    AWS_PROFILE=my-profile python examples/14_bedrock_agent.py
+    ORKEXA_BEDROCK_IMAGE=photo.png python examples/14_bedrock_agent.py      # adds an image turn
 
 The provider authenticates with AWS credentials from boto3's credential chain (here
 the profile named by ``AWS_PROFILE``; without it environment variables, SSO, a

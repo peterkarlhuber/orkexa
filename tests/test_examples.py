@@ -70,7 +70,7 @@ def run(name: str) -> None:
 
 def test_every_example_is_covered() -> None:
     scripts = sorted(p.name for p in EXAMPLES.glob("[0-9][0-9]_*.py"))
-    assert len(scripts) == 13
+    assert len(scripts) == 14
     tested = {name.split("_")[2] for name in globals() if name.startswith("test_example_")}
     assert tested == {s[:2] for s in scripts}
 
@@ -305,7 +305,7 @@ def test_example_13(capsys: pytest.CaptureFixture[str]) -> None:
     assert "published: Orkexa runs agents on four providers with one API." in out
 
 
-def test_bedrock_example(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_example_14(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     boto3 = pytest.importorskip("boto3")
     pixel = EXAMPLES.parent / "assets" / "branding" / "favicon-32.png"
     monkeypatch.setenv("AWS_PROFILE", "offline")
@@ -359,7 +359,7 @@ def test_bedrock_example(monkeypatch: pytest.MonkeyPatch, capsys: pytest.Capture
             return Runtime() if service == "bedrock-runtime" else Control()
 
     monkeypatch.setattr(boto3, "Session", Session)
-    run("bedrock_agent.py")
+    run("14_bedrock_agent.py")
     out = capsys.readouterr().out
     assert "A managed AI service." in out and "250 EUR" in out and "A small logo." in out
     assert sessions[0] == {"profile_name": "offline", "region_name": "eu-central-1"}
