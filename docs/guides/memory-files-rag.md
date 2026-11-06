@@ -27,6 +27,35 @@ URL/file annotations).
 (`embeddings=`, `orkexa[vector]`; see [Local models, embeddings and retrieval modes](local-models.md))
 and PDF extraction (`orkexa[pdf]`). The older `embedder=` callables keep working.
 
+## SQLite limits and error codes
+
+`SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` can share one database file between threads, instances and
+processes: every read-then-write step runs in one write transaction (`BEGIN IMMEDIATE`), so concurrent deletes or
+adds of the same source or file neither damage the full-text index nor lose entries.
+
+Searches of `SQLiteIndex` are limited, because full-text and hybrid search run one or two full-text queries per
+query word while they hold the index:
+
+| Limit | Default | Constructor argument |
+| --- | --- | --- |
+| characters per query | `orkexa.retrieval.MAX_QUERY_CHARS` = 1000 | `max_query_chars=` |
+| distinct query words (`query_words()`) | `orkexa.retrieval.MAX_QUERY_WORDS` = 64 | `max_query_words=` |
+
+A query over a limit raises `RetrievalError` before it is embedded or the index is locked, so it cannot hold up
+other searches or writes. The search tool reports the error to the model like any other tool error.
+
+`RetrievalError.code` values (the full list is in the `RetrievalError` docstring):
+
+| Code | Raised by | Meaning |
+| --- | --- | --- |
+| `query.too_long` | `SQLiteIndex.retrieve`, `search`, the search tool | the query exceeds `max_query_chars` or `max_query_words` |
+| `vector.dimension` | `SQLiteIndex.retrieve` (`vector`, `hybrid`) | the query vector's length differs from the stored vectors' |
+| `storage.symlink` | the SQLite classes' constructors | the database path, or its `-wal`, `-shm` or `-journal` file, is a symbolic link; it is refused, not followed |
+| `storage.corrupt` | the SQLite classes | the file is damaged or not a SQLite database; the `sqlite3.DatabaseError` is `__cause__` |
+| `mode_unsupported`, `vector_unavailable`, `reindex_required`, `vector_incomplete`, `cancelled` | `SQLiteIndex` vector search and `reindex()` | see [Local models](local-models.md) |
+
+Error messages never contain file paths.
+
 ## Deleting data
 
 Every store can delete what it holds, e.g. to answer an erasure request:

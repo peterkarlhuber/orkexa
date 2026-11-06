@@ -4,6 +4,25 @@
 
 First release of Orkexa.
 
+### Fixed: concurrent SQLite deletes; Added: query limits and storage error codes (MUP-ONA A10, 2026-11-06)
+
+* Fixed (PS-8): two `SQLiteIndex` instances or processes deleting the same source no longer fail with
+  "database disk image is malformed": `delete()` reads the rows inside its write transaction. Indexing a file
+  again (`add_file`) replaces its chunks in one transaction, starting a reindex and dropping vectors are
+  transactions, and `SQLiteFileStore.add()`/`delete()` run in `BEGIN IMMEDIATE`, so two processes adding the same
+  file no longer overwrite each other's metadata. `__len__`, `sources()` and `FileStore.__contains__` take the lock.
+* Changed: `SQLiteIndex` refuses a query over `MAX_QUERY_CHARS` (1000 characters) or `MAX_QUERY_WORDS` (64
+  distinct words) with `RetrievalError("query.too_long")`, checked before embedding and locking; the limits are
+  `orkexa.retrieval` constants and constructor arguments (`max_query_chars=`, `max_query_words=`).
+* Changed: a query vector of another length than the stored vectors raises `RetrievalError("vector.dimension")`.
+* Changed: `SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` refuse a database path that is a symbolic link (or
+  whose `-wal`, `-shm` or `-journal` file is one) with `RetrievalError("storage.symlink")`, and report a damaged
+  file as `RetrievalError("storage.corrupt")` (the `sqlite3.DatabaseError` is the cause) instead of a raw
+  `sqlite3.DatabaseError`. Messages contain no paths. The codes are listed in the `RetrievalError` docstring and
+  in the guide (`docs/guides/memory-files-rag.md`, "SQLite limits and error codes").
+* Fixed: extension loading is switched off again when loading sqlite-vec fails.
+* Valid queries return the same results as before (FX-RANK-0); the database format is unchanged.
+
 ### Tests: legacy fixtures and skip expectations (MUP-ONA A0, 2026-11-06)
 
 * tests: legacy fixtures and skip expectations. `tests/fixtures/legacy/FX-SQ-0` holds SQLite databases written by

@@ -18,6 +18,12 @@
 
 ::: orkexa.SQLiteIndex
 
+::: orkexa.retrieval.RetrievalError
+
+::: orkexa.retrieval.MAX_QUERY_CHARS
+
+::: orkexa.retrieval.MAX_QUERY_WORDS
+
 ::: orkexa.citations
 
 ::: orkexa.retrieval_sources

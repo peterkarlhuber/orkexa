@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from datetime import UTC, datetime
 import hashlib
 import json
@@ -39,14 +40,13 @@ import mimetypes
 import os
 from pathlib import Path
 import re
-import sqlite3
 import threading
 from typing import TYPE_CHECKING, Any, Literal
 import uuid
 
 from pydantic import BaseModel, Field
 
-from ._storage import create_private_file, make_private_dirs
+from ._storage import connect_private_database, make_private_dirs, storage_errors
 from .content import ContentBlock, ToolContent, document, image, uploaded_file
 from .errors import ToolResultError
 from .tools import Tool
@@ -173,6 +173,10 @@ class FileStore(ABC):
     def _remove(self, file_id: str) -> None:
         """Delete ``file_id`` and its bytes."""
 
+    def _transaction(self) -> AbstractContextManager[Any]:
+        """Wraps each read-then-write step (under the lock); database backends make it a transaction."""
+        return nullcontext()
+
     # ---- public API ------------------------------------------------------------
 
     def add(
@@ -216,7 +220,7 @@ class FileStore(ABC):
         if len(data) > limit:
             raise ValueError(f"{name}: {len(data)} bytes exceed the limit of {limit} bytes")
         digest = hashlib.sha256(data).hexdigest()
-        with self._lock:
+        with self._lock, self._transaction():
             existing = self._entry(digest[:16])
             if existing is not None:
                 entry = existing.model_copy(
@@ -274,15 +278,19 @@ class FileStore(ABC):
         A copy uploaded to the Files API (``files_api=``) is not deleted; delete it
         with the client first, using ``info(file_id).api_file_id``.
         """
-        with self._lock:
+        with self._lock, self._transaction():
             self.info(file_id)
             self._remove(file_id)
 
     def __contains__(self, file_id: object) -> bool:
-        return isinstance(file_id, str) and bool(_ID.fullmatch(file_id)) and self._entry(file_id) is not None
+        if not isinstance(file_id, str) or not _ID.fullmatch(file_id):
+            return False
+        with self._lock:
+            return self._entry(file_id) is not None
 
     def __len__(self) -> int:
-        return len(self._entries())
+        with self._lock:
+            return len(self._entries())
 
     def block(self, file_id: str, *, citations: bool = False) -> ContentBlock:
         """The document or image block for ``file_id``, e.g. to put a file into a prompt yourself."""
@@ -442,6 +450,9 @@ class SQLiteFileStore(FileStore):
         files_api: See :class:`FileStore`.
         max_image_bytes: See :class:`FileStore`.
         max_document_bytes: See :class:`FileStore`.
+
+    A database path that is a symbolic link raises :class:`~orkexa.retrieval.RetrievalError`
+    (``storage.symlink``); a damaged file raises it with ``storage.corrupt``.
     """
 
     def __init__(
@@ -459,19 +470,17 @@ class SQLiteFileStore(FileStore):
         if not namespace:
             raise ValueError("namespace must not be empty")
         self.namespace = namespace
-        create_private_file(database)  # owner-only (0600) from the start; journals inherit it
-        self._connection = sqlite3.connect(
-            database, isolation_level=None, check_same_thread=False, timeout=30
-        )
-        # Deleted rows are overwritten instead of left in free pages of the file.
-        self._connection.execute("PRAGMA secure_delete=ON")
-        if str(database) != ":memory:":
-            self._connection.execute("PRAGMA journal_mode=WAL")
-        self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS stored_files ("
-            " namespace TEXT NOT NULL, id TEXT NOT NULL, entry TEXT NOT NULL, data BLOB NOT NULL,"
-            " PRIMARY KEY (namespace, id))"
-        )
+        self._connection = connect_private_database(database)
+        try:
+            with storage_errors():
+                self._connection.execute(
+                    "CREATE TABLE IF NOT EXISTS stored_files ("
+                    " namespace TEXT NOT NULL, id TEXT NOT NULL, entry TEXT NOT NULL, data BLOB NOT NULL,"
+                    " PRIMARY KEY (namespace, id))"
+                )
+        except BaseException:
+            self._connection.close()
+            raise
 
     def close(self) -> None:
         """Close the database connection."""
@@ -483,6 +492,18 @@ class SQLiteFileStore(FileStore):
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        # Two processes adding the same file must not both read "missing" and overwrite each other's entry.
+        with storage_errors():
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+            self._connection.execute("COMMIT")
 
     def _save(self, entry: StoredFile, data: bytes | None) -> None:
         if data is None:
