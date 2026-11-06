@@ -258,9 +258,6 @@ class AnthropicProvider(Provider):
         if family in _NO_SYSTEM_MESSAGES:
             overrides["system_messages"] = "unsupported"
             reasons["system_messages"] = f"{model} does not accept system messages inside the conversation"
-        if model_limits(model).efforts == ():
-            overrides["reasoning"] = "unsupported"
-            reasons["reasoning"] = f"{model} takes no reasoning effort; remove effort"
         return ModelCapabilities.all("supported", reasons=reasons, **overrides)
 
     def limits(self, model: str) -> ModelLimits:
