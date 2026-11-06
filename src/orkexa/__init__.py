@@ -36,12 +36,15 @@ from .content import ContentBlock, Prompt, ToolContent, document, image, uploade
 from .core.capabilities import ModelCapabilities, ModelLimits, Support
 from .core.checkpoint import CheckpointClaims, TurnCheckpoint, WaitingCall
 from .core.conversion import HistoryConversionWarning
+from .core.reasoning import ReasoningStream, ReasoningText
 from .core.types import (
     Effort,
     Message,
     ModelRequest,
     ModelResponse,
     ReasoningDelta,
+    ReasoningKind,
+    ReasoningStatus,
     ResponseCompleted,
     StreamEvent,
     TextDelta,
@@ -177,6 +180,10 @@ __all__ = [
     "ProviderServerError",
     "RateLimitError",
     "ReasoningDelta",
+    "ReasoningKind",
+    "ReasoningStatus",
+    "ReasoningStream",
+    "ReasoningText",
     "Refinement",
     "RefusalError",
     "RefusalMode",

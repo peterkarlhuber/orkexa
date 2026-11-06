@@ -19,11 +19,13 @@ from typing import Any, ClassVar
 
 from ..content import ContentBlock
 from ..core.capabilities import ModelCapabilities, ModelLimits, Support
+from ..core.reasoning import ReasoningStream
 from ..core.types import (
     ModelRequest,
     ModelResponse,
     Part,
     ReasoningDelta,
+    ReasoningStatus,
     ResponseCompleted,
     StopReason,
     StreamEvent,
@@ -276,6 +278,11 @@ class AnthropicProvider(Provider):
 
     def auto_stream(self, max_tokens: int) -> bool:
         return max_tokens > _AUTO_STREAM_MAX_TOKENS
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        # Claude 4 and later return summarized thinking; ``thinking_display="omitted"`` (the
+        # default of some models) sends thinking blocks without text.
+        return ReasoningStream(text="summary", status=True, request_option="thinking_display")
 
     def lenient_tool_input(self, request: ModelRequest, capabilities: ModelCapabilities) -> bool:
         # Unbuffered tool input can arrive cut off or malformed; Claude retries.
@@ -553,22 +560,35 @@ class _StreamState:
     def __init__(self) -> None:
         self.call_id: str | None = None
         self.index = 0
+        #: Indexes of the open thinking blocks (``thinking`` and ``redacted_thinking``).
+        self.thinking: set[int] = set()
 
     def translate(self, event: Any) -> Iterator[StreamEvent]:
         kind = getattr(event, "type", None)
         if kind == "text":
             yield TextDelta(str(event.text))
         elif kind == "thinking":
+            # Claude models since Claude 4 return summarized thinking (``display: "summarized"``);
+            # with ``display: "omitted"`` the deltas carry no text and nothing is shown.
             if event.thinking:
-                yield ReasoningDelta(str(event.thinking))
+                yield ReasoningDelta(str(event.thinking), kind="summary")
         elif kind == "content_block_start":
             block = getattr(event, "content_block", None)
             self.index = int(getattr(event, "index", 0) or 0)
-            if block is not None and getattr(block, "type", None) == "tool_use":
+            block_type = getattr(block, "type", None)
+            if block is not None and block_type == "tool_use":
                 self.call_id = str(block.id)
                 yield ToolCallStarted(call_id=self.call_id, name=str(block.name), index=self.index)
             else:
                 self.call_id = None
+            if block_type in ("thinking", "redacted_thinking"):
+                self.thinking.add(self.index)
+                yield ReasoningStatus("started", kind="summary", redacted=block_type == "redacted_thinking")
+        elif kind == "content_block_stop":
+            index = int(getattr(event, "index", 0) or 0)
+            if index in self.thinking:
+                self.thinking.discard(index)
+                yield ReasoningStatus("finished", kind="summary")
         elif kind == "input_json" and self.call_id is not None:
             yield ToolCallDelta(
                 call_id=self.call_id, index=self.index, arguments_delta=str(event.partial_json)

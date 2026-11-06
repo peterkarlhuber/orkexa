@@ -20,6 +20,7 @@ from pydantic import SecretStr
 from ..content import ContentBlock
 from ..core.capabilities import ModelCapabilities, ModelLimits
 from ..core.conversion import parse_block
+from ..core.reasoning import ReasoningStream
 from ..core.types import ModelRequest, ModelResponse, Part, StreamEvent
 from ..errors import (
     AuthenticationError,
@@ -247,6 +248,17 @@ class Provider(ABC):
     def auto_stream(self, max_tokens: int) -> bool:
         """Whether requests should stream although nobody asked (e.g. long outputs)."""
         return False
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        """What the stream of ``model`` transmits of its reasoning (:mod:`orkexa.core.reasoning`).
+
+        ``capabilities`` are the model's capabilities with the caller's overrides (default: the
+        provider's own). The default follows the ``reasoning`` capability only: ``none`` for a
+        model that does not reason, else ``unknown`` (text is shown if it arrives, never assumed)."""
+        caps = capabilities or self.capabilities(model)
+        if caps.reasoning == "unsupported":
+            return ReasoningStream.none(f"{self.name}:{model} does not reason")
+        return ReasoningStream()
 
     def lenient_tool_input(self, request: ModelRequest, capabilities: ModelCapabilities) -> bool:
         """Whether invalid tool input goes back to the model even with ``raise_tool_errors``.

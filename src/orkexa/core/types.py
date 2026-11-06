@@ -29,7 +29,9 @@ __all__ = [
     "NativePart",
     "Part",
     "ReasoningDelta",
+    "ReasoningKind",
     "ReasoningPart",
+    "ReasoningStatus",
     "RefusalDetails",
     "ResponseCompleted",
     "ResultContentPart",
@@ -55,6 +57,12 @@ Effort = Literal["low", "medium", "high", "xhigh", "max"]
 """Generic reasoning effort; adapters map it only to a matching provider concept."""
 
 Role = Literal["user", "assistant", "system"]
+
+ReasoningKind = Literal["thinking", "summary"]
+"""What streamed reasoning text is: ``thinking`` is the model's reasoning text as it was generated
+(open-weight models, Bedrock's non-Anthropic reasoning models); ``summary`` is a summary the provider
+writes of reasoning it does not expose (OpenAI reasoning summaries, Gemini thought summaries, Claude's
+summarized thinking)."""
 
 StopReason = Literal[
     "end_turn",
@@ -399,10 +407,33 @@ class TextDelta:
 
 @dataclass(frozen=True)
 class ReasoningDelta:
-    """A piece of visible reasoning (thinking text or a reasoning summary)."""
+    """A piece of visible reasoning the provider transmitted: thinking text or a reasoning summary.
+
+    ``kind`` says which of the two the provider's API delivers (:data:`ReasoningKind`). Adapters
+    emit only text the provider sent; nothing is generated or filled in.
+    """
 
     text: str
+    kind: ReasoningKind = "thinking"
     type: ClassVar[str] = "reasoning_delta"
+
+
+@dataclass(frozen=True)
+class ReasoningStatus:
+    """The model started or finished a reasoning phase, whether or not its text is transmitted.
+
+    Emitted where the provider's stream reports reasoning as such (Anthropic thinking blocks,
+    OpenAI reasoning items, Bedrock reasoning blocks) or where the first reasoning text arrives.
+    ``redacted`` is set when the provider sent the reasoning only in encrypted or omitted form
+    (Anthropic ``redacted_thinking`` or ``display: "omitted"``, Bedrock ``redactedContent``):
+    the model reasoned, but there is no text to show. ``kind`` is the kind of text that may follow,
+    ``None`` when the stream cannot tell.
+    """
+
+    state: Literal["started", "finished"]
+    kind: ReasoningKind | None = None
+    redacted: bool = False
+    type: ClassVar[str] = "reasoning_status"
 
 
 @dataclass(frozen=True)
@@ -460,6 +491,7 @@ class TurnFailed:
 StreamEvent = (
     TextDelta
     | ReasoningDelta
+    | ReasoningStatus
     | ToolCallStarted
     | ToolCallDelta
     | ResponseCompleted
