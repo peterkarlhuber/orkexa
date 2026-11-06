@@ -21,8 +21,9 @@ First release of Orkexa.
   Claude models; models without a documented number stay unknown.
 * Python 3.14 is supported and tested in CI (#25). The sandbox static check also refuses the annotation evaluation
   helpers of 3.14 (`annotationlib`) and code hidden in string annotations.
-* `docker/sandbox.Dockerfile` takes an optional extra CA as a build secret (`pip-ca`) for builds behind a
-  TLS-intercepting proxy; the CA is not kept in the image.
+* `docker/sandbox-ca.Dockerfile` (the sandbox image, kept in sync by a test) takes an optional extra CA as a
+  build secret (`pip-ca`; BuildKit or Podman) for builds behind a TLS-intercepting proxy; the CA is not kept in
+  the image. `docker/sandbox.Dockerfile` stays buildable with the legacy builder.
 * `tests/test_upkeep.py` flags dated snapshots (built-in prices, the Bedrock capability table, the sandbox base
   image) older than 90 days; the release workflow fails on them. The release guide has an upkeep checklist.
 * A weekly and manual workflow (`ollama-live.yml`) runs the live tests against the pinned Ollama runtime.

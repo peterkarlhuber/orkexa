@@ -100,3 +100,25 @@ def test_the_sandbox_requirements_are_complete_and_hashed() -> None:
         names.add(entry[0].split("==")[0].lower())
     # orkexa's runtime dependencies (pyproject.toml) and what they need
     assert {"pydantic", "pydantic-core", "typing-extensions", "annotated-types", "typing-inspection"} <= names
+
+
+def test_the_proxy_ca_variant_matches_the_sandbox_dockerfile() -> None:
+    """docker/sandbox-ca.Dockerfile is the sandbox image plus a CA build secret, nothing else (ORK-027).
+
+    The default file must stay free of ``RUN --mount`` so the legacy builder (Colima's default) can build it.
+    """
+    plain = _instructions(ROOT / "docker" / "sandbox.Dockerfile")
+    variant = _instructions(ROOT / "docker" / "sandbox-ca.Dockerfile")
+    assert not any("--mount" in line for line in plain)
+
+    def without_run(lines: list[str]) -> list[str]:
+        return [line for line in lines if not line.upper().startswith("RUN ")]
+
+    assert without_run(plain) == without_run(variant)
+    (run,) = [line for line in variant if line.upper().startswith("RUN ")]
+    assert run.startswith("RUN --mount=type=secret,id=pip-ca,")
+    command = (
+        "pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/sandbox-requirements.txt"
+    )
+    assert command in run
+    assert any(command in line for line in plain)

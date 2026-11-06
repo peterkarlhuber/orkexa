@@ -63,9 +63,10 @@ Keep stores in a directory with suitable ACLs.
   `SandboxError` (wrapped in `ToolExecutionError` for tool calls) that explains the
   options; no code runs. Build the image with
   `docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`. Behind a proxy that
-  intercepts TLS, add its CA certificate as a build secret
-  (`--secret id=pip-ca,src=proxy-ca.pem`, with `--build-arg HTTPS_PROXY=...`): pip
-  trusts it for the install step only, and it is not stored in the image.
+  intercepts TLS, build `docker/sandbox-ca.Dockerfile` instead and pass its CA certificate
+  as a build secret (`--secret id=pip-ca,src=proxy-ca.pem`, with
+  `--build-arg HTTPS_PROXY=...`; needs BuildKit or Podman): pip trusts it for the install
+  step only, and it is not stored in the image.
 * **The Docker host must prove the sandbox before code runs.** The preflight
   (`orkexa.dynamic.docker.preflight`) refuses a daemon that does not run Linux containers
   (`os-type`), cannot enforce memory, process or CPU limits (`limits`, e.g. a rootless
