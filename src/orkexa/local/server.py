@@ -202,7 +202,10 @@ class ManagedOllama:
 
     def client(self) -> OllamaClient:
         if self._base_url is None:
-            raise OllamaError("not_running", "The managed Ollama server is not running")
+            raise OllamaError(
+                "not_running",
+                "The managed Ollama server is not running; start() it (or `orkexa-local serve`)",
+            )
         return OllamaClient(self._base_url)
 
     @property
@@ -235,7 +238,11 @@ class ManagedOllama:
                 return self._base_url
             binary = self.binary
             if binary is None or not binary.is_file():
-                raise OllamaError("runtime_missing", "The Ollama runtime is not installed")
+                raise OllamaError(
+                    "runtime_missing",
+                    "The Ollama runtime is not installed; install it with install_runtime() "
+                    "(`orkexa-local install-runtime --download`, or `--archive FILE` offline)",
+                )
             self._reclaim_orphan()
             try:
                 self.models_dir.mkdir(parents=True, exist_ok=True)

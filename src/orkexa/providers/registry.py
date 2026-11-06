@@ -67,6 +67,16 @@ def provider_names() -> list[str]:
     return sorted(_REGISTRY)
 
 
+#: A model id per provider for error messages (examples only, not a catalog).
+_EXAMPLE_MODELS = {
+    "anthropic": "claude-sonnet-5-5",
+    "openai": "gpt-5.5",
+    "gemini": "gemini-3.8-flash",
+    "bedrock": "eu.anthropic.claude-sonnet-5-5",
+    "ollama": "qwen3.5:4b",
+}
+
+
 def split_model(model: str) -> tuple[str | None, str]:
     """``"openai:gpt-5.5"`` -> ``("openai", "gpt-5.5")``; unregistered prefixes are kept."""
     prefix, sep, rest = model.partition(":")
@@ -89,6 +99,12 @@ def resolve_model(model: str, provider: str | None = None, *, strict: bool = Fal
     """
     if not isinstance(model, str) or not model.strip():
         raise ConfigurationError("model must be a non-empty string")
+    head, colon, rest = model.partition(":")
+    if colon and head in _REGISTRY and not rest.strip():
+        raise ConfigurationError(
+            f"model={model!r} names the provider {head!r} but no model; write '{head}:<model id>', "
+            f"e.g. {head + ':' + _EXAMPLE_MODELS.get(head, 'my-model')!r}"
+        )
     prefix, model_id = split_model(model)
     if provider is not None and provider not in _REGISTRY:
         raise ConfigurationError(f"Unknown provider {provider!r}; registered: {', '.join(provider_names())}")

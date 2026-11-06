@@ -16,6 +16,7 @@ import signal
 import sys
 import time
 
+from ..errors import OrkexaError
 from ._http import DEFAULT_OLLAMA_URL, OllamaError
 from .client import OllamaClient
 from .install import OLLAMA_VERSION, artifact_for, install_runtime, installed_runtime, remove_runtime
@@ -58,16 +59,23 @@ def _client(args: argparse.Namespace) -> OllamaClient:
 def _cmd_status(args: argparse.Namespace) -> int:
     binary = installed_runtime(args.home)
     print(f"runtime: {binary or 'not installed'} (pinned Ollama {OLLAMA_VERSION})")
+    if binary is None:
+        print("  next: orkexa-local install-runtime --download (or --archive FILE offline)")
     external = detect_ollama()
     print(f"Ollama on 127.0.0.1:11434: {external or 'none'}")
     try:
         client = _client(args)
         print(f"server {client.base_url}: {client.version()}")
-        for model in client.list_models():
+        models = client.list_models()
+        for model in models:
             caps = ",".join(model.capabilities)
             print(f"  {model.name:32} {_size(model.size):>10}  {model.digest[:12]}  {caps}")
+        if not models:
+            print("  no models; next: orkexa-local pull MODEL (or import-gguf, import)")
     except OllamaError as exc:
         print(f"server: {exc}")
+        if binary is not None and exc.code == "unreachable":
+            print("  next: orkexa-local serve")
     return 0
 
 
@@ -179,72 +187,96 @@ def _cmd_remove_runtime(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(prog="orkexa-local", description=__doc__.splitlines()[0])
-    root.add_argument(
-        "--home", type=Path, default=_DEFAULT_HOME, help="runtime, state and default model folder"
+    root = argparse.ArgumentParser(
+        prog="orkexa-local", description="Manage local Ollama models from the command line."
     )
-    root.add_argument("--url", help="a running Ollama server")
+    root.add_argument(
+        "--home",
+        type=Path,
+        default=_DEFAULT_HOME,
+        help="runtime, state and default model folder (default: $ORKEXA_LOCAL_HOME or ~/.orkexa/local)",
+    )
+    root.add_argument(
+        "--url", help="a running Ollama server (default: the one `serve` started, else 127.0.0.1:11434)"
+    )
     root.add_argument(
         "--allow-remote", action="store_true", help="allow a non-loopback --url (no authentication!)"
     )
-    commands = root.add_subparsers(dest="command", required=True)
-    commands.add_parser("status").set_defaults(run=_cmd_status)
+    commands = root.add_subparsers(dest="command", required=True, metavar="COMMAND")
+    commands.add_parser("status", help="show the runtime, the server and its models").set_defaults(
+        run=_cmd_status
+    )
     install = commands.add_parser("install-runtime", help="install the pinned Ollama runtime")
     install.add_argument("--archive", type=Path, help="release archive on this computer (offline)")
     install.add_argument("--download", action="store_true", help="download it from the Ollama release page")
     install.add_argument(
-        "--gpu", action=argparse.BooleanOptionalAction, default=None, help="NVIDIA libraries"
+        "--gpu",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="unpack the NVIDIA GPU libraries (default: only if an NVIDIA driver is present)",
     )
     install.set_defaults(run=_cmd_install)
-    commands.add_parser("remove-runtime").set_defaults(run=_cmd_remove_runtime)
+    commands.add_parser("remove-runtime", help="delete the installed runtime (models are kept)").set_defaults(
+        run=_cmd_remove_runtime
+    )
     serve = commands.add_parser("serve", help="run the managed server in the foreground")
-    serve.add_argument("--models-dir", type=Path)
-    serve.add_argument("--port", type=int)
+    serve.add_argument("--models-dir", type=Path, help="model folder (default: <home>/models)")
+    serve.add_argument("--port", type=int, help="fixed port (default: a free one)")
     serve.add_argument("--offline", action="store_true", help="no proxy route for the server")
     serve.set_defaults(run=_cmd_serve)
     pull = commands.add_parser("pull", help="download a model (network)")
-    pull.add_argument("model")
+    pull.add_argument("model", help="model name, e.g. qwen3.5:4b")
     pull.set_defaults(run=_cmd_pull)
     remove = commands.add_parser("rm", help="remove a model")
-    remove.add_argument("model")
+    remove.add_argument("model", help="model name")
     remove.set_defaults(run=_cmd_rm)
     gguf = commands.add_parser("import-gguf", help="create a model from a local GGUF file (offline)")
-    gguf.add_argument("name")
-    gguf.add_argument("gguf", type=Path)
+    gguf.add_argument("name", help="name of the new model")
+    gguf.add_argument("gguf", type=Path, help="the GGUF file")
     gguf.add_argument("--projector", type=Path, help="vision projector GGUF")
     gguf.set_defaults(run=_cmd_import_gguf)
     build = commands.add_parser("build", help="build a model from pinned upstream weights and verify it")
-    build.add_argument("recipe", choices=sorted(_RECIPES))
+    build.add_argument("recipe", choices=sorted(_RECIPES), help="the recipe to build")
     build.add_argument("--weights", type=Path, help="the upstream safetensors file (offline)")
     build.add_argument("--template", type=Path, help="the template GGUF file or header (offline)")
     build.add_argument("--download", action="store_true", help="download missing inputs (network)")
     build.set_defaults(run=_cmd_build)
     export = commands.add_parser("export", help="write an offline model package")
-    export.add_argument("target", type=Path)
-    export.add_argument("models", nargs="+")
-    export.add_argument("--models-dir", type=Path, required=True)
+    export.add_argument("target", type=Path, help="the package folder to write")
+    export.add_argument("models", nargs="+", help="names of the models to export")
+    export.add_argument("--models-dir", type=Path, required=True, help="the Ollama model folder to read")
     export.set_defaults(run=_cmd_export)
     imp = commands.add_parser("import", help="import an offline model package (offline)")
-    imp.add_argument("package", type=Path)
-    imp.add_argument("models", nargs="*")
-    imp.add_argument("--models-dir", type=Path, required=True)
+    imp.add_argument("package", type=Path, help="the package folder")
+    imp.add_argument("models", nargs="*", help="names to import (default: all)")
+    imp.add_argument("--models-dir", type=Path, required=True, help="the Ollama model folder to write")
     imp.set_defaults(run=_cmd_import)
     verify = commands.add_parser("verify", help="check an offline model package")
-    verify.add_argument("package", type=Path)
+    verify.add_argument("package", type=Path, help="the package folder")
     verify.add_argument("--quick", action="store_true", help="sizes only, no SHA-256")
     verify.set_defaults(run=_cmd_verify)
     scan = commands.add_parser("scan", help="list the models of an Ollama model folder")
-    scan.add_argument("folder", type=Path)
+    scan.add_argument("folder", type=Path, help="the Ollama model folder")
     scan.set_defaults(run=_cmd_scan)
     return root
+
+
+def _code(exc: BaseException) -> str:
+    """A short machine-readable name of an error (``OllamaError.code``, else the class name)."""
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, str) and code else type(exc).__name__
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         return int(args.run(args))
-    except OllamaError as exc:
-        print(f"error ({exc.code}): {exc}", file=sys.stderr)
+    except (OrkexaError, ImportError) as exc:
+        # Every Orkexa error (and a missing optional package) is one line, never a traceback.
+        print(f"error ({_code(exc)}): {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"error ({type(exc).__name__}): {exc}", file=sys.stderr)
         return 1
 
 

@@ -440,7 +440,8 @@ def install_runtime(
     if archive is None and not download:
         raise OllamaError(
             "runtime_missing",
-            f"Ollama {OLLAMA_VERSION} is not installed; pass archive= (offline) or download=True",
+            f"Ollama {OLLAMA_VERSION} is not installed; pass archive= (offline) or download=True "
+            "(`orkexa-local install-runtime --archive FILE` or `--download`)",
         )
     runtime = base / "runtime"
     # Private (0700) when new: whoever may write in it could replace the executable that the

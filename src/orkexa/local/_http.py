@@ -158,7 +158,11 @@ class OllamaHTTP:
             raise OllamaError("timeout", f"Ollama at {self.base_url} did not answer in time") from exc
         except (OSError, http.client.HTTPException) as exc:
             connection.close()
-            raise OllamaError("unreachable", f"Ollama is not reachable at {self.base_url}: {exc}") from exc
+            raise OllamaError(
+                "unreachable",
+                f"Ollama is not reachable at {self.base_url}: {exc}; start it (`orkexa-local serve` for "
+                "the managed runtime, or `ollama serve`) or check the URL",
+            ) from exc
         if 300 <= response.status < 400:
             connection.close()
             raise OllamaError(
