@@ -1,13 +1,31 @@
 # Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
 # Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
-# Job platforms.yml/offline on macos-15-intel: derived from the Linux run and the tests'
-# skip conditions, NOT yet verified on a real runner (the lead fixes it after the first CI run).
+# Job platforms.yml/offline on macos-15-intel: derived from local Linux runs (with sqlite3 extension loading
+# switched off for macOS and Windows ARM64) and the tests' skip conditions,
+# NOT yet verified on a real runner (the lead fixes it after the first CI run).
 
 tests.anthropic.test_dynamic_sandbox::test_docker_sandbox_end_to_end  # needs Docker and the image from docker/sandbox.Dockerfile
 tests.anthropic.test_dynamic_sandbox::test_memory_limit  # RLIMIT_AS is only reliable on Linux
 tests.anthropic.test_live::test_text_tool_and_structured_output  # needs ANTHROPIC_API_KEY
+tests.anthropic.test_retrieval::test_hybrid_search_finds_synonyms_via_vectors  # needs sqlite-vec
 tests.audit2.test_ork2_06_guards::test_a_stopped_run_kills_the_whole_process_group[cancel]  # process groups and /proc
 tests.audit2.test_ork2_06_guards::test_a_stopped_run_kills_the_whole_process_group[timeout]  # process groups and /proc
+tests.audit3.test_ork3_02_reindex_race::test_add_replaces_a_stale_vector_left_by_an_earlier_version  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_02_reindex_race::test_reindex_does_not_give_a_new_chunk_the_vector_of_a_deleted_one  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_02_reindex_race::test_reindex_leaves_no_vector_of_a_chunk_deleted_meanwhile  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_03_vectors::test_a_zero_vector_does_not_break_vector_search[hybrid]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_03_vectors::test_a_zero_vector_does_not_break_vector_search[vector]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_03_vectors::test_non_finite_vectors_are_refused  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_06_query_embedding_lock::test_a_reindex_during_the_query_embedding_is_detected  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_06_query_embedding_lock::test_writes_do_not_wait_for_a_query_embedding[hybrid]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_06_query_embedding_lock::test_writes_do_not_wait_for_a_query_embedding[vector]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_07_identity_refresh::test_a_model_update_during_a_reindex_discards_the_mixed_vectors  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_07_identity_refresh::test_an_updated_model_is_not_filed_under_its_old_identity  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_failing_sqlite_vec_load_leaves_extension_loading_off  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_legacy_vector_index_is_searched_written_and_deleted  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_query_vector_of_another_length_is_refused[hybrid]  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_query_vector_of_another_length_is_refused[vector]  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_the_ranking_fixture_gives_the_recorded_sqlite_results[sqlite]  # sqlite-vec cannot be loaded here
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
 tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging
@@ -29,6 +47,7 @@ tests.test_docker_sandbox::test_write_to_root_fails  # Docker sandbox not ready:
 tests.test_docker_self_test::test_the_environment_is_the_one_the_container_started_with  # reads /proc/self/environ
 tests.test_docker_self_test::test_the_seccomp_probes_run_here  # the seccomp probes have system call numbers for 64-bit x86 and arm Linux
 tests.test_history_models::test_dated_model_versions_keep_reasoning_in_the_tool_loop[bedrock]  # bedrock responses never name a model version
+tests.test_legacy_fixtures::test_the_vector_index_opens_with_its_vectors  # sqlite-vec cannot be loaded here
 tests.test_local::test_live_agent_answer_and_embeddings  # set ORKEXA_TEST_OLLAMA_URL to a real Ollama with qwen3.5:4b
 tests.test_local_convert::test_live_mdenseon_build_matches_reference_and_ranks_across_languages  # needs a real Ollama and the mDenseOn files
 tests.test_ollama_live::test_a_text_answer_after_an_empty_turn  # needs ORKEXA_OLLAMA_LIVE_URL
@@ -38,3 +57,22 @@ tests.test_ollama_live::test_tools_then_structured_answer[False]  # needs ORKEXA
 tests.test_ollama_live::test_tools_then_structured_answer[True]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_pdf_limits::test_a_flate_bomb_hits_the_memory_limit_and_the_parent_is_unaffected  # the memory limit (RLIMIT_AS) is enforced on Linux only
 tests.test_pdf_limits::test_the_child_runs_with_lowered_resource_limits  # RLIMIT_AS is enforced on Linux only
+tests.test_rank_fixture::test_sqlite_with_sqlite_vec_reproduces_the_recorded_results  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_a_weak_full_text_hit_no_longer_outranks_the_vector_hit  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_changing_the_embedding_model_needs_a_reindex  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_default_mode_is_hybrid_with_embeddings_and_fts_without  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_delete_removes_vectors_and_drop_vectors_keeps_full_text  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_first_vectors_for_an_existing_fts_index  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_fuse_hybrid_breaks_ties_by_chunk_id_and_checks_the_weight  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_fuse_hybrid_lets_a_whole_query_match_win_but_not_an_accidental_one  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_fuse_hybrid_without_lexical_evidence_keeps_the_vector_order  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_hybrid_fusion_options_are_checked  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_hybrid_keeps_exact_codes_that_vectors_cannot_tell_apart  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_large_dataset_and_ties_are_deterministic  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_legacy_embedder_keeps_working_and_honours_modes  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_lexical_evidence_counts_words_no_chunk_contains  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_namespaces_keep_separate_spaces  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_reindex_is_resumable_and_keeps_the_old_space_until_complete  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_sources_limit_candidates_before_ranking  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_the_three_modes_rank_differently  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_tool_uses_mode_and_sources  # sqlite-vec cannot be loaded here
