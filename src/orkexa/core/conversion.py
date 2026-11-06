@@ -31,6 +31,7 @@ __all__ = [
     "HistoryConversionWarning",
     "HistoryPolicy",
     "dump_history",
+    "message_outline",
     "parse_block",
     "parse_history",
     "prepare_history",
@@ -275,3 +276,22 @@ def plain_text(parts: Sequence[Any]) -> str:
         else:
             lines.append(f"[{getattr(part, 'type', 'content')}]")
     return "\n".join(lines)
+
+
+def message_outline(messages: Sequence[Message], *, limit: int = 16) -> str:
+    """The conversation without its content: position, role and part kinds of each message.
+
+    ``#0 user[text] #1 assistant[reasoning,tool_call] #2 user[tool_result] #3 assistant[]``:
+    enough to see which message a provider refused, nothing a person wrote or a tool
+    returned. Long conversations keep their first two and last messages (``limit`` in all)."""
+    entries: list[str] = []
+    for index, message in enumerate(messages):
+        if isinstance(message.content, str):
+            kinds = ["text"] if message.content else []
+        else:
+            kinds = list(dict.fromkeys(part.type for part in message.content))
+        entries.append(f"#{index} {message.role}[{','.join(kinds)}]")
+    if len(entries) > limit:
+        keep = max(limit - 2, 1)
+        entries = [*entries[:2], f"... {len(entries) - 2 - keep} more ...", *entries[-keep:]]
+    return " ".join(entries)

@@ -1313,14 +1313,16 @@ class BedrockProvider(Provider):
             if code in _SERVER_CODES:
                 return ProviderServerError(message, retryable=True, **kwargs)
             if code in _INVALID_CODES:
-                return InvalidRequestError(message, **kwargs)
+                return InvalidRequestError(
+                    message, reason=self.invalid_request_reason(status or 400, str(detail or exc)), **kwargs
+                )
             return self.provider_error(exc, status_code=status, request_id=kwargs["request_id"])
         if name == "NoRegionError":
             return ConfigurationError(
                 "bedrock: no AWS region configured; set BedrockOptions(region_name=...) or AWS_DEFAULT_REGION"
             )
         if name == "ParamValidationError":
-            return InvalidRequestError(message, **kwargs)
+            return InvalidRequestError(message, reason="parameter", **kwargs)
         if any(word in name for word in ("Credential", "Token", "SSO", "Auth")):
             return AuthenticationError(message, **kwargs)
         if any(word in name for word in ("Connect", "Timeout", "ConnectionClosed", "Endpoint", "Protocol")):

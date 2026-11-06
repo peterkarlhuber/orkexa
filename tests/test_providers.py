@@ -218,14 +218,20 @@ def test_chat_completions_json_schema_response_format() -> None:
     assert response_format["json_schema"]["name"] == "Inner"
 
 
-def test_chat_completions_never_replays_reasoning() -> None:
+@pytest.mark.parametrize(("provider", "replayed"), [("ollama", True), ("vllm", False)])
+def test_chat_completions_replays_reasoning_only_where_the_endpoint_declares_a_field(
+    provider: str, replayed: bool
+) -> None:
+    """Ollama reads ``reasoning`` of an assistant message (``ChatMessageRules``); vLLM declares no field."""
     harness = ChatHarness()
+    harness.provider = provider
     agent = harness.agent(
         [harness.tool_calls([("c1", "add", {"a": 1, "b": 2})]), harness.text("3")], tools=[add]
     )
     agent.ask("hi")
     assistant = [m for m in harness.script.calls[1]["messages"] if m["role"] == "assistant"]
-    assert all("reasoning" not in m and "reasoning_content" not in m for m in assistant)
+    assert all("reasoning_content" not in m for m in assistant)
+    assert [m.get("reasoning") for m in assistant] == (["plan"] if replayed else [None])
 
 
 # ---- schema conversion -----------------------------------------------------------------

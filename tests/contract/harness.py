@@ -95,6 +95,12 @@ class Harness:
     def refusal(self) -> Any: ...
     def truncated(self, text: str) -> Any: ...
     def status_error(self, status: int) -> BaseException: ...
+    def thinking_only(self) -> Any:
+        """A final answer with reasoning and no text and no tool call ("done" thought)."""
+        ...
+
+    def check_wire(self, call: dict[str, Any]) -> None:
+        """Fail like the provider's server on a request it would refuse (where the rule is known)."""
 
     # inspection of sent requests
     def tool_results(self, call: dict[str, Any]) -> list[tuple[str, str, bool]]: ...
@@ -208,6 +214,9 @@ class AnthropicHarness(Harness):
 
     def refusal(self) -> Any:
         return self._message([{"type": "text", "text": "I can't help with that."}], "refusal")
+
+    def thinking_only(self) -> Any:
+        return self._message([{"type": "thinking", "thinking": "done", "signature": "sig-done"}], "end_turn")
 
     def truncated(self, text: str) -> Any:
         return self._message([{"type": "text", "text": text}], "max_tokens")
@@ -433,6 +442,18 @@ class OpenAIHarness(Harness):
     def refusal(self) -> Any:
         return self._response([self._message("I can't help with that.", "refusal")])
 
+    def thinking_only(self) -> Any:
+        return self._response(
+            [
+                {
+                    "type": "reasoning",
+                    "id": "rs_2",
+                    "summary": [{"type": "summary_text", "text": "done"}],
+                    "encrypted_content": "ENCRYPTED-2",
+                }
+            ]
+        )
+
     def truncated(self, text: str) -> Any:
         return self._response([self._message(text)], status="incomplete", reason="max_output_tokens")
 
@@ -564,6 +585,9 @@ class GeminiHarness(Harness):
 
     def refusal(self) -> Any:
         return self._response([], finish="SAFETY")
+
+    def thinking_only(self) -> Any:
+        return self._response([{"text": "done", "thought": True}])
 
     def truncated(self, text: str) -> Any:
         return self._response([{"text": text}], finish="MAX_TOKENS")
@@ -703,6 +727,7 @@ class ChatHarness(Harness):
         return self._completion(
             {
                 "content": None,
+                "reasoning": "plan",
                 "tool_calls": [
                     {"id": i, "type": "function", "function": {"name": n, "arguments": json.dumps(a)}}
                     for i, n, a in calls
@@ -713,6 +738,22 @@ class ChatHarness(Harness):
 
     def refusal(self) -> Any:
         return self._completion({"content": None, "refusal": "I can't help with that."}, "stop")
+
+    def thinking_only(self) -> Any:
+        return self._completion({"content": "", "reasoning": "done"}, "stop")
+
+    def check_wire(self, call: dict[str, Any]) -> None:
+        # Ollama (openai/openai.go, FromChatRequest): content may only be null or missing next to
+        # tool calls, else HTTP 400 "invalid message content type: <nil>".
+        for message in call["messages"]:
+            if message.get("content") is None and message.get("tool_calls") is None:
+                raise AssertionError(
+                    f"Ollama would answer 400 invalid message content type: <nil>: {message}"
+                )
+
+    def native_replayed(self, call: dict[str, Any]) -> bool:
+        # Ollama reads earlier reasoning from an assistant message's ``reasoning`` field.
+        return any(m.get("reasoning") == "plan" for m in call["messages"] if m["role"] == "assistant")
 
     def truncated(self, text: str) -> Any:
         return self._completion({"content": text}, "length")
@@ -744,6 +785,9 @@ class ChatHarness(Harness):
     def _chunks(self, completion: ChatCompletion) -> list[ChatCompletionChunk]:
         message = completion.choices[0].message
         chunks: list[dict[str, Any]] = []
+        reasoning = (message.model_extra or {}).get("reasoning")
+        if reasoning:
+            chunks.append({"reasoning": reasoning})
         if message.content:
             middle = len(message.content) // 2 or 1
             for piece in (message.content[:middle], message.content[middle:]):
@@ -991,6 +1035,11 @@ class BedrockHarness(Harness):
     def refusal(self) -> Any:
         return converse_response(
             [{"text": "Sorry, the model cannot answer this question."}], "guardrail_intervened"
+        )
+
+    def thinking_only(self) -> Any:
+        return converse_response(
+            [{"reasoningContent": {"reasoningText": {"text": "done", "signature": "sig-done"}}}]
         )
 
     def truncated(self, text: str) -> Any:
