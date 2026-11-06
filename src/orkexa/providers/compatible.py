@@ -25,7 +25,7 @@ from typing import Any, ClassVar
 
 from pydantic import SecretStr
 
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.types import ModelRequest, ModelResponse, StreamEvent
 from ..errors import ConfigurationError
 from .base import ProviderConfig
@@ -57,6 +57,9 @@ class _CompatibleResponses(OpenAIProvider):
 
     def capabilities(self, model: str) -> ModelCapabilities:
         return self.owner.capabilities(model)
+
+    def limits(self, model: str) -> ModelLimits:
+        return self.owner.limits(model)
 
     @staticmethod
     def _options(request: ModelRequest) -> OpenAIOptions:

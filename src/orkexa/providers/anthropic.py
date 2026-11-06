@@ -18,7 +18,7 @@ import time
 from typing import Any, ClassVar
 
 from ..content import ContentBlock
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.types import (
     ModelRequest,
     ModelResponse,
@@ -41,7 +41,7 @@ from . import anthropic_codec as codec
 from .base import Provider, ProviderConfig, require_module
 from .options import AnthropicOptions
 
-__all__ = ["AnthropicProvider", "model_family"]
+__all__ = ["AnthropicProvider", "model_family", "model_limits"]
 
 #: Models that reject a forced tool_choice (``any``/``tool``) with HTTP 400.
 _NO_FORCED_TOOL_CHOICE = frozenset(
@@ -58,6 +58,55 @@ _NO_SYSTEM_MESSAGES = frozenset(
     {"claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"}
 )
 _EFFORTS_ABOVE_HIGH = ("xhigh", "max")
+
+_ALL_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+#: Documented limits of the Claude models (Anthropic's model overview): context window, maximum output,
+#: accepted efforts and values of ``thinking``. Models not listed are unknown (nothing is checked).
+_LIMITS: dict[str, ModelLimits] = {
+    **{
+        family: ModelLimits(1_000_000, 128_000, _ALL_EFFORTS, ("adaptive",), False, "documented")
+        for family in (
+            "claude-fable-5-1",
+            "claude-mythos-5-1",
+            "claude-fable-5",
+            "claude-mythos-5",
+            "claude-opus-5-5",
+        )
+    },
+    "claude-sonnet-5-5": ModelLimits(
+        1_000_000, 128_000, _ALL_EFFORTS, ("adaptive", "between_tools"), False, "documented"
+    ),
+    **{
+        family: ModelLimits(1_000_000, 128_000, _ALL_EFFORTS, ("adaptive", "disabled"), False, "documented")
+        for family in (
+            "claude-opus-5",
+            "claude-haiku-5-5",
+            "claude-sonnet-5",
+            "claude-opus-4-8",
+            "claude-opus-4-7",
+        )
+    },
+    **{
+        family: ModelLimits(
+            1_000_000,
+            128_000,
+            ("low", "medium", "high", "max"),
+            ("adaptive", "disabled"),
+            False,
+            "documented",
+        )
+        for family in ("claude-opus-4-6", "claude-sonnet-4-6")
+    },
+    # Haiku 4.5 thinks only with a token budget (``budget_tokens``, which Orkexa does not send) and
+    # takes no effort.
+    "claude-haiku-4-5": ModelLimits(200_000, 64_000, (), (), False, "documented"),
+}
+
+
+def model_limits(model: str) -> ModelLimits:
+    """The documented limits of a Claude model id (also ``anthropic.``-prefixed or dated)."""
+    return _LIMITS.get(model_family(model), ModelLimits())
+
 
 _THINKING_UPDATES_BETA = "thinking-display-updates-2026-08-18"
 _FALLBACK_BETA_DEFAULT = "server-side-fallback-2026-07-01"
@@ -134,6 +183,18 @@ def check_options(model: str, options: AnthropicOptions, effort: str | None) -> 
         raise UnsupportedCapabilityError(
             f"thinking_display cannot be combined with thinking={thinking!r}", capability="reasoning"
         )
+    modes = model_limits(model).thinking_modes
+    if modes is not None and (thinking is not None or options.thinking_display is not None):
+        if not modes:
+            raise UnsupportedCapabilityError(
+                f"{model} has no configurable thinking in Orkexa; remove thinking and thinking_display",
+                capability="reasoning",
+            )
+        if thinking is not None and thinking not in modes:
+            raise UnsupportedCapabilityError(
+                f"{model} does not accept thinking={thinking!r} (accepted: {', '.join(modes)})",
+                capability="reasoning",
+            )
 
 
 def _forced_reason(model: str) -> str:
@@ -197,7 +258,13 @@ class AnthropicProvider(Provider):
         if family in _NO_SYSTEM_MESSAGES:
             overrides["system_messages"] = "unsupported"
             reasons["system_messages"] = f"{model} does not accept system messages inside the conversation"
+        if model_limits(model).efforts == ():
+            overrides["reasoning"] = "unsupported"
+            reasons["reasoning"] = f"{model} takes no reasoning effort; remove effort"
         return ModelCapabilities.all("supported", reasons=reasons, **overrides)
+
+    def limits(self, model: str) -> ModelLimits:
+        return model_limits(model)
 
     def check(self, request: ModelRequest) -> None:
         check_options(request.model, self._options(request), request.effort)

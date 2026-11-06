@@ -46,7 +46,7 @@ import time
 from typing import Any, ClassVar, TypeVar
 from urllib.parse import urlsplit
 
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.conversion import document_text, search_result_text, validate_output
 from ..core.schema import drop_null_optionals, strict_schema
 from ..core.types import (
@@ -553,6 +553,19 @@ class BedrockProvider(Provider):
 
     def capabilities(self, model: str) -> ModelCapabilities:
         return bedrock_capabilities(parse_model_id(model).base_model)
+
+    def limits(self, model: str) -> ModelLimits:
+        """The effort levels of the Claude model behind the id; Anthropic's ``thinking`` options
+        are not part of Converse. Token limits on Bedrock are not documented to Orkexa (unknown)."""
+        base = parse_model_id(model).base_model or ""
+        efforts = None
+        if _CLAUDE.match(base):
+            from .anthropic import model_limits
+
+            efforts = model_limits(base).efforts
+            if efforts is None and not _CLAUDE_5.match(base):
+                efforts = ()  # Converse sends no effort for older Claude models
+        return ModelLimits(efforts=efforts, thinking_modes=(), thinking_budget=False)
 
     def check(self, request: ModelRequest) -> None:
         options = self._options_of(request)

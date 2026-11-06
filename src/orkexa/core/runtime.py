@@ -59,7 +59,7 @@ from ..pricing import ModelPrice, PricingBasis, PricingInput, pricing_basis
 from ..retrieval import Index
 from ..tools import Tool, ToolOutput
 from ..usage import Reservation, UsageRecord, UsageSummary, UsageTracker, current_workflow, summarize_usage
-from .capabilities import ModelCapabilities, Support
+from .capabilities import ModelCapabilities, ModelLimits, Support
 from .checkpoint import CHECKPOINT_FORMAT, CHECKPOINT_VERSION, TurnCheckpoint, WaitingCall, checkpoint_digest
 from .conversion import (
     HistoryPolicy,
@@ -394,6 +394,11 @@ class AgentCore(Generic[OutputT]):
         """What the current model supports here, including ``capabilities=`` overrides."""
         return self.adapter.capabilities(self._model_id()).merged(self.capability_overrides)
 
+    @property
+    def limits(self) -> ModelLimits:
+        """The current model's documented token limits and reasoning settings (``None``: unknown)."""
+        return self.adapter.limits(self._model_id())
+
     # ---- usage -----------------------------------------------------------------------
 
     @property
@@ -667,6 +672,11 @@ class AgentCore(Generic[OutputT]):
             for part in message.parts():
                 self._check_part(part, caps, where)
         self.adapter.check(request)
+        # Documented limits last, so a provider's own, more specific message comes first.
+        limits = self.adapter.limits(request.model)
+        limits.check_max_tokens(request.max_tokens, **where)
+        if request.effort is not None:
+            limits.check_effort(request.effort, **where)
 
     @staticmethod
     def _check_part(part: Any, caps: ModelCapabilities, where: dict[str, str]) -> None:
