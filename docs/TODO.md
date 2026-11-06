@@ -10,9 +10,9 @@
 | Priority | Count |
 |---|---|
 | P0 Critical | 0 |
-| P1 High | 0 |
-| P2 Medium | 2 |
-| P3 Low | 10 |
+| P1 High | 2 |
+| P2 Medium | 5 |
+| P3 Low | 11 |
 | P4 Optional | 8 |
 
 **Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
@@ -270,6 +270,56 @@ None known.
 - **What:** `SubprocessSandbox` and `AutoApprover` are explicit unsafe opt-ins, and `ClaudeAgent` raises SDK
   exceptions as they are (tracebacks may contain request details). Reason: deliberate design, documented as out of
   scope in `SECURITY.md`.
+
+## MUP-ONA
+
+Packages of the MUP-ONA plan (security and database backends for Orkexa, Nodestro and Axentra; [plan](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md))
+that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0, skip expectations, T-SQL-1 as a strict
+xfail) is in place; each entry is removed in the change that completes its package.
+
+### ORK-MUP-A10 · SQLite robustness: concurrent FTS5 delete, query limits, damaged files
+
+- **Priority:** P1 High · **Status:** Open · **Refs:** [MUP-ONA MP-A10](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md), PS-8, PS-9, VB-12,
+  `tests/backends/sqlite/test_robustness.py` (T-SQL-1, strict xfail)
+- **What:** Two `SQLiteIndex` instances or processes deleting the same source both send the FTS5 `'delete'` and the
+  second fails with "database disk image is malformed" (PS-8); queries have no length or word limit (PS-9); smaller
+  findings: extension loading without `finally`, query vector dimension, `SQLiteFileStore.add` outside a transaction,
+  symlinked database paths, raw `sqlite3.DatabaseError` for damaged files.
+- **Next step:** Implement MP-A10 (T-SQL-1..10, T-RANK-1) and remove the xfail.
+
+### ORK-MUP-A1 · PDF extraction with budgets and process isolation
+
+- **Priority:** P1 High · **Status:** Open · **Refs:** [MUP-ONA MP-A1](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md), PS-1
+- **What:** `Index.add_file` extracts PDF text without a page, character, time or memory limit; a thread timeout
+  cannot stop `pypdf`.
+- **Next step:** `pdf_pages` with budgets and `pdf_pages_isolated` in a separate interpreter (T-PDF-1..7, 11..14);
+  raise the `pdf` extra's lower bound to a `pypdf` without known DoS advisories.
+
+### ORK-MUP-B0 · Versioning, public API snapshot and release rules
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** [MUP-ONA MP-B0](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md)
+- **What:** No API snapshot test, no import contracts, no documented tag scheme; version still `0.1.0`.
+- **Next step:** `tests/test_public_api.py` (T-API-1), import-linter contracts (T-PKG-0), version `0.2.0.dev0`,
+  release rules in the CHANGELOG and the docs.
+
+### ORK-MUP-B1 · Generic contracts and the public conformance suite
+
+- **Priority:** P2 Medium · **Status:** Open · **Refs:** [MUP-ONA MP-B1](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md)
+- **What:** The `Index`, `FileStore` and `MemoryBackend` contracts have no reusable conformance suite.
+- **Next step:** `orkexa.testing.conformance` (T-CONF) run against the SQLite classes.
+
+### ORK-MUP-B2 · SQLite backend moves to `orkexa.backends.sqlite`
+
+- **Priority:** P2 Medium · **Status:** Open · **Refs:** [MUP-ONA MP-B2](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md)
+- **What:** `SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` live in the contract modules.
+- **Next step:** Behavior-neutral move with re-exports (T-API-1..3, T-SQL-10 against FX-SQ-0).
+
+### ORK-MUP-B5 · `orkexa.backends.postgres` and `orkexa.testing.sqlcheck`
+
+- **Priority:** P2 Medium · **Status:** Open · **Refs:** [MUP-ONA MP-B5](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md)
+- **What:** The generic PostgreSQL backend still lives in nodestro-runtime; there is no reusable tenant SQL rule
+  engine.
+- **Next step:** Optional extras `postgres` and `sqlcheck`, statement catalog with partition guard, T-PART/T-CAT/T-GUARD.
 
 ## Cross-repository dependencies
 

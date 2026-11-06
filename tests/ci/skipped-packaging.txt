@@ -1,0 +1,3 @@
+# Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
+# Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
+# Job ci.yml/packaging (pytest -m packaging tests/packaging --noconftest): every packaging test runs, none is skipped.

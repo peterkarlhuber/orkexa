@@ -1,0 +1,38 @@
+# Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
+# Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
+# Job platforms.yml/offline on macos-15-intel: derived from the Linux run and the tests'
+# skip conditions, NOT yet verified on a real runner (the lead fixes it after the first CI run).
+
+tests.anthropic.test_dynamic_sandbox::test_docker_sandbox_end_to_end  # needs Docker and the image from docker/sandbox.Dockerfile
+tests.anthropic.test_dynamic_sandbox::test_memory_limit  # RLIMIT_AS is only reliable on Linux
+tests.anthropic.test_live::test_text_tool_and_structured_output  # needs ANTHROPIC_API_KEY
+tests.audit2.test_ork2_06_guards::test_a_stopped_run_kills_the_whole_process_group[cancel]  # process groups and /proc
+tests.audit2.test_ork2_06_guards::test_a_stopped_run_kills_the_whole_process_group[timeout]  # process groups and /proc
+tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
+tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
+tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging
+tests.packaging.test_artifacts::test_published_description_uses_only_absolute_urls  # packaging test; run with: pytest -m packaging
+tests.packaging.test_install::test_core_install_has_no_provider_sdk  # packaging test; run with: pytest -m packaging
+tests.packaging.test_install::test_extras_install_every_sdk  # packaging test; run with: pytest -m packaging
+tests.test_bedrock_live::test_one_tiny_request_with_eu_residency  # needs ORKEXA_BEDROCK_LIVE_MODEL and AWS_DEFAULT_REGION
+tests.test_docker_sandbox::test_call_runs_isolated  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_cancel_leaves_no_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_cancel_scope_removes_the_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_fork_bomb_hits_the_pids_limit  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_fsize_ulimit_limits_a_big_write  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_network_connect_fails  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_reaper_removes_an_expired_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_self_test_passes  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_timeout_removes_the_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_twice_the_memory_is_oom_killed  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_write_to_root_fails  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_self_test::test_the_environment_is_the_one_the_container_started_with  # reads /proc/self/environ
+tests.test_docker_self_test::test_the_seccomp_probes_run_here  # the seccomp probes have system call numbers for 64-bit x86 and arm Linux
+tests.test_history_models::test_dated_model_versions_keep_reasoning_in_the_tool_loop[bedrock]  # bedrock responses never name a model version
+tests.test_local::test_live_agent_answer_and_embeddings  # set ORKEXA_TEST_OLLAMA_URL to a real Ollama with qwen3.5:4b
+tests.test_local_convert::test_live_mdenseon_build_matches_reference_and_ranks_across_languages  # needs a real Ollama and the mDenseOn files
+tests.test_ollama_live::test_a_text_answer_after_an_empty_turn  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[False]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[True]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_tools_then_structured_answer[False]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_tools_then_structured_answer[True]  # needs ORKEXA_OLLAMA_LIVE_URL

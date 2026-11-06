@@ -1,0 +1,288 @@
+# Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
+# Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
+# Job platforms.yml/offline on windows-11-arm: derived from the Linux run and the tests'
+# skip conditions, NOT yet verified on a real runner (the lead fixes it after the first CI run).
+
+::tests.audit3.test_ork3_09_build_model  # collection skipped: could not import 'gguf' (not installed on Windows ARM64)
+::tests.test_local_convert  # collection skipped: could not import 'gguf' (not installed on Windows ARM64)
+tests.anthropic.test_dynamic_sandbox::test_docker_sandbox_end_to_end  # needs Docker and the image from docker/sandbox.Dockerfile
+tests.anthropic.test_dynamic_sandbox::test_memory_limit  # RLIMIT_AS is only reliable on Linux
+tests.anthropic.test_files::test_local_store_permissions  # POSIX permissions
+tests.anthropic.test_live::test_text_tool_and_structured_output  # needs ANTHROPIC_API_KEY
+tests.anthropic.test_memory::test_file_memory_rejects_symlinks_that_leave_the_root  # symlinks need privileges on Windows
+tests.anthropic.test_retrieval::test_hybrid_search_finds_synonyms_via_vectors  # needs sqlite-vec
+tests.audit2.test_ork2_01_tool_cancel::test_agent_tool_timeout_stops_the_sandbox_call  # checks the process by its pid
+tests.audit2.test_ork2_01_tool_cancel::test_async_agent_tool_timeout_stops_the_sandbox_call  # checks the process by its pid
+tests.audit2.test_ork2_01_tool_cancel::test_cancelling_async_ask_stops_the_sandbox_call  # checks the process by its pid
+tests.audit2.test_ork2_01_tool_cancel::test_linked_check  # checks the process by its pid
+tests.audit2.test_ork2_01_tool_cancel::test_the_callers_cancel_scope_still_stops_a_call_with_a_timeout  # checks the process by its pid
+tests.audit2.test_ork2_06_guards::test_a_stopped_run_kills_the_whole_process_group[cancel]  # process groups and /proc
+tests.audit2.test_ork2_06_guards::test_a_stopped_run_kills_the_whole_process_group[timeout]  # process groups and /proc
+tests.audit2.test_ork2_08_stop_container::test_a_killed_container_is_confirmed_gone_without_the_settle_wait  # a shell script plays docker
+tests.audit2.test_ork2_08_stop_container::test_a_killed_container_still_listed_is_removed_again  # a shell script plays docker
+tests.audit2.test_ork2_08_stop_container::test_without_a_kill_the_name_is_watched_for_the_settle_time  # a shell script plays docker
+tests.audit3.test_ork3_01_runtime_links::test_install_keeps_links_inside_the_runtime  # POSIX links and process groups
+tests.audit3.test_ork3_01_runtime_links::test_install_refuses_link_chains_that_leave_the_runtime[links0]  # POSIX links and process groups
+tests.audit3.test_ork3_01_runtime_links::test_install_refuses_link_chains_that_leave_the_runtime[links1]  # POSIX links and process groups
+tests.audit3.test_ork3_02_reindex_race::test_add_replaces_a_stale_vector_left_by_an_earlier_version  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_02_reindex_race::test_reindex_does_not_give_a_new_chunk_the_vector_of_a_deleted_one  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_02_reindex_race::test_reindex_leaves_no_vector_of_a_chunk_deleted_meanwhile  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_03_vectors::test_a_zero_vector_does_not_break_vector_search[hybrid]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_03_vectors::test_a_zero_vector_does_not_break_vector_search[vector]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_03_vectors::test_non_finite_vectors_are_refused  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_04_managed_server::test_cli_serve_stops_the_server_on_sigterm  # POSIX links and process groups
+tests.audit3.test_ork3_04_managed_server::test_managed_server_on_ipv6_loopback  # POSIX links and process groups
+tests.audit3.test_ork3_04_managed_server::test_stop_also_ends_the_runners_of_a_server_that_had_to_be_killed  # POSIX links and process groups
+tests.audit3.test_ork3_05_orphaned_server::test_a_server_whose_owner_still_runs_is_left_alone  # POSIX process groups
+tests.audit3.test_ork3_05_orphaned_server::test_next_start_stops_the_orphaned_server_and_its_runners  # POSIX process groups
+tests.audit3.test_ork3_05_orphaned_server::test_unrelated_processes_are_never_stopped_and_stale_files_go[OTHER]  # POSIX process groups
+tests.audit3.test_ork3_05_orphaned_server::test_unrelated_processes_are_never_stopped_and_stale_files_go[not json]  # POSIX process groups
+tests.audit3.test_ork3_05_orphaned_server::test_unrelated_processes_are_never_stopped_and_stale_files_go[{}]  # POSIX process groups
+tests.audit3.test_ork3_06_query_embedding_lock::test_a_reindex_during_the_query_embedding_is_detected  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_06_query_embedding_lock::test_writes_do_not_wait_for_a_query_embedding[hybrid]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_06_query_embedding_lock::test_writes_do_not_wait_for_a_query_embedding[vector]  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_07_identity_refresh::test_a_model_update_during_a_reindex_discards_the_mixed_vectors  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_07_identity_refresh::test_an_updated_model_is_not_filed_under_its_old_identity  # sqlite-vec cannot be loaded here
+tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
+tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
+tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging
+tests.packaging.test_artifacts::test_published_description_uses_only_absolute_urls  # packaging test; run with: pytest -m packaging
+tests.packaging.test_install::test_core_install_has_no_provider_sdk  # packaging test; run with: pytest -m packaging
+tests.packaging.test_install::test_extras_install_every_sdk  # packaging test; run with: pytest -m packaging
+tests.test_bedrock_live::test_one_tiny_request_with_eu_residency  # needs ORKEXA_BEDROCK_LIVE_MODEL and AWS_DEFAULT_REGION
+tests.test_docker_container::test_bind_transport_still_works  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_cancel_kills_the_container  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_environ_is_the_environment_of_every_docker_cli_call  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_list_and_reap  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_reaper_errors  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_reaper_ignores_foreign_and_malformed_inspect_output  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_stdin_transport_end_to_end  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_timeout_removes_the_container  # the fake docker CLI is a POSIX script
+tests.test_docker_container::test_tool_errors_and_silent_containers  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_a_failing_info_is_unreachable_even_with_json  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_every_fixture_is_covered  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_facts_are_strings  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_fingerprint_follows_the_host  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_host_fields  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_inspect_errors  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_inspect_passes_the_cli_environment  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_inspect_timeout  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_limits_refusal_names_every_missing_flag  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[colima]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[docker-desktop-unconfined]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[docker-desktop]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[no-seccomp]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[orbstack]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[podman-compat]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[podman-native-cgroup1]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[podman-native-no-delegation]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[podman-native]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[rootful-arm64]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[rootful-cgroup1]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[rootful-cgroup2]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[rootless-cgroup1]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[rootless-cgroup2-no-delegation]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[rootless-cgroup2]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[seccomp-unconfined]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[windows]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_probe_errors_are_redacted  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_probe_passes_a_good_host  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_probe_reports_a_missing_image_and_an_unreachable_daemon  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload-Bearer <redacted>-eyJhbGci]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[Cannot connect to the Docker daemon at unix:///home/alice/.colima/default/docker.sock.-unix://<redacted>-alice]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[GET /info?access_token=abc123&x=1 failed-access_token=<redacted>&x=1-abc123]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[dial ssh://deploy@build-host.internal: exit status 255-ssh://<redacted>@build-host-deploy]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[dial unix /run/user/1001/docker.sock: connect: permission denied-dial unix <socket>: connect-/run/user/1001]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[error during connect: Get tcp://admin:s3cr3t@10.0.0.5:2376/v1.47/info: x509-tcp://<redacted>@10.0.0.5:2376-s3cr3t]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[https://user:p@ss@registry.example/v2/-https://<redacted>@registry.example-p@ss]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redact_docker_output[open /Users/bob/.docker/config.json: denied-/Users/<user>/.docker/config.json-bob]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_redaction_keeps_standard_sockets_and_cuts_after_redacting  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_sandbox_refuses_a_failing_host[rootless-cgroup2-no-delegation]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_sandbox_refuses_a_failing_host[seccomp-unconfined]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_sandbox_refuses_a_failing_host[windows]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_the_engine_name_is_never_trusted  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_unreported_cpu_limits_are_left_to_the_self_test_only_on_cgroup_v2  # the fake docker CLI is a POSIX script
+tests.test_docker_sandbox::test_call_runs_isolated  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_cancel_leaves_no_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_cancel_scope_removes_the_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_fork_bomb_hits_the_pids_limit  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_fsize_ulimit_limits_a_big_write  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_network_connect_fails  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_reaper_removes_an_expired_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_self_test_passes  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_timeout_removes_the_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_twice_the_memory_is_oom_killed  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_sandbox::test_write_to_root_fails  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
+tests.test_docker_self_test::test_a_failed_self_test_is_not_remembered  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_a_permissive_daemon_fails_every_probe  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_apparmor_is_reported_without_failing_where_the_host_has_none  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[None-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[containers-default-0.57.4 (enforce)-True]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[containers-default-0.57.4-apparmor1//&crun (mixed)-True]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[containers-default-0.57.4//&evil (mixed)-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[crun//&containers-default-0.57.4 (mixed)-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[docker-default (complain)-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[docker-default (enforce)-True]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[docker-default (mixed)-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[docker-default (unconfined)-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[docker-default//&runc (mixed)-True]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[orkexa-strict (kill)-True]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[unconfined-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_apparmor[unconfined//&crun (mixed)-False]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_check_seccomp_probes  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_cli_preflight_and_reap  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_cli_self_test  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_evaluate_self_test_directly  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_init_binaries_and_masks_are_allowed  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_inspect_image_edge_cases  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_and_unreadable_images  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/dev/shm]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/dev]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/proc]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/run]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/sys]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/tmp]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/var/tmp]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_missing_mounts_are_refused[/work]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_module_entry_point_runs_without_warnings  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_other_engines_pass_when_their_containers_do[colima]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_other_engines_pass_when_their_containers_do[docker-desktop]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_other_engines_pass_when_their_containers_do[orbstack]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_other_engines_pass_when_their_containers_do[podman-compat]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_other_engines_pass_when_their_containers_do[rootless-cgroup2]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_parse_mountinfo  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_pin_base[ghcr.io/acme/base:1@sha256:1212121212121212121212121212121212121212121212121212121212121212-digests3]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_pin_base[localhost:5000/base@sha256:1212121212121212121212121212121212121212121212121212121212121212-digests4]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_pin_base[python:3.12-slim@sha256:1212121212121212121212121212121212121212121212121212121212121212-digests0]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_pin_base[python@sha256:1212121212121212121212121212121212121212121212121212121212121212-digests1]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_pin_base[ref2-digests2]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_pin_base_image_gone_after_pull  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_pin_base_refuses  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_readiness_is_reused_for_a_while  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_recorded_mount_tables_pass[docker-desktop]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_recorded_mount_tables_pass[docker-rootful]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_recorded_mount_tables_pass[docker-rootless]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_recorded_mount_tables_pass[podman-rootful]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_recorded_mount_tables_pass[podman-rootless]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_resolve_image_id  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_rootful_cgroup_v1_is_refused_by_the_self_test  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_secret_like_image_variables_are_refused  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_is_remembered_per_host_image_and_shape  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_passes_on_a_correct_engine  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes0-unknown version]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes1-uid 0]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes10-root file system is writable]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes11-/work is mounted without nodev, noexec, nosuid]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes12-a program in /tmp]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes13-/dev/shm has]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes14-/work has None]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes15-not on cgroup v2]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes16-memory.max is max]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes17-memory.swap.max is max]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes18-pids.max is max]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes19-cpu.max is max 100000]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes2-ids are not all 65534]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes20-expected 1 CPUs]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes21-RLIMIT_NOFILE]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes22-RLIMIT_FSIZE]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes23-RLIMIT_CORE]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes24-unexpected environment variables]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes25-environment is not reported]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes26-mount table is not reported]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes27-mount table cannot be read]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes28-can write to /run]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes29-can write to /var/tmp]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes3-CapEff is 00000000a80425fb]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes30-seccomp profile allows move_pages]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes31-architecture riscv64]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes32-seccomp probes are not reported]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes33-not confined by an enforcing profile (unconfined)]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes34-(no label)]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes4-CapBnd]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes5-CapEff is not reported]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes6-NoNewPrivs is 0]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes7-Seccomp is 0]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes8-only lo]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_refuses_what_the_engine_did_not_apply[changes9-root file system is writable]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_self_test_without_a_report  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_the_environment_is_the_one_the_container_started_with  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_the_recorded_engines_have_the_samples  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_the_seccomp_probes_run_here  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_the_self_test_script_compiles  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[900 612 8:1 /srv/shared /data rw,relatime - ext4 /dev/root rw,discard-unexpected writable mount at /data (ext4 /dev/root]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[901 612 8:1 /usr/share/rhel/secrets /run/secrets ro,relatime - ext4 /dev/root rw-unexpected read-only mount at /run/secrets]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[902 612 0:70 / /scratch rw,nosuid,nodev - tmpfs tmpfs rw,size=64k-writable mount at /scratch]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[903 612 0:71 / /scratch ro,nosuid,nodev - tmpfs tmpfs ro-read-only mount at /scratch]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[904 612 0:22 / /hostproc ro,nosuid - proc proc rw-mount at /hostproc]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[905 613 0:22 / /proc/driver ro,nosuid - proc proc rw-mount at /proc/driver]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[906 613 0:55 /sys /proc/sys/kernel rw,nosuid - proc proc rw-writable mount at /proc/sys/kernel]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[907 616 0:7 / /sys/kernel/security rw,nosuid - securityfs securityfs rw-/sys/kernel/security]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[908 616 8:1 /home/user /sys/kernel/debug ro,relatime - ext4 /dev/root rw-/sys/kernel/debug]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[909 614 0:5 /sda /dev/sda rw,nosuid - devtmpfs udev rw-mount at /dev/sda]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[910 614 0:5 /zero /dev/null rw,nosuid - devtmpfs udev rw-mount at /dev/null]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[911 612 8:1 / /etc/hosts rw,relatime - ext4 /dev/root rw,discard-mount at /etc/hosts]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[912 612 8:1 /usr/bin/tini /sbin/docker-init rw,relatime - ext4 /dev/root rw-/sbin/docker-init]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[913 612 8:1 /home/user/project /work rw,relatime - ext4 /dev/root rw,discard-/work is ext4, not a tmpfs]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[914 612 8:1 /srv /my\\040data rw,relatime - ext4 /dev/root rw-mount at /my data]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unexpected_mounts_are_refused[915 612 0:72 / /proc/acpi rw,relatime - tmpfs tmpfs rw-writable mount at /proc/acpi]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_unsupported_architectures_report_themselves  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/dev rw,nosuid - tmpfs-/dev rw - tmpfs-/dev is mounted without nosuid]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/dev/pts rw,nosuid,noexec,relatime - devpts-/dev/pts rw,nosuid - tmpfs-mount at /dev/pts]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/proc/sys ro,-/proc/sys rw,-writable mount at /proc/sys]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/run rw,nosuid,nodev,noexec,relatime-/run rw,nosuid,nodev,relatime-/run is mounted without noexec]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/sys ro,nosuid,nodev,noexec,relatime - sysfs sysfs ro-/sys rw,nosuid,nodev,noexec,relatime - sysfs sysfs rw-/sys is writable]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/sys/fs/cgroup ro,-/sys/fs/cgroup rw,-/sys/fs/cgroup is writable]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/tmp rw,nosuid,nodev,noexec,relatime - tmpfs-/tmp rw,nosuid - ext4-/tmp is ext4]  # the fake docker CLI is a POSIX script
+tests.test_docker_self_test::test_wrong_engine_mounts_are_refused[/var/tmp rw,nosuid,nodev,noexec,relatime - tmpfs-/var/tmp rw - overlay-/var/tmp is overlay]  # the fake docker CLI is a POSIX script
+tests.test_history_models::test_dated_model_versions_keep_reasoning_in_the_tool_loop[bedrock]  # bedrock responses never name a model version
+tests.test_legacy_fixtures::test_the_vector_index_opens_with_its_vectors  # sqlite-vec cannot be loaded here
+tests.test_local::test_install_from_a_verified_archive  # POSIX runtime layout with symlinks
+tests.test_local::test_live_agent_answer_and_embeddings  # set ORKEXA_TEST_OLLAMA_URL to a real Ollama with qwen3.5:4b
+tests.test_local::test_managed_server_starts_on_loopback_with_a_minimal_environment  # the fake binary is a shebang script
+tests.test_local_install_progress::test_one_installation_at_a_time  # flock
+tests.test_managed_server_hardening::test_another_server_answering_on_the_port_is_never_used  # POSIX modes; the fake server is a script
+tests.test_managed_server_hardening::test_binary_that_cannot_be_executed_is_an_ollama_error  # POSIX modes; the fake server is a script
+tests.test_managed_server_hardening::test_large_log_is_rotated_at_the_next_start  # POSIX modes; the fake server is a script
+tests.test_managed_server_hardening::test_runtime_folders_are_private_to_the_user  # POSIX modes; the fake server is a script
+tests.test_managed_server_hardening::test_server_files_are_private_to_the_user  # POSIX modes; the fake server is a script
+tests.test_managed_server_hardening::test_small_log_is_appended_to  # POSIX modes; the fake server is a script
+tests.test_managed_server_hardening::test_unusable_home_is_an_ollama_error  # POSIX modes; the fake server is a script
+tests.test_ollama_live::test_a_text_answer_after_an_empty_turn  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[False]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[True]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_tools_then_structured_answer[False]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_ollama_live::test_tools_then_structured_answer[True]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_private_storage::test_existing_directories_keep_their_mode  # POSIX permission bits
+tests.test_private_storage::test_existing_sqlite_databases_keep_their_mode[SQLiteFileStore]  # POSIX permission bits
+tests.test_private_storage::test_existing_sqlite_databases_keep_their_mode[SQLiteIndex]  # POSIX permission bits
+tests.test_private_storage::test_existing_sqlite_databases_keep_their_mode[SQLiteMemory]  # POSIX permission bits
+tests.test_private_storage::test_failed_history_write_keeps_the_old_file_and_no_temporary_file  # POSIX permission bits
+tests.test_private_storage::test_file_memory_and_local_file_store_are_private  # POSIX permission bits
+tests.test_private_storage::test_new_sqlite_databases_and_their_journals_are_private[SQLiteFileStore]  # POSIX permission bits
+tests.test_private_storage::test_new_sqlite_databases_and_their_journals_are_private[SQLiteIndex]  # POSIX permission bits
+tests.test_private_storage::test_new_sqlite_databases_and_their_journals_are_private[SQLiteMemory]  # POSIX permission bits
+tests.test_private_storage::test_registry_records_and_nested_directories_are_private  # POSIX permission bits
+tests.test_private_storage::test_saved_histories_are_private_new_and_overwritten[Agent]  # POSIX permission bits
+tests.test_private_storage::test_saved_histories_are_private_new_and_overwritten[ClaudeAgent]  # POSIX permission bits
+tests.test_private_storage::test_saved_history_replaces_a_symlink_instead_of_following_it  # POSIX permission bits
+tests.test_private_storage::test_the_process_umask_is_not_changed  # POSIX permission bits
+tests.test_retrieval_modes::test_a_weak_full_text_hit_no_longer_outranks_the_vector_hit  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_changing_the_embedding_model_needs_a_reindex  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_default_mode_is_hybrid_with_embeddings_and_fts_without  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_delete_removes_vectors_and_drop_vectors_keeps_full_text  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_first_vectors_for_an_existing_fts_index  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_fuse_hybrid_breaks_ties_by_chunk_id_and_checks_the_weight  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_fuse_hybrid_lets_a_whole_query_match_win_but_not_an_accidental_one  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_fuse_hybrid_without_lexical_evidence_keeps_the_vector_order  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_hybrid_fusion_options_are_checked  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_hybrid_keeps_exact_codes_that_vectors_cannot_tell_apart  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_large_dataset_and_ties_are_deterministic  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_legacy_embedder_keeps_working_and_honours_modes  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_lexical_evidence_counts_words_no_chunk_contains  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_namespaces_keep_separate_spaces  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_reindex_is_resumable_and_keeps_the_old_space_until_complete  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_sources_limit_candidates_before_ranking  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_the_three_modes_rank_differently  # sqlite-vec cannot be loaded here
+tests.test_retrieval_modes::test_tool_uses_mode_and_sources  # sqlite-vec cannot be loaded here
+tests.test_sandbox_policy::test_subprocess_run_directory_stays_owner_only  # POSIX permission bits
