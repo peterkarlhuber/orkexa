@@ -15,6 +15,7 @@ import http.client
 import ipaddress
 import json
 import socket
+import sys
 import threading
 from typing import Any
 from urllib.parse import urlsplit
@@ -244,6 +245,10 @@ class OllamaHTTP:
                         if sock is not None and not finished.is_set():
                             with contextlib.suppress(OSError):
                                 sock.shutdown(socket.SHUT_RDWR)
+                            if sys.platform == "win32":
+                                # Windows wakes a blocking recv() on close, not on shutdown.
+                                with contextlib.suppress(OSError):
+                                    sock.close()
                         return
 
             threading.Thread(target=watch, name="orkexa-ollama-cancel", daemon=True).start()
