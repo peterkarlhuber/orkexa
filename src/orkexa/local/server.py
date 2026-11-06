@@ -24,6 +24,7 @@ import threading
 import time
 from typing import Any
 
+from .._storage import PRIVATE_FILE_MODE, make_private_dirs, write_private_text
 from ._http import OllamaError
 from .client import OllamaClient
 from .install import OLLAMA_VERSION, installed_runtime
@@ -31,6 +32,8 @@ from .install import OLLAMA_VERSION, installed_runtime
 __all__ = ["DEFAULT_PORT", "ManagedOllama", "ServerState", "detect_ollama", "free_port"]
 
 DEFAULT_PORT = 11434
+#: The server log is rotated at the next start once it is larger than this (one older log is kept).
+LOG_ROTATE_BYTES = 10 * 1024 * 1024
 _ENV_PASSTHROUGH = (
     "PATH",
     "HOME",
@@ -240,14 +243,26 @@ class ManagedOllama:
                 raise OllamaError(
                     "models_dir", f"The model folder {self.models_dir} cannot be used: {exc}"
                 ) from exc
-            (self.home / "ollama-home").mkdir(parents=True, exist_ok=True)
             if not os.access(self.models_dir, os.W_OK):
                 raise OllamaError("models_dir", f"The model folder {self.models_dir} is not writable")
+            try:
+                # The server's home holds its key pair, the logs may show prompts and model names:
+                # both are private to this user (on a host that several users share).
+                make_private_dirs(self.home / "ollama-home")
+                make_private_dirs(self.log_file.parent)
+            except OSError as exc:
+                raise OllamaError(
+                    "start_failed", f"{self.home} cannot be used for the server's files: {exc}"
+                ) from exc
             port = self.port or free_port(self.host)
             if self.port is not None and detect_ollama(f"http://{self._authority}:{port}") is not None:
                 raise OllamaError("port_in_use", f"Another Ollama already listens on port {port}")
-            self.log_file.parent.mkdir(parents=True, exist_ok=True)
-            log = self.log_file.open("ab")
+            try:
+                log_fd = self._open_log()
+            except OSError as exc:
+                raise OllamaError(
+                    "start_failed", f"The log {self.log_file} cannot be written: {exc}"
+                ) from exc
             kwargs: dict[str, Any] = {}
             if platform.system() == "Windows":
                 kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
@@ -258,13 +273,19 @@ class ManagedOllama:
                     [str(binary), "serve"],
                     env=self._env(port),
                     stdin=subprocess.DEVNULL,
-                    stdout=log,
+                    stdout=log_fd,
                     stderr=subprocess.STDOUT,
                     cwd=self.home,
                     **kwargs,
                 )
+            except OSError as exc:
+                raise OllamaError(
+                    "start_failed",
+                    f"{binary} cannot be started: {exc}; reinstall the runtime "
+                    "(`orkexa-local install-runtime --download`)",
+                ) from None
             finally:
-                log.close()
+                os.close(log_fd)
             url = f"http://{self._authority}:{port}"
             client = OllamaClient(url, timeout=3)
             deadline = time.monotonic() + timeout
@@ -274,6 +295,14 @@ class ManagedOllama:
                         "start_failed", f"Ollama exited with {self._process.returncode}; see {self.log_file}"
                     )
                 if client.is_running():
+                    if self._process.poll() is not None:
+                        # Something else answered on the port (taken between choosing it and the
+                        # start), and our server gave up: never hand out another server's address.
+                        raise OllamaError(
+                            "port_in_use",
+                            f"Another server answered on port {port} and Ollama exited "
+                            f"with {self._process.returncode}; start again (see {self.log_file})",
+                        )
                     self._base_url = url
                     self._write_state(port, binary)
                     return url
@@ -282,6 +311,15 @@ class ManagedOllama:
             raise OllamaError(
                 "start_failed", f"Ollama did not answer within {timeout:.0f} s; see {self.log_file}"
             )
+
+    def _open_log(self) -> int:
+        """The log file, opened for appending (``0600`` when new); rotated first if it grew too large."""
+        log = self.log_file
+        with contextlib.suppress(FileNotFoundError):
+            if log.stat().st_size > LOG_ROTATE_BYTES:
+                os.replace(log, log.with_name(log.name + ".1"))
+        flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0)
+        return os.open(log, flags, PRIVATE_FILE_MODE)
 
     @property
     def _state_file(self) -> Path:
@@ -295,7 +333,7 @@ class ManagedOllama:
             "binary": str(binary),
             "owner": os.getpid(),
         }
-        self._state_file.write_text(json.dumps(state), encoding="utf-8")
+        write_private_text(self._state_file, json.dumps(state))
 
     def _reclaim_orphan(self) -> None:
         """Stop a server that an earlier, crashed process of this application left running.
