@@ -22,7 +22,7 @@ import json
 import re
 from typing import Any, ClassVar
 
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.conversion import document_text, search_result_text, validate_output
 from ..core.reasoning import ReasoningStream
 from ..core.schema import drop_null_optionals, strict_schema
@@ -66,6 +66,8 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 #: declared with ``capabilities=``.
 _REASONING_MODELS = re.compile(r"^(gpt-6|gpt-5|o\d)")
 _CLASSIC_MODELS = re.compile(r"^(gpt-4|gpt-3\.5|chatgpt-4o)")
+#: GPT-6 models document every effort level from low to max.
+_ALL_EFFORT_MODELS = re.compile(r"^gpt-6")
 _MULTIMODAL_MODELS = re.compile(r"^(gpt-6|gpt-5|gpt-4o|gpt-4\.1|o3|o4)")
 
 
@@ -423,6 +425,14 @@ class OpenAIProvider(Provider):
             native_memory_tool="unsupported",
             batch="unsupported",
         )
+
+    def limits(self, model: str) -> ModelLimits:
+        """Reasoning settings by model family; Orkexa documents no token limits for OpenAI models."""
+        if _ALL_EFFORT_MODELS.match(model):
+            return ModelLimits(efforts=("low", "medium", "high", "xhigh", "max"), thinking_modes=())
+        if _CLASSIC_MODELS.match(model):
+            return ModelLimits(efforts=(), thinking_modes=())
+        return ModelLimits(thinking_modes=())
 
     def check(self, request: ModelRequest) -> None:
         for tool in request.tools:

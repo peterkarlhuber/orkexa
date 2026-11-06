@@ -15,7 +15,7 @@ from typing import Literal, get_args
 
 from ..errors import UnknownCapabilityError, UnsupportedCapabilityError
 
-__all__ = ["CAPABILITY_NAMES", "Capability", "ModelCapabilities", "Support"]
+__all__ = ["CAPABILITY_NAMES", "EFFORTS", "Capability", "ModelCapabilities", "ModelLimits", "Support"]
 
 Support = Literal["supported", "unsupported", "unknown"]
 
@@ -135,3 +135,90 @@ class ModelCapabilities:
         values: dict[str, Support] = dict.fromkeys(CAPABILITY_NAMES, value)
         values.update(overrides)
         return cls(**values, reasons=dict(reasons or {}))  # type: ignore[arg-type,unused-ignore]
+
+
+EFFORTS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+"""Every generic effort level, lowest first (``orkexa.core.types.Effort``)."""
+
+
+@dataclass(frozen=True)
+class ModelLimits:
+    """Documented token limits and reasoning settings of one model; ``None`` means unknown.
+
+    Unknown values are never guessed: a limit that is not documented for a model (most models
+    of OpenAI-compatible endpoints, typed ids of other providers) stays ``None`` and nothing is
+    checked against it.
+
+    Attributes:
+        context_window: Most tokens one request may hold in total (input and output share it).
+        max_output_tokens: Most output tokens per response (``max_tokens``; reasoning counts
+            against it). A request asking for more is refused before it is sent.
+        efforts: The effort levels the model accepts (``()``: none, the model takes no effort).
+        thinking_modes: Values of a provider's own thinking switch the model accepts (Anthropic's
+            ``thinking``: ``adaptive``, ``between_tools``, ``disabled``); ``()``: not configurable.
+        thinking_budget: Whether the model takes a thinking token budget instead of an effort
+            (Gemini 2.5: ``GeminiOptions(thinking_budget=...)``).
+        source: ``documented`` (the provider's model documentation as Orkexa knows it),
+            ``declared`` (set by whoever configured the endpoint) or ``unknown``.
+    """
+
+    context_window: int | None = None
+    max_output_tokens: int | None = None
+    efforts: tuple[str, ...] | None = None
+    thinking_modes: tuple[str, ...] | None = None
+    thinking_budget: bool | None = None
+    source: Literal["documented", "declared", "unknown"] = "unknown"
+
+    def __post_init__(self) -> None:
+        for name in ("context_window", "max_output_tokens"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 1):
+                raise ValueError(f"{name} must be a positive integer or None")
+        if self.efforts is not None:
+            unknown = [effort for effort in self.efforts if effort not in EFFORTS]
+            if unknown:
+                raise ValueError(f"Unknown effort levels {unknown}; known: {', '.join(EFFORTS)}")
+
+    def declared(self, **values: int | None) -> ModelLimits:
+        """A copy with declared ``context_window``/``max_output_tokens`` for values that are unknown here.
+
+        A documented value is never replaced; a declared one only fills a gap (an endpoint's
+        model)."""
+        changes = {
+            name: value for name, value in values.items() if value is not None and getattr(self, name) is None
+        }
+        unknown = set(values) - {"context_window", "max_output_tokens"}
+        if unknown:
+            raise ValueError(
+                f"Only context_window and max_output_tokens can be declared, not {sorted(unknown)}"
+            )
+        if not changes:
+            return self
+        source: Literal["documented", "declared", "unknown"] = (
+            "documented" if self.source == "documented" else "declared"
+        )
+        return replace(
+            self,
+            source=source,
+            context_window=changes.get("context_window", self.context_window),
+            max_output_tokens=changes.get("max_output_tokens", self.max_output_tokens),
+        )
+
+    def check_max_tokens(self, max_tokens: int, *, provider: str, model: str) -> None:
+        """Raise :class:`~orkexa.errors.ConfigurationError` when ``max_tokens`` exceeds the maximum."""
+        if self.max_output_tokens is not None and max_tokens > self.max_output_tokens:
+            from ..errors import ConfigurationError
+
+            raise ConfigurationError(
+                f"max_tokens={max_tokens} exceeds the maximum output of {provider}:{model} "
+                f"({self.max_output_tokens} tokens); lower max_tokens"
+            )
+
+    def check_effort(self, effort: str, *, provider: str, model: str) -> None:
+        """Raise :class:`UnsupportedCapabilityError` for an effort outside the documented levels."""
+        if self.efforts is not None and effort not in self.efforts:
+            accepted = ", ".join(self.efforts) if self.efforts else "none"
+            raise UnsupportedCapabilityError(
+                f"{provider}:{model} does not accept effort {effort!r} (accepted: {accepted})",
+                capability="reasoning",
+            )

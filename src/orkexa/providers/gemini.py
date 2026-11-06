@@ -23,7 +23,7 @@ from copy import deepcopy
 import re
 from typing import Any, ClassVar
 
-from ..core.capabilities import ModelCapabilities, Support
+from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.conversion import document_text, search_result_text, validate_output
 from ..core.reasoning import ReasoningStream
 from ..core.schema import inline_refs
@@ -73,7 +73,8 @@ _REFUSALS = frozenset(
 )
 _THINKING_LEVEL = re.compile(r"^(models/)?gemini-[34]([.-]|$)")  # Gemini 3.x and 4 (e.g. gemini-4-argon)
 _GEMINI_2 = re.compile(r"^(models/)?gemini-(2|1)\.")
-_GEMINI_25 = re.compile(r"^(models/)?gemini-2\.5")  # thinks with a budget
+#: Gemini 2.5 models think with a token budget (``thinking_budget``); older ones do not think.
+_THINKING_BUDGET = re.compile(r"^(models/)?gemini-2\.5([.-]|$)")
 _RESERVED = frozenset(
     {
         "system_instruction",
@@ -216,8 +217,18 @@ class GeminiProvider(Provider):
             caching="supported",
         )
 
+    def limits(self, model: str) -> ModelLimits:
+        """Reasoning settings by model generation; Orkexa documents no token limits for Gemini models."""
+        if _THINKING_LEVEL.match(model):
+            return ModelLimits(efforts=tuple(_LEVELS), thinking_modes=(), thinking_budget=False)
+        if _GEMINI_2.match(model):
+            return ModelLimits(
+                efforts=(), thinking_modes=(), thinking_budget=bool(_THINKING_BUDGET.match(model))
+            )
+        return ModelLimits(thinking_modes=())
+
     def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
-        if _THINKING_LEVEL.match(model) or _GEMINI_25.match(model):
+        if _THINKING_LEVEL.match(model) or _THINKING_BUDGET.match(model):
             # Thought summaries only with ``GeminiOptions(include_thoughts=True)``; without them the
             # stream has no sign of the thinking phase (only ``thoughts_token_count`` afterwards).
             return ReasoningStream(text="summary", request_option="include_thoughts")

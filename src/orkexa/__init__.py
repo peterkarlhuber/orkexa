@@ -33,7 +33,7 @@ from .agent import Agent, RefusalMode, ToolCall
 from .async_agent import AsyncAgent
 from .claude import AsyncClaudeAgent, ClaudeAgent, Fallbacks, ThinkingDisplay, ThinkingMode
 from .content import ContentBlock, Prompt, ToolContent, document, image, uploaded_file
-from .core.capabilities import ModelCapabilities, Support
+from .core.capabilities import ModelCapabilities, ModelLimits, Support
 from .core.checkpoint import CheckpointClaims, TurnCheckpoint, WaitingCall
 from .core.conversion import HistoryConversionWarning
 from .core.reasoning import ReasoningStream, ReasoningText
@@ -166,6 +166,7 @@ __all__ = [
     "MissingCredentialsError",
     "MissingDependencyError",
     "ModelCapabilities",
+    "ModelLimits",
     "ModelPricing",
     "ModelRequest",
     "ModelResponse",

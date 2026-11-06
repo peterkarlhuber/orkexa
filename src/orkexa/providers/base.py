@@ -18,7 +18,7 @@ from typing import Any, ClassVar
 from pydantic import SecretStr
 
 from ..content import ContentBlock
-from ..core.capabilities import ModelCapabilities
+from ..core.capabilities import ModelCapabilities, ModelLimits
 from ..core.conversion import parse_block
 from ..core.reasoning import ReasoningStream
 from ..core.types import ModelRequest, ModelResponse, Part, StreamEvent
@@ -200,6 +200,10 @@ class Provider(ABC):
     @abstractmethod
     def capabilities(self, model: str) -> ModelCapabilities:
         """What ``model`` supports through this provider (before user overrides)."""
+
+    def limits(self, model: str) -> ModelLimits:
+        """Documented token limits and reasoning settings of ``model`` (all unknown by default)."""
+        return ModelLimits()
 
     def check(self, request: ModelRequest) -> None:  # noqa: B027 - optional hook
         """Provider- and model-specific validation before anything is sent."""
