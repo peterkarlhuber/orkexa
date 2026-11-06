@@ -10,11 +10,16 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 from pathlib import Path
+import sqlite3
 import sys
 from types import ModuleType
 from typing import Any
 
 import pytest
+
+HAS_VEC = importlib.util.find_spec("sqlite_vec") is not None and hasattr(
+    sqlite3.connect(":memory:"), "enable_load_extension"
+)
 
 RANKING = Path(__file__).parent / "fixtures" / "ranking"
 
@@ -90,7 +95,8 @@ def test_sqlite_without_sqlite_vec_reproduces_the_recorded_results(
 def test_sqlite_with_sqlite_vec_reproduces_the_recorded_results(
     fixture: dict[str, Any], tmp_path: Path
 ) -> None:
-    pytest.importorskip("sqlite_vec")
+    if not HAS_VEC:
+        pytest.skip("sqlite-vec cannot be loaded here")
     measure = _module("measure_sqlite")
     measured = measure.measure(fixture, tmp_path, vec=True)
     recorded = fixture["results"]["sqlite"]
