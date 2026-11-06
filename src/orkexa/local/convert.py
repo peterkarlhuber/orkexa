@@ -129,7 +129,14 @@ def _sha256_file(path: Path, limit: int | None = None) -> str:
     return digest.hexdigest()
 
 
-def _download(source: SourceFile, target: Path, *, header: bool, cancel: threading.Event | None) -> None:
+def _download(
+    source: SourceFile,
+    target: Path,
+    *,
+    header: bool,
+    cancel: threading.Event | None,
+    transferred: Callable[[int, int], None] | None = None,
+) -> None:
     if not source.url.startswith("https://"):
         raise OllamaError("invalid_source", "Recipe sources must be https URLs")
     headers = {"User-Agent": "orkexa-local"}
@@ -146,6 +153,8 @@ def _download(source: SourceFile, target: Path, *, header: bool, cancel: threadi
             block = block[: source.size - done]
             done += len(block)
             out.write(block)
+            if transferred is not None:
+                transferred(done, source.size)
             if done >= source.size:
                 break
     if done != source.size:
@@ -160,6 +169,7 @@ def _input(
     header: bool,
     download: bool,
     cancel: threading.Event | None,
+    transferred: Callable[[int, int], None] | None = None,
 ) -> Path:
     """A verified copy (or the verified local file) of one recipe input."""
     if source.size > (_MAX_HEADER if header else _MAX_WEIGHTS):
@@ -176,7 +186,7 @@ def _input(
     if not download:
         raise OllamaError("source_missing", "Pass the local files or download=True")
     target = work / ("template.gguf" if header else "weights.safetensors")
-    _download(source, target, header=header, cancel=cancel)
+    _download(source, target, header=header, cancel=cancel, transferred=transferred)
     if _sha256_file(target) != source.sha256:
         raise OllamaError("checksum_mismatch", f"{source.url} does not match the pinned SHA-256")
     return target
@@ -371,6 +381,7 @@ def build_model(
     work_dir: str | os.PathLike[str] | None = None,
     progress: Callable[[str], None] | None = None,
     cancel: threading.Event | None = None,
+    transferred: Callable[[int, int], None] | None = None,
 ) -> BuildReport:
     """Build ``recipe`` into a model of the Ollama server behind ``client`` and verify it.
 
@@ -385,6 +396,7 @@ def build_model(
             It is deleted afterwards; Ollama keeps its own copy.
         progress: Called with a short status text per step.
         cancel: Stops a download.
+        transferred: ``(bytes, total)`` of the file being downloaded in the step that runs.
 
     Raises:
         OllamaError: ``source_missing``, ``checksum_mismatch``, ``invalid_template``,
@@ -402,9 +414,15 @@ def build_model(
     with tempfile.TemporaryDirectory(dir=work_dir, prefix=".orkexa-build-") as scratch:
         work = Path(scratch)
         step("verify template")
-        template_path = _input(recipe.template, template, work, header=True, download=download, cancel=cancel)
+
+        def fetch(source: SourceFile, local: str | os.PathLike[str] | None, *, header: bool) -> Path:
+            return _input(
+                source, local, work, header=header, download=download, cancel=cancel, transferred=transferred
+            )
+
+        template_path = fetch(recipe.template, template, header=True)
         step("verify weights")
-        weights_path = _input(recipe.weights, weights, work, header=False, download=download, cancel=cancel)
+        weights_path = fetch(recipe.weights, weights, header=False)
         out = work / f"{recipe.name.replace(':', '-').replace('/', '-')}.gguf"
         step("write gguf")
         _write_gguf(recipe, weights_path, template_path, out)

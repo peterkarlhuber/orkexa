@@ -10,20 +10,27 @@ are size-limited.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+import contextlib
 import http.client
 import ipaddress
 import json
 import socket
+import threading
 from typing import Any
 from urllib.parse import urlsplit
+import weakref
 
 from ..errors import ConfigurationError, OrkexaError
 
-__all__ = ["DEFAULT_OLLAMA_URL", "OllamaError", "OllamaHTTP", "check_ollama_url"]
+__all__ = ["DEFAULT_OLLAMA_URL", "OllamaError", "OllamaHTTP", "check_ollama_url", "stream_error_code"]
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 _MAX_BODY = 64 * 1024 * 1024  # embeddings of large batches can be a few MB
 _MAX_LINE = 1024 * 1024
+#: The socket of each open connection (weakly, by connection), so a cancelled stream can shut it down.
+socket_of: weakref.WeakKeyDictionary[http.client.HTTPConnection, socket.socket | None] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 class OllamaError(OrkexaError, RuntimeError):
@@ -31,13 +38,46 @@ class OllamaError(OrkexaError, RuntimeError):
 
     ``code`` is stable and machine-readable: ``unreachable``, ``timeout``, ``redirect``,
     ``http_error``, ``model_missing``, ``invalid_response``, ``input_too_long``,
-    ``not_embedding_model``, ``dimension_mismatch``, ``cancelled``, ``too_large``.
+    ``not_embedding_model``, ``dimension_mismatch``, ``cancelled``, ``too_large``,
+    ``disk_full`` (no space left for a download), ``network`` (Ollama, or a download, could not
+    reach the internet).
     """
 
     def __init__(self, code: str, message: str, *, status: int | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
+
+
+#: Parts of Ollama's error messages when a download breaks: a full disk, or no route to the registry.
+_DISK_FULL = ("no space left on device", "not enough space", "disk full", "insufficient space")
+_NETWORK = (
+    "dial tcp",
+    "no such host",
+    "connection refused",
+    "connection reset",
+    "i/o timeout",
+    "tls handshake",
+    "proxyconnect",
+    "network is unreachable",
+    "context deadline exceeded",
+    "unexpected eof",
+    "max retries exceeded",
+    "server misbehaving",
+    "temporary failure in name resolution",
+)
+
+
+def stream_error_code(message: str) -> str:
+    """The code of an error line in a streamed answer (e.g. a download that broke in ``/api/pull``)."""
+    text = message.lower()
+    if any(part in text for part in _DISK_FULL):
+        return "disk_full"
+    if "not found" in text or "file does not exist" in text:
+        return "model_missing"
+    if any(part in text for part in _NETWORK):
+        return "network"
+    return "http_error"
 
 
 def _is_loopback(host: str) -> bool:
@@ -109,6 +149,8 @@ class OllamaHTTP:
             sent = {"Content-Type": "application/json", **(headers or {})}
         try:
             connection.request(method, path, body=payload, headers=sent)
+            # Kept: a response that closes the connection takes the socket over (see stream's cancel).
+            socket_of[connection] = connection.sock
             response = connection.getresponse()
         except TimeoutError as exc:
             connection.close()
@@ -142,6 +184,9 @@ class OllamaHTTP:
             return OllamaError("input_too_long", message, status=status)
         if "does not support embeddings" in message or "does not support generate" in message:
             return OllamaError("not_embedding_model", message, status=status)
+        code = stream_error_code(message)
+        if code in ("disk_full", "network"):
+            return OllamaError(code, f"Ollama answered {status}: {message}", status=status)
         return OllamaError("http_error", f"Ollama answered {status}: {message}", status=status)
 
     def request(
@@ -182,9 +227,30 @@ class OllamaHTTP:
         *,
         timeout: float | None = None,
         model: str | None = None,
+        cancel: threading.Event | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """A request with a newline-delimited JSON answer (e.g. ``/api/pull``), line by line."""
+        """A request with a newline-delimited JSON answer (e.g. ``/api/pull``), line by line.
+
+        ``cancel`` ends the answer at once, also while the server sends nothing (the connection is shut down,
+        which tells Ollama that nobody waits any longer); the generator then raises ``cancelled``."""
         connection, response = self._send(method, path, body, timeout, None)
+        finished = threading.Event()
+        if cancel is not None:
+
+            def watch() -> None:
+                while not finished.is_set():
+                    if cancel.wait(0.2):
+                        sock = socket_of.get(connection)
+                        if sock is not None and not finished.is_set():
+                            with contextlib.suppress(OSError):
+                                sock.shutdown(socket.SHUT_RDWR)
+                        return
+
+            threading.Thread(target=watch, name="orkexa-ollama-cancel", daemon=True).start()
+
+        def cancelled() -> OllamaError:
+            return OllamaError("cancelled", "The request was cancelled")
+
         try:
             if response.status >= 400:
                 raise self._error(response, self._read(response), model)
@@ -192,9 +258,15 @@ class OllamaHTTP:
                 try:
                     line = response.readline(_MAX_LINE)
                 except TimeoutError as exc:
+                    if cancel is not None and cancel.is_set():
+                        raise cancelled() from None
                     raise OllamaError("timeout", "Ollama stopped answering") from exc
                 except (OSError, http.client.HTTPException) as exc:
+                    if cancel is not None and cancel.is_set():
+                        raise cancelled() from None
                     raise OllamaError("unreachable", f"The connection to Ollama broke: {exc}") from exc
+                if cancel is not None and cancel.is_set():
+                    raise cancelled()
                 if not line:
                     return
                 if not line.strip():
@@ -205,14 +277,10 @@ class OllamaHTTP:
                     raise OllamaError("invalid_response", "Ollama sent a line that is not JSON") from exc
                 if isinstance(item, dict) and item.get("error"):
                     message = str(item["error"])
-                    code = (
-                        "model_missing"
-                        if "not found" in message or "file does not exist" in message
-                        else "http_error"
-                    )
-                    raise OllamaError(code, message)
+                    raise OllamaError(stream_error_code(message), message)
                 yield item
         finally:
+            finished.set()
             connection.close()
 
 
