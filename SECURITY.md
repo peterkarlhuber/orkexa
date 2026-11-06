@@ -8,7 +8,7 @@ the latest minor release line receives fixes.
 
 | Version | Supported |
 | --- | --- |
-| `master` (unreleased 0.1.0) | yes |
+| `master` (unreleased 0.2.0) | yes |
 
 ## Reporting a vulnerability
 

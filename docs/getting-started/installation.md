@@ -4,7 +4,7 @@ Orkexa needs Python 3.11 or newer. The core depends only on Pydantic; each provi
 SDK is an extra.
 
 !!! note "Not yet on PyPI"
-    Orkexa 0.1.0 is unreleased. Until it is published, install it from the repository:
+    Orkexa 0.2.0 is unreleased. Until it is published, install it from the repository:
 
     ```bash
     pip install "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"

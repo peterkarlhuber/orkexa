@@ -13,7 +13,7 @@ cost tracking are shared. Where a provider cannot do what you asked for, Orkexa 
 an error instead of silently doing something else.
 
 !!! note "Status"
-    Alpha (0.1.0, unreleased). The API may still change, and the package is not yet
+    Alpha (0.2.0, unreleased). The API may still change, and the package is not yet
     published on PyPI; see [Installation](getting-started/installation.md).
 
 ```python

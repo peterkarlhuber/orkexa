@@ -12,10 +12,10 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 5 |
-| P3 Low | 11 |
+| P3 Low | 10 |
 | P4 Optional | 7 |
 
-**Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
+**Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
 below is not a release blocker.
 
@@ -94,7 +94,9 @@ None known.
 - **What:** The release workflow is ready, but the one-time owner setup is not done or not confirmed: PyPI trusted
   publisher, protected `pypi` environment, branch protection, private vulnerability reporting (referenced by
   `SECURITY.md`), and whether to deploy the docs site. (The actions are SHA-pinned, #20; `releasing.md` says so.)
-- **Next step:** Owner decides when to publish 0.1.0; then complete the setup.
+- **Next step:** The release rules (MUP-ONA B0, [Versioning and releases](development/releasing.md#versioning-and-releases))
+  say no PyPI. If the owner decides to publish after all: complete the setup and make the workflow's tag check accept
+  `orkexa-vX.Y.Z`.
 
 ### ORK-011 · Deferred Bedrock features
 
@@ -264,15 +266,9 @@ None known.
 ## MUP-ONA
 
 Packages of the MUP-ONA plan (security and database backends for Orkexa, Nodestro and Axentra; [plan](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md))
-that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0 and FX-RANK-0, skip expectations) MP-A10 (SQLite
-robustness) and the Orkexa part of MP-A1 (PDF budgets and isolation) are in place; each entry is removed in the change that completes its package.
-
-### ORK-MUP-B0 · Versioning, public API snapshot and release rules
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** [MUP-ONA MP-B0](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md)
-- **What:** No API snapshot test, no import contracts, no documented tag scheme; version still `0.1.0`.
-- **Next step:** `tests/test_public_api.py` (T-API-1), import-linter contracts (T-PKG-0), version `0.2.0.dev0`,
-  release rules in the CHANGELOG and the docs.
+that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0 and FX-RANK-0, skip expectations), MP-A10 (SQLite
+robustness), the Orkexa part of MP-A1 (PDF budgets and isolation) and the Orkexa part of MP-B0 (version 0.2.0.dev0,
+API snapshot, import contracts, release rules) are in place; each entry is removed in the change that completes its package.
 
 ### ORK-MUP-B1 · Generic contracts and the public conformance suite
 

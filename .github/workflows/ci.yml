@@ -34,6 +34,8 @@ jobs:
       - run: ruff format --check .
       - run: mypy --strict src
       - run: mypy --strict examples
+      # MUP-ONA B0: the import contracts in pyproject.toml ([tool.importlinter]).
+      - run: lint-imports
       # Offline only: no API keys are configured, and live tests run only with -m live.
       - run: pytest --cov=orkexa --cov-report=term-missing --cov-report=xml -rs --junitxml=junit-test.xml
       # MUP-ONA A0: the skipped tests must match the expectation file (a new skip fails the job).

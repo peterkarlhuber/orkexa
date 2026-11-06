@@ -21,7 +21,7 @@ evaluation, dynamic agents and cost tracking behave the same on every provider, 
 provider is an adapter you choose with a model string. Where a provider cannot do what
 you asked for, Orkexa raises an error instead of silently doing something else.
 
-> **Status:** alpha (0.1.0, unreleased). The API may still change. Orkexa is not yet
+> **Status:** alpha (0.2.0, unreleased). The API may still change. Orkexa is not yet
 > published on PyPI; install it from source as shown below.
 
 ## Installation

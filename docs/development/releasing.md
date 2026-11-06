@@ -1,8 +1,45 @@
 # Releasing
 
-Orkexa has not been published yet. The release workflow
+Orkexa has not been published yet, and publishing it on PyPI is not planned: consumers
+install it from the repository by commit or tag. The release workflow
 (`.github/workflows/release.yml`) is prepared but runs only when a GitHub release is
 published, and it cannot upload anything until the one-time setup below is done.
+
+## Versioning and releases
+
+* **Version.** The version in `pyproject.toml` is the single source
+  (`orkexa.__version__` reads the installed metadata). Development between releases
+  carries a `.devN` suffix; the current version is `0.2.0.dev0`.
+* **Semantic versioning from 0.2.** From 0.2.0 on, versions follow
+  [SemVer](https://semver.org/): a patch release fixes without changing the API, a
+  minor release may add names, and before 1.0 a minor release may also remove or
+  change names. Nothing is removed in a patch release.
+* **Aliases.** A kept alias (for example `orkexa.retrieval._pdf_pages` for `pdf_pages`)
+  is removed only in a minor release, with a CHANGELOG entry that names the alias and
+  its replacement; where possible it first warns with a `DeprecationWarning` for at
+  least one minor release.
+* **Public API.** `tests/test_public_api.py` lists every public name of `orkexa`,
+  `orkexa.retrieval`, `orkexa.files`, `orkexa.memory` and `orkexa.embeddings`, the
+  deeper paths that Nodestro imports, and checks that every re-export is the same
+  object. A new name is added to the snapshot in the same change; a removed or renamed
+  one needs a minor release and a CHANGELOG entry. The import contracts
+  (`[tool.importlinter]` in `pyproject.toml`, checked with `lint-imports` in CI) keep
+  the core modules free of `orkexa.backends.postgres` and `orkexa.testing`.
+* **Tags.** Release tags are named `orkexa-vX.Y.Z` (annotated, on the merge commit of
+  the release). Until the owner approves a tag, the merge commit's SHA stands for the
+  version. A tag is prepared locally and pushed only after that approval, for example:
+
+    ```bash
+    git tag -a orkexa-v0.2.0 -m "orkexa 0.2.0" <merge-sha>
+    git push origin orkexa-v0.2.0   # only after approval
+    ```
+
+    Pushing a tag publishes nothing: `release.yml` starts only when a GitHub release
+    is published, its tag check expects `vX.Y.Z` and so refuses an `orkexa-v` tag, and
+    its upload job needs the protected `pypi` environment.
+* **No PyPI.** No release is uploaded to PyPI. The steps below stay documented for the
+  case that the owner decides otherwise; the workflow's tag check then has to accept
+  the `orkexa-v` scheme first.
 
 ## One-time setup (manual)
 
@@ -41,7 +78,8 @@ done by the repository owner by hand:
    **public** repository: make the repository public before uploading, then open
    `https://raw.githubusercontent.com/peterkarlhuber/orkexa/master/assets/branding/orkexa-logo.png`
    and check the rendered description on TestPyPI or after `twine check --strict`.
-5. Create a tag `vX.Y.Z` and a GitHub release for it. Publishing the release starts
+5. Create a tag and a GitHub release for it (the workflow still expects `vX.Y.Z`,
+   not the `orkexa-vX.Y.Z` scheme above; see "Versioning and releases"). Publishing the release starts
    the workflow, which checks that the tag matches the version, builds and checks the
    distribution, runs the packaging tests, creates build provenance attestations, and,
    after the `pypi` environment is approved, uploads `orkexa` through trusted

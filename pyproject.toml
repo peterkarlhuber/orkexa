@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "orkexa"
-version = "0.1.0"
+version = "0.2.0.dev0"
 description = "Provider-independent Python agents and multi-agent systems: one runtime for Anthropic Claude, OpenAI, Google Gemini, Amazon Bedrock and OpenAI-compatible endpoints, with strict tools, memory, RAG, evaluation, dynamic agents and cost tracking."
 dynamic = ["readme"]
 license = "MIT"
@@ -69,6 +69,8 @@ dev = [
     "sqlite-vec>=0.1.6",
     "zstandard>=0.23",
     "gguf>=0.17,<1",
+    # MUP-ONA B0: import contracts ([tool.importlinter] below; CI runs lint-imports).
+    "import-linter>=2.1",
 ]
 
 [project.scripts]
@@ -150,6 +152,131 @@ known-first-party = ["orkexa"]
 "src/orkexa/core/{__init__,types}.py" = ["UP"]
 "src/orkexa/dynamic/_sandbox_runner.py" = ["UP"]
 "tests/anthropic/*" = ["RUF", "B", "SIM"]
+
+# MUP-ONA B0 (T-PKG-0): core modules never import the optional PostgreSQL backend or the test helpers, even before
+# those packages exist (the wildcards then match nothing). "Core" is every top-level module of orkexa except
+# orkexa.backends.postgres and orkexa.testing; tests/test_public_api.py checks that the list below names every
+# top-level module, so a new module cannot slip past the contracts. CI runs `lint-imports` (job "test").
+[tool.importlinter]
+root_packages = ["orkexa"]
+
+[[tool.importlinter.contracts]]
+name = "Core modules do not import orkexa.backends.postgres"
+type = "forbidden"
+as_packages = false
+source_modules = [
+    "orkexa",
+    "orkexa._aio",
+    "orkexa._aio.**",
+    "orkexa._cancel",
+    "orkexa._cancel.**",
+    "orkexa._pdf_launch",
+    "orkexa._pdf_launch.**",
+    "orkexa._pdf_probe",
+    "orkexa._pdf_probe.**",
+    "orkexa._pdf_worker",
+    "orkexa._pdf_worker.**",
+    "orkexa._storage",
+    "orkexa._storage.**",
+    "orkexa.agent",
+    "orkexa.agent.**",
+    "orkexa.async_agent",
+    "orkexa.async_agent.**",
+    "orkexa.claude",
+    "orkexa.claude.**",
+    "orkexa.content",
+    "orkexa.content.**",
+    "orkexa.core",
+    "orkexa.core.**",
+    "orkexa.dynamic",
+    "orkexa.dynamic.**",
+    "orkexa.embeddings",
+    "orkexa.embeddings.**",
+    "orkexa.errors",
+    "orkexa.errors.**",
+    "orkexa.evaluation",
+    "orkexa.evaluation.**",
+    "orkexa.files",
+    "orkexa.files.**",
+    "orkexa.flow",
+    "orkexa.flow.**",
+    "orkexa.local",
+    "orkexa.local.**",
+    "orkexa.memory",
+    "orkexa.memory.**",
+    "orkexa.orchestration",
+    "orkexa.orchestration.**",
+    "orkexa.pricing",
+    "orkexa.pricing.**",
+    "orkexa.providers",
+    "orkexa.providers.**",
+    "orkexa.retrieval",
+    "orkexa.retrieval.**",
+    "orkexa.tools",
+    "orkexa.tools.**",
+    "orkexa.usage",
+    "orkexa.usage.**",
+]
+forbidden_modules = ["orkexa.*.postgres", "orkexa.*.postgres.**"]
+
+[[tool.importlinter.contracts]]
+name = "Core modules do not import orkexa.testing"
+type = "forbidden"
+as_packages = false
+source_modules = [
+    "orkexa",
+    "orkexa._aio",
+    "orkexa._aio.**",
+    "orkexa._cancel",
+    "orkexa._cancel.**",
+    "orkexa._pdf_launch",
+    "orkexa._pdf_launch.**",
+    "orkexa._pdf_probe",
+    "orkexa._pdf_probe.**",
+    "orkexa._pdf_worker",
+    "orkexa._pdf_worker.**",
+    "orkexa._storage",
+    "orkexa._storage.**",
+    "orkexa.agent",
+    "orkexa.agent.**",
+    "orkexa.async_agent",
+    "orkexa.async_agent.**",
+    "orkexa.claude",
+    "orkexa.claude.**",
+    "orkexa.content",
+    "orkexa.content.**",
+    "orkexa.core",
+    "orkexa.core.**",
+    "orkexa.dynamic",
+    "orkexa.dynamic.**",
+    "orkexa.embeddings",
+    "orkexa.embeddings.**",
+    "orkexa.errors",
+    "orkexa.errors.**",
+    "orkexa.evaluation",
+    "orkexa.evaluation.**",
+    "orkexa.files",
+    "orkexa.files.**",
+    "orkexa.flow",
+    "orkexa.flow.**",
+    "orkexa.local",
+    "orkexa.local.**",
+    "orkexa.memory",
+    "orkexa.memory.**",
+    "orkexa.orchestration",
+    "orkexa.orchestration.**",
+    "orkexa.pricing",
+    "orkexa.pricing.**",
+    "orkexa.providers",
+    "orkexa.providers.**",
+    "orkexa.retrieval",
+    "orkexa.retrieval.**",
+    "orkexa.tools",
+    "orkexa.tools.**",
+    "orkexa.usage",
+    "orkexa.usage.**",
+]
+forbidden_modules = ["*.testing", "*.testing.**"]  # = orkexa.testing (a literal name must exist)
 
 [tool.mypy]
 python_version = "3.11"
