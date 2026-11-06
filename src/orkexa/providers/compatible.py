@@ -233,6 +233,11 @@ class VLLMProvider(CompatibleProvider):
     name: ClassVar[str] = "vllm"
     default_base_url: ClassVar[str | None] = "http://localhost:8000/v1"
     start_hint: ClassVar[str] = "start the server (`vllm serve <model>`) or correct base_url"
+    # vLLM reads an assistant message's ``reasoning`` (and the older ``reasoning_content``) and
+    # passes it to the chat template for interleaved thinking (vLLM 0.33.0:
+    # ``renderers/chat_utils/chat_message.py``; ``reasoning_content`` is renamed on input in
+    # ``entrypoints/openai/chat_completion/protocol.py``). Older servers ignore the extra field.
+    message_rules: ClassVar[ChatMessageRules] = ChatMessageRules(reasoning_field="reasoning")
     preset: ClassVar[Mapping[str, Support]] = {
         "streaming": "supported",
         "system_messages": "supported",

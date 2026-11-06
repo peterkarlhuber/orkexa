@@ -86,8 +86,10 @@ content elsewhere with HTTP 400 `invalid message content type: <nil>`.
 Reasoning is sent back only where the endpoint declares a field for it
 (`ChatCompletionsProvider.message_rules`, a `ChatMessageRules`): the `ollama` preset sends an
 assistant turn's reasoning as `reasoning`, which Ollama passes to the chat template as that turn's
-thinking (thinking models such as Qwen 3.x continue a tool loop with their own reasoning).
-`compatible` and `vllm` send none. Reasoning of another model or provider is never sent
+thinking (thinking models such as Qwen 3.x continue a tool loop with their own reasoning). The
+`vllm` preset sends it the same way: vLLM passes an assistant message's `reasoning` to the chat
+template for interleaved thinking (checked in vLLM 0.33.0; older servers ignore the field).
+`compatible` sends none. Reasoning of another model or provider is never sent
 (`prepare_history`).
 
 ## What each adapter does
