@@ -3,7 +3,7 @@
 > Open work for this repository: release blockers, known bugs, security follow-ups, technical debt and planned improvements.
 > GitHub issues are the source of truth for details; this file is the entry point and summary.
 >
-> **Last full review:** 2026-11-05 against `master` at `4f5eda6` (quality round 3 close-out; TODO consolidated).
+> **Last full review:** 2026-11-06 against `master` at `c1e2f0f` (TODO abatement round).
 
 ## Summary
 
@@ -12,17 +12,17 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 2 |
-| P3 Low | 17 |
-| P4 Optional | 15 |
+| P3 Low | 10 |
+| P4 Optional | 8 |
 
 **Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
 below is not a release blocker.
 
-The library is in good shape: no open pull requests, the three open issues (#24 to #26) are tracked below, no
-TODO/FIXME markers in the code, and offline tests, strict typing, packaging, docs and dependency audits run in CI.
-The open work is mostly verification against real providers and Docker hosts, follow-ups in Nodestro for the
-2026-11-03 audit fixes, and release and documentation upkeep.
+The library is in good shape: no TODO/FIXME markers in the code, and offline tests (Python 3.11 to 3.14), strict
+typing, packaging, docs and dependency audits run in CI; the live Ollama tests run weekly (`ollama-live.yml`). The
+issues #24 to #26 are fixed on `ws-ork` (ORK-002, ORK-007, ORK-010) and can be closed once it is merged. The open work
+is mostly verification against real providers and Docker hosts, owner decisions, and follow-ups in Nodestro.
 
 ## Priorities and statuses
 
@@ -44,19 +44,16 @@ None known.
 Needs an independent review: ORK-004 (the static check). It belongs in the same independent review as Nodestro's
 tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off until then.
 
-### ORK-003 · Endpoint hardening: redirects, loopback rules and the managed Ollama server
+### ORK-003 · Loopback rule for `OllamaProvider`
 
-- **Priority:** P3 Low · **Status:** Open · **Refs:** internal backend audit 2026-11-01, follow-up to finding A-05;
-  internal backend audit round 3 (ORK3-10)
-- **What:** Hardening item. The fix for A-05 lives only in Nodestro's server path; code that uses `orkexa.Agent`
-  with a `compatible` endpoint directly still relies on the HTTP client's default redirect handling.
-  `OllamaProvider` (the `Agent` path) likewise accepts any `base_url` without the loopback and no-redirect rules of
-  `OllamaClient` (internal audit 2026-11-04); Nodestro relies on a non-loopback Ollama in Local Docker, so a
-  loopback default needs an agreed opt-in. The same audit (ORK3-10) also recorded small hardening points of the
-  managed Ollama server and the runtime installer (start checks, error mapping, log rotation) that matter mainly on
-  hosts shared by several users.
-- **Next step:** Decide on a library-level default or option and document it in the security guide; handle the
-  managed-server and installer points with the next change there (details are in the internal audit, not here).
+- **Priority:** P3 Low · **Status:** Needs decision · **Refs:** internal backend audit 2026-11-01 (A-05 follow-up),
+  internal backend audit 2026-11-04
+- **What:** OpenAI-compatible providers (`compatible`, `ollama`, `vllm`) no longer follow HTTP redirects, and the
+  managed Ollama server's start checks, error mapping, private log files and log rotation were hardened (2026-11-06).
+  Left open: `OllamaProvider` (the `Agent` path) accepts any `base_url`, while `OllamaClient` is limited to loopback
+  by default. Nodestro relies on a non-loopback Ollama in Local Docker, so a loopback default needs an agreed opt-in.
+- **Next step:** Owner and Nodestro agree on an option (for example `allow_remote=True` for non-loopback hosts) and
+  its default; then document it in the security guide.
 
 ### ORK-004 · Independent review of the static check
 
@@ -77,22 +74,9 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
 - **Next step:** After the pin update, nodestro-runtime passes a per-installation `checkpoint_key` (from its secret
   store) and documents why it does not pass a claim (its journal and approval gate decide on a repeat).
 
-### ORK-005 · Optional fail-closed mode for Bedrock credentials
-
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** Bedrock integration review 2026-11-01, finding L1
-- **What:** Without a session or client, the Bedrock provider uses boto3's default credential chain. Multi-tenant
-  hosts must make sure they always pass a session; Nodestro already enforces this in the runtime
-  (`require_session`). A library flag would make the guard independent of each call site.
-- **Next step:** Consider a `BedrockOptions` setting that refuses to build a default session.
-
 ## Bugs and reliability
 
-### ORK-002 · Registries do not see records written by other processes
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** #24, S-2 pilot finding F1 (worked around in nodestro-runtime #57)
-- **What:** `ToolRegistry` and `AgentRegistry` read their directory once in `__init__`; a long-running process keeps
-  stale tool versions until it creates a new registry.
-- **Next step:** Add a `refresh()` or document registries as single-process snapshots.
+None known.
 
 ## Architecture and modularity
 
@@ -111,15 +95,6 @@ None known.
   publisher, protected `pypi` environment, branch protection, private vulnerability reporting (referenced by
   `SECURITY.md`), and whether to deploy the docs site. (The actions are SHA-pinned, #20; `releasing.md` says so.)
 - **Next step:** Owner decides when to publish 0.1.0; then complete the setup.
-
-### ORK-009 · Keep the Bedrock capability table current
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** Bedrock provider report 2026-11-01, follow-up 4
-- **What:** Bedrock capabilities per model family come from the AWS documentation of 2026-11-01
-  (`bedrock_capabilities()` in `src/orkexa/providers/bedrock.py`). New models report `unknown` until the table is
-  updated, which disables features in Nodestro.
-- **Next step:** Define a review cadence (for example with each provider SDK update) and a short checklist in the
-  provider docs.
 
 ### ORK-011 · Deferred Bedrock features
 
@@ -179,16 +154,10 @@ None known.
   llama.cpp conversion of mmBERT-base (`mykor/mmBERT-base-GGUF`, MIT, pinned by revision and SHA-256), because
   mDenseOn ships no GGUF and the converter was not run here. That conversion sets `add_space_prefix=false`, which
   does not match the Hugging Face tokenizer; the recipe corrects it and the reference-vector check guards it.
-- **Next step:** Run llama.cpp's `convert_hf_to_gguf.py` on mDenseOn at a pinned llama.cpp commit, compare the
+- **Next step:** On a machine where running the converter is allowed (it was not run in the 2026-11-06 round),
+  run llama.cpp's `convert_hf_to_gguf.py` on mDenseOn at a pinned llama.cpp commit, compare the
   metadata with the template, report the `add_space_prefix` mismatch upstream, and switch the recipe's template to
   our own conversion or to an official LightOn GGUF if one is published.
-
-### ORK-034 · Updating the pinned Ollama runtime
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** `src/orkexa/local/install.py`
-- **What:** `install_runtime` accepts only the archives of Ollama 0.40.14 by SHA-256. A newer Ollama needs the
-  table updated from the release's `sha256sum.txt`, and the live tests rerun.
-- **Next step:** Add the update to the release checklist; review with each Nodestro release.
 
 ### ORK-036 · Synthetic structured-answer request in the stored conversation
 
@@ -196,35 +165,6 @@ None known.
 - **What:** With providers that split tools and structured output (Ollama), the agent adds a user message that asks
   for the JSON answer and keeps it in the conversation history, although the user never wrote it.
 - **Next step:** Mark it as synthetic or drop it on commit; agree with Nodestro how chat views show it.
-
-### ORK-037 · Developer messages of the providers and `orkexa-local`
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** UX round 3 DX handovers B4 to B9
-- **What:** A connection error of an OpenAI-compatible provider (Ollama, vLLM) names neither the address nor what to
-  do; `orkexa-local` catches only `OllamaError`, so other Orkexa errors end in a traceback; the convert, install and
-  serve messages name no next step (`--weights`/`--template`, `install-runtime --download`, `serve`); the CLI options
-  have no help texts; a model id like `anthropic:` (prefix without a model) gets an unclear error.
-- **Next step:** Add the base URL (without credentials) and a start hint to connection errors, catch `OrkexaError` in
-  the CLI (`error (<code>): <message>`, exit 1), name the next step in those messages and in `status`, add `help=` to
-  every option, and refuse an empty model after a provider prefix with an example.
-
-### ORK-039 · Output maxima of OpenAI, Gemini and Bedrock models are not declared
-
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** settings/providers round 2026-11-06 (params stream)
-- **What:** `ModelLimits` knows the documented `max_output_tokens` for Anthropic and the local catalog only. For OpenAI, Gemini and Bedrock models the limit is `unknown`, so Nodestro cannot cap or hint and the provider rejects too-large values itself.
-- **Next step:** Add the documented maxima with their source per model; keep `unknown` where no source exists (no guessed limits).
-
-### ORK-040 · Bedrock prompt caching (`cachePoint`) is not mapped
-
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** settings/providers round 2026-11-06 (params stream)
-- **What:** The caching option is shown as `not_mapped` for Bedrock models.
-- **Next step:** Map `cachePoint` behind an explicit option, priced, with tests against the Converse request shape.
-
-### ORK-042 · vLLM may accept reasoning in the history
-
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** settings/providers round 2026-11-06 (Ollama 400 fix, O400-4)
-- **What:** Only Ollama declares a reasoning field in `ChatMessageRules`; vLLM still drops reasoning from the history.
-- **Next step:** Check whether vLLM accepts a reasoning field and declare it if it does.
 
 ## Tests and quality assurance
 
@@ -237,14 +177,8 @@ None known.
   models were verified only by registry metadata; their tool calling and structured output are untested here, and
   macOS/Windows runs of `ManagedOllama` are untested. The IPv6 loopback path (`host="::1"`) and the orphan reclaim
   after a host crash (POSIX only; Windows has none) were added on 2026-11-04 (#49) without a CI run on those
-  platforms.
+  platforms. The weekly `ollama-live.yml` job runs the live tests with the small models on Linux CPU only.
 - **Next step:** Run the live tests on hardware with 32+ GB (and a GPU, and macOS/Windows) and record the results.
-
-### ORK-041 · Live Ollama tests are not run regularly
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** settings/providers round 2026-11-06 (Ollama 400 fix, O400-3)
-- **What:** `tests/test_ollama_live.py` (`-m live`) proved the fix against a real Ollama 0.40.14 but is skipped by default.
-- **Next step:** Run it in an optional CI job or as a manual step of the local model release check.
 
 ## Platform coverage
 
@@ -291,33 +225,9 @@ None known.
 
 ## Documentation
 
-### ORK-010 · Architecture page and site metadata are out of date
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** #26
-- **What:** The architecture page lacks the Bedrock provider and the orchestration package, still names
-  `pricing.py`, and lists ADRs only up to 0009; no ADR records the Bedrock credential and residency design; the
-  removed ADR 0004 is not explained; the site description omits Bedrock. It also lacks `orkexa.local`,
-  `orkexa.embeddings` and the retrieval modes (2026-11-04).
-- **Next step:** Update the page and `mkdocs.yml`, add an ADR for Bedrock.
+None known.
 
 ## Technical debt
-
-### ORK-007 · Python 3.14 untested
-
-- **Priority:** P3 Low · **Status:** Open · **Refs:** #25 (its title still mentions 3.10, which was dropped on
-  2026-11-02), `tests/test_sandbox_policy.py`
-- **What:** Python 3.11 is the minimum since 2026-11-02 (3.10 reached end of life in October 2026). On 3.14 all
-  dependencies install and the suite passes except
-  `test_sandbox_policy.py::test_every_module_reachable_from_allowed_imports_is_reviewed`: `annotationlib` (new in
-  3.14, reached through `dataclasses` and `typing`) is not reviewed for the sandbox.
-- **Next step:** Review `annotationlib` for the sandbox policy, then add 3.14 to the CI matrix and the classifiers.
-
-### ORK-025 · Small leftovers
-
-- **Priority:** P4 Optional · **Status:** Open
-- **What:** The sdist still excludes the removed `compat/` directory (`pyproject.toml`), and
-  `examples/bedrock_agent.py` is outside the numbered example scheme.
-- **Next step:** Clean up with the next related change.
 
 ### ORK-038 · Dependency updates are merged by hand; branch protection decided
 
@@ -335,21 +245,7 @@ None known.
 
 ## Later optimizations
 
-### ORK-026 · Freshness check for built-in prices
-
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** [Pricing engine](guides/pricing.md#known-limitations)
-- **What:** The built-in Anthropic prices are a manual snapshot (`orkexa-builtin-2026-10-31`); nothing warns when
-  it ages. Nodestro syncs its own prices, so the impact is limited to direct library users.
-- **Next step:** Add a test or release checklist step that flags snapshots older than a set age.
-
-### ORK-027 · Sandbox image upkeep: build behind a TLS-intercepting proxy, digest refresh
-
-- **Priority:** P4 Optional · **Status:** Open · **Refs:** internal backend audit 2026-11-03 (ORK2-10), ORK-023 (done, #34)
-- **What:** `docker/sandbox.Dockerfile` cannot be built behind a proxy that intercepts TLS (pip fails) without
-  editing it; there is no build secret or argument for an extra CA. Separately, the pinned base image digest and the
-  hashed requirements need a refresh with each Python patch release.
-- **Next step:** Optional `--mount=type=secret` CA support in the Dockerfile (documented); add the digest refresh to
-  the release checklist.
+None known.
 
 ## Accepted risks
 
@@ -379,13 +275,12 @@ None known.
 
 | This repo item | Other repo | Other item | Relation |
 |---|---|---|---|
-| ORK-002 | nodestro-runtime | #57 (registry refresh workaround) | Runtime can drop its workaround after ORK-002 |
-| ORK-005 | nodestro-runtime | `require_session` guard | Runtime already enforces it; ORK-005 would add a second layer |
-| ORK-007 | nodestro-runtime | RT-022 (Python 3.14) | Runtime adds 3.14 after this review; runtime depends on Orkexa |
+| ORK-003 | nodestro-runtime | Local Docker Ollama URL (non-loopback) | A loopback default needs the runtime's opt-in first |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
 | ORK-029 | nodestro-studio | run problem messages (`errors.json`, `RunProblem.tsx`) | Studio adds `run.agent.MaxToolCallsError` |
 | ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows; orphan reclaim on Windows) | The managed server lives here; runtime and desktop rerun their tests |
 | ORK-036 | nodestro-runtime | chat views of stored conversations | Agree how chat views show the synthetic request |
+| (done 2026-11-06) | nodestro-runtime | #57 workaround, `require_session` guard, RT-022, Bedrock caching option | With the next pin: `ToolRegistry.refresh()`/`AgentRegistry.refresh()`, `BedrockOptions(require_session=True)`, Python 3.14, `BedrockOptions(prompt_caching=True)` are available |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
 
 ## Maintaining this file
