@@ -48,6 +48,7 @@ from urllib.parse import urlsplit
 
 from ..core.capabilities import ModelCapabilities, Support
 from ..core.conversion import document_text, search_result_text, validate_output
+from ..core.reasoning import ReasoningStream
 from ..core.schema import drop_null_optionals, strict_schema
 from ..core.types import (
     DocumentPart,
@@ -58,7 +59,9 @@ from ..core.types import (
     NativePart,
     Part,
     ReasoningDelta,
+    ReasoningKind,
     ReasoningPart,
+    ReasoningStatus,
     RefusalDetails,
     ResponseCompleted,
     SearchResultPart,
@@ -553,6 +556,12 @@ class BedrockProvider(Provider):
 
     def capabilities(self, model: str) -> ModelCapabilities:
         return bedrock_capabilities(parse_model_id(model).base_model)
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        # Converse marks reasoning blocks (``reasoningContent``), also redacted ones.
+        if _reasoning_kind(model) == "summary":
+            return ReasoningStream(text="summary", status=True)
+        return ReasoningStream(status=True)
 
     def check(self, request: ModelRequest) -> None:
         options = self._options_of(request)
@@ -1145,7 +1154,7 @@ class BedrockProvider(Provider):
 
     def stream(self, native: dict[str, Any], request: ModelRequest) -> Iterator[StreamEvent]:
         events, request_id = self._open_stream(native, request)
-        state = _BedrockStream(request_id)
+        state = _BedrockStream(request_id, _reasoning_kind(request.model))
         try:
             for event in events:
                 yield from state.translate(event)
@@ -1158,7 +1167,7 @@ class BedrockProvider(Provider):
             lambda cancelled: self._open_stream(native, request, cancelled),
             on_orphan=lambda opened: _close(opened[0]),  # opened after a cancellation: close it
         )
-        state = _BedrockStream(request_id)
+        state = _BedrockStream(request_id, _reasoning_kind(request.model))
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
         stop = threading.Event()
@@ -1324,11 +1333,18 @@ def _stream_error(name: str, body: Any) -> BaseException:
     return error
 
 
+def _reasoning_kind(model: str) -> ReasoningKind:
+    """Claude on Bedrock returns summarized thinking; other reasoning models their reasoning text."""
+    return "summary" if _CLAUDE.match(parse_model_id(model).base_model or "") else "thinking"
+
+
 class _BedrockStream:
     """Accumulates ConverseStream events into the blocks a Converse response would hold."""
 
-    def __init__(self, request_id: str | None) -> None:
+    def __init__(self, request_id: str | None, reasoning_kind: ReasoningKind = "thinking") -> None:
         self.request_id = request_id
+        #: What the model's reasoning text is (:func:`_reasoning_kind`).
+        self.reasoning_kind: ReasoningKind = reasoning_kind
         self.blocks: dict[int, dict[str, Any]] = {}
         self.stop: str | None = None
         self.stopped = False
@@ -1362,6 +1378,11 @@ class _BedrockStream:
                     yield ToolCallStarted(call_id=block["id"], name=block["name"], index=index)
             elif key == "contentBlockDelta":
                 yield from self._delta(index, _get(body, "delta") or {})
+            elif key == "contentBlockStop":
+                stopped = self.blocks.get(index)
+                if stopped is not None and stopped["kind"] == "reasoning" and not stopped.get("closed"):
+                    stopped["closed"] = True
+                    yield ReasoningStatus("finished", kind=self.reasoning_kind)
             elif key == "messageStop":
                 self.stopped = True
                 self.stop = _get(body, "stopReason")
@@ -1382,12 +1403,17 @@ class _BedrockStream:
             block["input"] = block.get("input", "") + piece
             yield ToolCallDelta(call_id=str(block.get("id", "")), index=index, arguments_delta=piece)
         elif "reasoningContent" in delta:
+            started = index not in self.blocks
             block = self._block(index, "reasoning")
             reasoning = delta["reasoningContent"] or {}
+            if started:
+                yield ReasoningStatus(
+                    "started", kind=self.reasoning_kind, redacted="redactedContent" in reasoning
+                )
             if "text" in reasoning:
                 block["text"] = block.get("text", "") + str(reasoning["text"])
                 if reasoning["text"]:
-                    yield ReasoningDelta(str(reasoning["text"]))
+                    yield ReasoningDelta(str(reasoning["text"]), kind=self.reasoning_kind)
             if "signature" in reasoning:
                 block["signature"] = block.get("signature", "") + str(reasoning["signature"])
             if "redactedContent" in reasoning:

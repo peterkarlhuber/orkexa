@@ -15,6 +15,7 @@ from typing import Any, ClassVar
 
 from ..core.capabilities import ModelCapabilities
 from ..core.conversion import document_text, search_result_text, validate_output
+from ..core.reasoning import ReasoningStream
 from ..core.schema import drop_null_optionals, strict_schema
 from ..core.types import (
     DocumentPart,
@@ -26,6 +27,7 @@ from ..core.types import (
     Part,
     ReasoningDelta,
     ReasoningPart,
+    ReasoningStatus,
     RefusalDetails,
     ResponseCompleted,
     SearchResultPart,
@@ -132,6 +134,14 @@ class ChatCompletionsProvider(Provider):
 
     def capabilities(self, model: str) -> ModelCapabilities:
         return ModelCapabilities()
+
+    def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
+        support = (capabilities or self.capabilities(model)).reasoning
+        if support == "unsupported":
+            return ReasoningStream.none(f"{model} does not reason (as declared for this endpoint)")
+        # A reasoning model's server streams its reasoning text as it is generated (Ollama:
+        # ``reasoning``; vLLM: ``reasoning_content``); servers that do not separate it send none.
+        return ReasoningStream(text="thinking" if support == "supported" else "unknown")
 
     def check(self, request: ModelRequest) -> None:
         options = self._options(request)
@@ -418,6 +428,7 @@ class ChatCompletionsProvider(Provider):
             close = getattr(stream, "close", None)
             if close is not None:
                 close()
+        yield from state.close()
         yield ResponseCompleted(state.final(self, request))
 
     async def astream(self, native: dict[str, Any], request: ModelRequest) -> AsyncIterator[StreamEvent]:
@@ -431,6 +442,8 @@ class ChatCompletionsProvider(Provider):
             close = getattr(stream, "close", None)
             if close is not None:
                 await close()
+        for event in state.close():
+            yield event
         yield ResponseCompleted(state.final(self, request))
 
     def map_error(self, exc: BaseException) -> BaseException | None:
@@ -460,6 +473,14 @@ class _ChatStream:
         self.model: str | None = None
         self.id: str | None = None
         self.service_tier: str | None = None
+        #: Reasoning text is being streamed (until the first answer text or tool call).
+        self.thinking = False
+
+    def close(self) -> Iterator[StreamEvent]:
+        """End the reasoning phase (answer text or a tool call follows, or the stream ended)."""
+        if self.thinking:
+            self.thinking = False
+            yield ReasoningStatus("finished", kind="thinking")
 
     def translate(self, chunk: Any) -> Iterator[StreamEvent]:
         self.model = _get(chunk, "model") or self.model
@@ -471,14 +492,21 @@ class _ChatStream:
             delta = _get(choice, "delta")
             if _get(choice, "finish_reason"):
                 self.finish = _get(choice, "finish_reason")
+            # Servers of open-weight models send the reasoning text itself: ``reasoning_content``
+            # (vLLM, DeepSeek), ``reasoning`` (Ollama, newer vLLM) or ``thinking``.
+            thought = _get(delta, "reasoning_content") or _get(delta, "reasoning") or _get(delta, "thinking")
+            if thought and isinstance(thought, str):
+                if not self.thinking:
+                    self.thinking = True
+                    yield ReasoningStatus("started", kind="thinking")
+                self.reasoning.append(thought)
+                yield ReasoningDelta(thought, kind="thinking")
             text = _get(delta, "content")
+            if text or _get(delta, "tool_calls"):
+                yield from self.close()
             if text:
                 self.content.append(text)
                 yield TextDelta(text)
-            thought = _get(delta, "reasoning_content") or _get(delta, "reasoning")
-            if thought:
-                self.reasoning.append(thought)
-                yield ReasoningDelta(thought)
             refusal = _get(delta, "refusal")
             if refusal:
                 self.refusal.append(refusal)

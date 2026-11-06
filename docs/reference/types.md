@@ -14,6 +14,10 @@
 
 ::: orkexa.ReasoningDelta
 
+::: orkexa.ReasoningStatus
+
+::: orkexa.ReasoningStream
+
 ::: orkexa.ToolCallStarted
 
 ::: orkexa.ToolCallDelta

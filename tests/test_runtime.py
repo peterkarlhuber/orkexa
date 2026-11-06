@@ -35,6 +35,7 @@ from orkexa import (
 )
 from orkexa.core.types import (
     ReasoningDelta,
+    ReasoningStatus,
     ResponseCompleted,
     TextDelta,
     TextPart,
@@ -255,7 +256,9 @@ def test_streaming_events_and_identical_history() -> None:
         ToolCallDelta,
         ResponseCompleted,
         UsageReported,
+        ReasoningStatus,
         ReasoningDelta,
+        ReasoningStatus,
         TextDelta,
         TextDelta,
         ResponseCompleted,
