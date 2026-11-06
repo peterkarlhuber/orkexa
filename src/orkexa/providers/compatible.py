@@ -16,6 +16,10 @@ Security and capabilities:
   the server software itself provides for every model (streaming, system messages,
   structured output); tool calling still depends on the model and the server
   configuration and must be declared.
+* Redirects are never followed: the endpoint was chosen by its ``base_url``, and a
+  redirect would send the conversation (and the ``api_key``) on to another address.
+  A redirect answer is reported as the endpoint's error. Pass your own ``client=`` to
+  change that.
 """
 
 from __future__ import annotations
@@ -28,7 +32,7 @@ from pydantic import SecretStr
 from ..core.capabilities import ModelCapabilities, ModelLimits, Support
 from ..core.types import ModelRequest, ModelResponse, StreamEvent
 from ..errors import ConfigurationError
-from .base import ProviderConfig
+from .base import ProviderConfig, _shown, require_module
 from .chat_completions import ChatCompletionsProvider, ChatMessageRules
 from .openai import OpenAIProvider, ResponsesCodec
 from .options import CompatibleOptions, OpenAIOptions
@@ -93,6 +97,51 @@ class CompatibleProvider(ChatCompletionsProvider):
             config.api_key = SecretStr(_NO_KEY)  # the SDK would otherwise read OPENAI_API_KEY
         super().__init__(config, asynchronous)
         self._responses = _CompatibleResponses(self)
+
+    def make_client(self) -> Any:
+        """An SDK client that never follows a redirect (see the module docstring).
+
+        A ``http_client`` passed in the config's ``extra`` (or a whole ``client=``) is used
+        as it is.
+        """
+        sdk = require_module("openai", "openai")
+        kwargs = self.config.client_kwargs()
+        if "http_client" not in kwargs:
+            factory = sdk.DefaultAsyncHttpxClient if self.asynchronous else sdk.DefaultHttpxClient
+            kwargs["http_client"] = factory(follow_redirects=False)
+        cls = sdk.AsyncOpenAI if self.asynchronous else sdk.OpenAI
+        return cls(**kwargs)
+
+    #: What to check when the endpoint cannot be reached (appended to the connection error).
+    start_hint: ClassVar[str] = "check that the server runs and that base_url is right"
+
+    def _endpoint(self) -> str:
+        """The configured base URL for messages, without credentials."""
+        return _shown(self.config.base_url) or "the endpoint of the client= given"
+
+    def map_error(self, exc: BaseException) -> BaseException | None:
+        """Like the base class, with the address and what to do for connection errors and redirects."""
+        try:
+            sdk = require_module("openai", "openai")
+        except ImportError:
+            return None
+        if isinstance(exc, sdk.APITimeoutError):
+            hint = (
+                f"{self._endpoint()} did not answer in time; a large local model may need a longer timeout="
+            )
+            return self.provider_error(exc, status_code=None, connection=True, hint=hint)
+        if isinstance(exc, sdk.APIConnectionError):
+            hint = f"{self._endpoint()} cannot be reached; {self.start_hint}"
+            return self.provider_error(exc, status_code=None, connection=True, hint=hint)
+        if isinstance(exc, sdk.APIStatusError) and 300 <= exc.status_code < 400:
+            hint = (
+                f"{self._endpoint()} answered with a redirect, which Orkexa does not follow for "
+                "OpenAI-compatible endpoints; set base_url to the address it redirects to"
+            )
+            return self.provider_error(
+                exc, status_code=exc.status_code, request_id=getattr(exc, "request_id", None), hint=hint
+            )
+        return super().map_error(exc)
 
     def capabilities(self, model: str) -> ModelCapabilities:
         return ModelCapabilities.all(
@@ -168,6 +217,9 @@ class OllamaProvider(CompatibleProvider):
     # (openai/openai.go: ``Message.Reasoning`` -> ``api.Message.Thinking``); the chat templates of
     # thinking models (Qwen 3.x, ...) show it again in the turns of the current tool loop.
     message_rules: ClassVar[ChatMessageRules] = ChatMessageRules(reasoning_field="reasoning")
+    start_hint: ClassVar[str] = (
+        "start Ollama (`ollama serve`, or `orkexa-local serve` for the managed runtime) or correct base_url"
+    )
     preset: ClassVar[Mapping[str, Support]] = {
         "streaming": "supported",
         "system_messages": "supported",
@@ -180,6 +232,7 @@ class VLLMProvider(CompatibleProvider):
 
     name: ClassVar[str] = "vllm"
     default_base_url: ClassVar[str | None] = "http://localhost:8000/v1"
+    start_hint: ClassVar[str] = "start the server (`vllm serve <model>`) or correct base_url"
     preset: ClassVar[Mapping[str, Support]] = {
         "streaming": "supported",
         "system_messages": "supported",

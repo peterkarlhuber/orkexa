@@ -22,7 +22,11 @@
   ignores `AWS_ENDPOINT_URL*` from the environment and the AWS config file, and
   accepts only an `https` `base_url` (signed requests carry the access key id and
   session token). Treat a configurable `base_url` as security-relevant: it receives
-  the full conversation.
+  the full conversation. `compatible`/`ollama`/`vllm` never follow a redirect: an
+  endpoint that answers with one gets a `ProviderError` naming the configured address,
+  and the request goes nowhere else (pass your own `client=` to allow redirects). They
+  accept any host, also one that is not on loopback; restrict `base_url` yourself
+  where that matters (Nodestro checks it against the operator's allow list).
 * **Tools** run only in Orkexa, after `before_tool`; SDK automatic function calling is
   disabled. Tool inputs are validated; tool rounds, tool calls per response
   (`max_tool_calls_per_round`, default 64), parallelism and timeouts are limited.

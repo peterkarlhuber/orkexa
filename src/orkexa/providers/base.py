@@ -379,9 +379,16 @@ class Provider(ABC):
         status_code: int | None,
         request_id: str | None = None,
         connection: bool = False,
+        hint: str | None = None,
     ) -> ProviderError:
-        """A redacted :class:`ProviderError` subclass chosen by HTTP status."""
-        message = self.redact(f"{self.name}: {type(exc).__name__}: {exc}")
+        """A redacted :class:`ProviderError` subclass chosen by HTTP status.
+
+        ``hint`` (what to do about it) is appended to the message, also redacted.
+        """
+        message = f"{self.name}: {type(exc).__name__}: {exc}"
+        if hint:
+            message = f"{message.rstrip('.')}; {hint}"
+        message = self.redact(message)
         kwargs: dict[str, Any] = {"provider": self.name, "status_code": status_code, "request_id": request_id}
         if connection:
             return ProviderConnectionError(message, retryable=True, **kwargs)
