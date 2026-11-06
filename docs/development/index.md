@@ -35,3 +35,9 @@ test suite on Python 3.11 to 3.14, the suite with the lowest supported dependenc
 versions, building both distributions and installing them into fresh virtual
 environments, a strict docs build, and `pip-audit` over all runtime dependencies.
 Dependabot proposes grouped dependency and GitHub Actions updates.
+
+`.github/workflows/ollama-live.yml` runs the live tests against a real Ollama every Monday and by
+hand (`workflow_dispatch`, with the model as input): it installs the pinned runtime with
+`orkexa-local install-runtime --download`, starts the managed server, pulls `qwen3.5:0.8b`,
+`qwen3.5:4b` and `qwen3-embedding:0.6b` and runs `pytest -m live tests/test_ollama_live.py` and the
+live test of `tests/test_local.py`. It never runs on pushes or pull requests and uses no secret.

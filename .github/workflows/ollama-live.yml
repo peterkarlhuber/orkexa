@@ -1,0 +1,59 @@
+name: Ollama live
+
+# ORK-041: the live tests against a real Ollama (the pinned runtime, installed and run by
+# orkexa.local, with small Qwen models) on a schedule and by hand. They never run on pushes or
+# pull requests: they download the runtime and several GB of models and take several minutes on
+# a CPU runner. No secret is used; nothing is paid.
+on:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Thinking model with tool support for tests/test_ollama_live.py"
+        default: "qwen3.5:0.8b"
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: live tests (Ollama, ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ORKEXA_OLLAMA_LIVE_MODEL: ${{ inputs.model || 'qwen3.5:0.8b' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]"
+      - run: echo "ORKEXA_LOCAL_HOME=$RUNNER_TEMP/orkexa-local" >> "$GITHUB_ENV"
+      - name: Install the pinned Ollama runtime (SHA-256 checked)
+        run: orkexa-local install-runtime --download --no-gpu
+      - name: Start the managed server on port 11434
+        run: |
+          orkexa-local serve --port 11434 > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 60); do
+            if orkexa-local --url http://127.0.0.1:11434 status | grep -q "^server http://127.0.0.1:11434: "; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/serve.log"
+          exit 1
+      - name: Pull the models
+        run: |
+          for model in "$ORKEXA_OLLAMA_LIVE_MODEL" qwen3.5:4b qwen3-embedding:0.6b; do
+            orkexa-local --url http://127.0.0.1:11434 pull "$model"
+          done
+      - name: Live tests
+        env:
+          ORKEXA_OLLAMA_LIVE_URL: http://127.0.0.1:11434/v1
+          ORKEXA_TEST_OLLAMA_URL: http://127.0.0.1:11434
+        run: pytest -m live tests/test_ollama_live.py -v && pytest tests/test_local.py -k live -v
+      - if: failure()
+        run: cat "$RUNNER_TEMP/serve.log" "$ORKEXA_LOCAL_HOME/logs/ollama.log" || true
