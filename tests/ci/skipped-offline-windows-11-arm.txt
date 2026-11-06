@@ -1,7 +1,8 @@
 # Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
 # Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
-# Job platforms.yml/offline on windows-11-arm: derived from the Linux run and the tests'
-# skip conditions, NOT yet verified on a real runner (the lead fixes it after the first CI run).
+# Job platforms.yml/offline on windows-11-arm: derived from local Linux runs (with sqlite3 extension loading
+# switched off for macOS and Windows ARM64) and the tests' skip conditions,
+# NOT yet verified on a real runner (the lead fixes it after the first CI run).
 
 ::tests.audit3.test_ork3_09_build_model  # collection skipped: could not import 'gguf' (not installed on Windows ARM64)
 ::tests.test_local_convert  # collection skipped: could not import 'gguf' (not installed on Windows ARM64)
