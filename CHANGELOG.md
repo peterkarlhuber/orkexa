@@ -4,6 +4,44 @@
 
 First release of Orkexa.
 
+### Changed: OpenAI-compatible endpoints no longer follow redirects (2026-11-06)
+
+* `compatible`, `ollama` and `vllm` clients refuse HTTP redirects (a 3xx answer is an error that names the address),
+  so a redirect cannot send the conversation or the key to another host. A caller's own `http_client` keeps its own
+  redirect setting. Connection errors and timeouts name the endpoint (without credentials) and how to start the
+  server (`ollama serve` or `orkexa-local serve`, `vllm serve <model>`).
+* vLLM gets reasoning back in the history (`reasoning` field), as Ollama does.
+
+### Added: registry refresh, Bedrock session guard, documented limits, Python 3.14 (2026-11-06)
+
+* `ToolRegistry.refresh()` and `AgentRegistry.refresh()` re-read records written by other processes; a new version
+  number is taken from both memory and disk, so two processes no longer reuse a version (#24).
+* `BedrockOptions(require_session=True)` refuses to build a session from the host's credential chain.
+* Documented `max_output_tokens` (and context windows where documented) for current OpenAI, Gemini and Bedrock
+  Claude models; models without a documented number stay unknown.
+* Python 3.14 is supported and tested in CI (#25). The sandbox static check also refuses the annotation evaluation
+  helpers of 3.14 (`annotationlib`) and code hidden in string annotations.
+* `docker/sandbox-ca.Dockerfile` (the sandbox image, kept in sync by a test) takes an optional extra CA as a
+  build secret (`pip-ca`; BuildKit or Podman) for builds behind a TLS-intercepting proxy; the CA is not kept in
+  the image. `docker/sandbox.Dockerfile` stays buildable with the legacy builder.
+* `tests/test_upkeep.py` flags dated snapshots (built-in prices, the Bedrock capability table, the sandbox base
+  image) older than 90 days; the release workflow fails on them. The release guide has an upkeep checklist.
+* A weekly and manual workflow (`ollama-live.yml`) runs the live tests against the pinned Ollama runtime.
+
+### Changed: `orkexa-local` and local-server messages (2026-11-06)
+
+* Every `orkexa-local` option has a help text; any Orkexa error ends in one line, `error (<code>): <message>`, and
+  exit code 1, without a traceback. `status` and the install, serve and convert messages name the next step.
+* A model id with a provider prefix but no model (`anthropic:`) is refused with an example.
+* The managed Ollama server writes its log and state files privately (mode 0600), rotates its log at 10 MB, reports
+  a busy port and a failed start, and its folders are private.
+
+### Changed: documentation and examples (2026-11-06)
+
+* The architecture page covers Bedrock, orchestration, `orkexa.local`, embeddings and retrieval; ADR 0013 records
+  the Bedrock credential, endpoint and residency design (#26).
+* `examples/bedrock_agent.py` is now `examples/14_bedrock_agent.py`.
+
 ### Fixed: multi-step Ollama runs with thinking models no longer fail with HTTP 400 (2026-11-06)
 
 * A turn in which a thinking model only reasoned (no text, no tool call) was kept as `content: null`; Ollama refuses

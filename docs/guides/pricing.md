@@ -331,6 +331,12 @@ Opus 4.8), US-only data residency (1.1x, Claude 4.6 and later), web search ($10 
 Orkexa ships no prices for other providers or for Bedrock/Vertex; these prices are
 never applied to the `bedrock` provider (see [Amazon Bedrock](#amazon-bedrock)).
 
+The snapshot is reviewed before each release; the test suite warns once it is older
+than 90 days (see [Releasing](../development/releasing.md#upkeep)). Prices change between
+Orkexa releases: compare `BUILTIN_SNAPSHOT.created_at` (and each price's `checked_at`)
+with today, and register current prices yourself (`resolver.register(...)`) if the
+snapshot is older than you accept.
+
 ## Concurrency
 
 Snapshots and prices are immutable and can be shared between threads and asyncio

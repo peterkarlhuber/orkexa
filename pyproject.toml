@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
@@ -106,7 +107,7 @@ replacement = '](https://github.com/peterkarlhuber/orkexa/blob/master/\1)'
 packages = ["src/orkexa"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["compat/", ".github/", "assets/", "docs/assets/"]
+exclude = [".github/", "assets/", "docs/assets/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

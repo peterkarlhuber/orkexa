@@ -34,6 +34,7 @@ import urllib.error
 import urllib.request
 import zipfile
 
+from .._storage import make_private_dirs
 from ._http import OllamaError
 
 __all__ = [
@@ -439,10 +440,13 @@ def install_runtime(
     if archive is None and not download:
         raise OllamaError(
             "runtime_missing",
-            f"Ollama {OLLAMA_VERSION} is not installed; pass archive= (offline) or download=True",
+            f"Ollama {OLLAMA_VERSION} is not installed; pass archive= (offline) or download=True "
+            "(`orkexa-local install-runtime --archive FILE` or `--download`)",
         )
     runtime = base / "runtime"
-    runtime.mkdir(parents=True, exist_ok=True)
+    # Private (0700) when new: whoever may write in it could replace the executable that the
+    # managed server runs (the unpacked runtime itself is moved in from a 0700 temporary folder).
+    make_private_dirs(runtime)
 
     def enter(name: str) -> None:
         if phase is not None:
@@ -455,7 +459,7 @@ def install_runtime(
             return existing
         partial = runtime / _DOWNLOADS / f"{artifact.name}.partial"
         if archive is None:
-            partial.parent.mkdir(exist_ok=True)
+            make_private_dirs(partial.parent)
             enter("download")
             _download(artifact, partial, progress, cancel)
         source = Path(archive) if archive is not None else partial

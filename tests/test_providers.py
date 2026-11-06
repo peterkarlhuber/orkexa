@@ -218,11 +218,11 @@ def test_chat_completions_json_schema_response_format() -> None:
     assert response_format["json_schema"]["name"] == "Inner"
 
 
-@pytest.mark.parametrize(("provider", "replayed"), [("ollama", True), ("vllm", False)])
+@pytest.mark.parametrize(("provider", "replayed"), [("ollama", True), ("vllm", True), ("compatible", False)])
 def test_chat_completions_replays_reasoning_only_where_the_endpoint_declares_a_field(
     provider: str, replayed: bool
 ) -> None:
-    """Ollama reads ``reasoning`` of an assistant message (``ChatMessageRules``); vLLM declares no field."""
+    """Ollama and vLLM read ``reasoning`` of assistant messages (``ChatMessageRules``); others do not."""
     harness = ChatHarness()
     harness.provider = provider
     agent = harness.agent(

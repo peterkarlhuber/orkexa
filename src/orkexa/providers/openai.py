@@ -69,6 +69,17 @@ _CLASSIC_MODELS = re.compile(r"^(gpt-4|gpt-3\.5|chatgpt-4o)")
 #: GPT-6 models document every effort level from low to max.
 _ALL_EFFORT_MODELS = re.compile(r"^gpt-6")
 _MULTIMODAL_MODELS = re.compile(r"^(gpt-6|gpt-5|gpt-4o|gpt-4\.1|o3|o4)")
+#: Documented token limits (context window, maximum output) per model, from each model's page of
+#: https://developers.openai.com/api/docs/models (checked 2026-11-06). Models not listed are
+#: unknown: nothing is guessed. A dated snapshot (``gpt-5.5-2026-04-23``) has its model's limits.
+_DOCUMENTED_LIMITS: dict[str, tuple[int, int]] = {
+    "gpt-6-astra": (1_050_000, 128_000),
+    "gpt-6-luna": (1_050_000, 128_000),
+    "gpt-6.1-sol": (1_050_000, 128_000),
+    "gpt-6.1-terra": (1_050_000, 128_000),
+    "gpt-5.5": (1_050_000, 128_000),
+}
+_SNAPSHOT = re.compile(r"-\d{4}-\d{2}-\d{2}$")
 
 
 def openai_tool_choice(choice: ToolChoice | None) -> Any:
@@ -427,12 +438,20 @@ class OpenAIProvider(Provider):
         )
 
     def limits(self, model: str) -> ModelLimits:
-        """Reasoning settings by model family; Orkexa documents no token limits for OpenAI models."""
+        """Reasoning settings by model family and the documented token limits of listed models."""
+        documented = _DOCUMENTED_LIMITS.get(_SNAPSHOT.sub("", model))
+        tokens: dict[str, Any] = {}
+        if documented is not None:
+            tokens = {
+                "context_window": documented[0],
+                "max_output_tokens": documented[1],
+                "source": "documented",
+            }
         if _ALL_EFFORT_MODELS.match(model):
-            return ModelLimits(efforts=("low", "medium", "high", "xhigh", "max"), thinking_modes=())
+            return ModelLimits(efforts=("low", "medium", "high", "xhigh", "max"), thinking_modes=(), **tokens)
         if _CLASSIC_MODELS.match(model):
-            return ModelLimits(efforts=(), thinking_modes=())
-        return ModelLimits(thinking_modes=())
+            return ModelLimits(efforts=(), thinking_modes=(), **tokens)
+        return ModelLimits(thinking_modes=(), **tokens)
 
     def check(self, request: ModelRequest) -> None:
         for tool in request.tools:

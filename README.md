@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/peterkarlhuber/orkexa/actions/workflows/ci.yml"><img src="https://github.com/peterkarlhuber/orkexa/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
-  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-16243B" alt="Python 3.11 | 3.12 | 3.13">
+  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-16243B" alt="Python 3.11 | 3.12 | 3.13 | 3.14">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0079FE" alt="MIT License"></a>
 </p>
 
@@ -106,7 +106,7 @@ print(agent.ask("What is 17 + 25?"))
 Claude on Bedrock is billed by AWS and processed under AWS terms; it is a different
 provider from `anthropic`, with a subset of its features. See
 [Providers and capabilities](docs/getting-started/providers.md#amazon-bedrock) and
-[`examples/bedrock_agent.py`](examples/bedrock_agent.py).
+[`examples/14_bedrock_agent.py`](examples/14_bedrock_agent.py).
 
 ## Provider support
 

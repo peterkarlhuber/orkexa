@@ -103,18 +103,18 @@ def test_text_is_kept_as_it_was() -> None:
     assert sent[3]["content"] == "It is 3."
 
 
-def test_ollama_gets_its_reasoning_back_other_endpoints_do_not() -> None:
-    """Ollama reads ``reasoning`` of an assistant message as its thinking; vLLM and generic
-    endpoints declare no such field and get none (unchanged)."""
+@pytest.mark.parametrize("name", ["ollama", "vllm"])
+def test_ollama_and_vllm_get_their_reasoning_back_generic_endpoints_do_not(name: str) -> None:
+    """Ollama and vLLM read ``reasoning`` of an assistant message as the model's thinking
+    (ORK-042: checked in the vLLM 0.33.0 source); generic endpoints declare no such
+    field and get none."""
     last = Message(role="assistant", content=[ReasoningPart(text="It is 3.")])
-    ollama = encode("ollama", history(last))
-    assert ollama[1]["reasoning"] == "I add." and ollama[1]["content"] is None
-    assert ollama[3] == {"role": "assistant", "content": "", "reasoning": "It is 3."}
-    for name in ("vllm", "compatible"):
-        sent = encode(name, history(last))
-        assert all("reasoning" not in m for m in sent)
-    assert provider("ollama").message_rules == ChatMessageRules(reasoning_field="reasoning")
-    assert provider("vllm").message_rules == ChatMessageRules()
+    sent = encode(name, history(last))
+    assert sent[1]["reasoning"] == "I add." and sent[1]["content"] is None
+    assert sent[3] == {"role": "assistant", "content": "", "reasoning": "It is 3."}
+    assert all("reasoning" not in m for m in encode("compatible", history(last)))
+    assert provider(name).message_rules == ChatMessageRules(reasoning_field="reasoning")
+    assert provider("compatible").message_rules == ChatMessageRules()
 
 
 def test_redacted_or_textless_reasoning_is_not_replayed() -> None:

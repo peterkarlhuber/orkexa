@@ -243,6 +243,11 @@ class BedrockOptions:
             session's region, e.g. ``AWS_DEFAULT_REGION``).
         profile_name: Named profile of the shared AWS config to build the session from.
         session: A preconfigured ``boto3.Session`` (then ``profile_name`` must be ``None``).
+        require_session: Fail closed on hosts that serve several tenants: never build a
+            ``boto3.Session`` from the host's credential chain (environment, shared config,
+            instance role). A client is then only built from ``session``; without one (and
+            without an injected ``client=``, plus ``control_client=`` for residency checks)
+            the request fails with ``ConfigurationError`` before anything is sent.
         data_residency: ``"eu_only"`` restricts inference to the EU regions in
             ``allowed_regions`` and verifies every model/inference profile before the
             first paid request (see :mod:`orkexa.providers.bedrock`).
@@ -269,6 +274,7 @@ class BedrockOptions:
     region_name: str | None = None
     profile_name: str | None = None
     session: Any = field(default=None, repr=False, compare=False)
+    require_session: bool = False
     data_residency: Literal["eu_only"] | None = None
     allowed_regions: tuple[str, ...] | None = None
     control_client: Any = field(default=None, repr=False, compare=False)
@@ -288,6 +294,11 @@ class BedrockOptions:
     def __post_init__(self) -> None:
         if self.session is not None and self.profile_name is not None:
             raise ConfigurationError("Pass either session= or profile_name=, not both")
+        if self.require_session and self.profile_name is not None:
+            raise ConfigurationError(
+                "require_session=True uses only the session= you pass; profile_name= would read the "
+                "host's shared AWS config"
+            )
         if self.data_residency is not None and self.data_residency not in _BEDROCK_RESIDENCY:
             raise ConfigurationError(f"data_residency must be one of {_BEDROCK_RESIDENCY} or None")
         if self.allowed_regions is not None:

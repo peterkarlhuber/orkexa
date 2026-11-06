@@ -35,6 +35,14 @@ jobs:
           version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
           test "$TAG" = "v$version" || { echo "tag $TAG does not match version $version"; exit 1; }
       - run: pip install build==1.6.1 pytest==9.1.1 twine==7.0.0
+      # Built-in prices, the Bedrock capability table and the sandbox base image must have been
+      # reviewed within 90 days (docs/development/releasing.md, "Upkeep").
+      - name: Check that the dated snapshots are fresh
+        env:
+          ORKEXA_CHECK_FRESHNESS: "1"
+        run: |
+          pip install -e .
+          pytest tests/test_upkeep.py -v --noconftest
       - run: python -m build --outdir dist/orkexa
       - run: twine check --strict dist/orkexa/*
       - run: pytest -m packaging tests/packaging -v --noconftest

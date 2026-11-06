@@ -38,6 +38,7 @@ import base64
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import suppress
 from copy import deepcopy
+from datetime import date
 import hashlib
 import json
 import re
@@ -209,6 +210,21 @@ _CLAUDE_CACHING = re.compile(r"^anthropic\.claude-(?:3-7-sonnet|(?:opus|sonnet|h
 _CLAUDE_NO_VISION = re.compile(r"^anthropic\.claude-3-5-haiku")
 _NOVA = re.compile(r"^amazon\.nova-(?:micro|lite|pro|premier|2-lite)(?:[-.:]|$)")
 _NOVA_TEXT_ONLY = re.compile(r"^amazon\.nova-micro")
+
+#: When :func:`bedrock_capabilities` was last checked against the AWS documentation (the
+#: Converse feature table and the model cards). Reviewed with each boto3 update and before a
+#: release (docs/development/releasing.md); tests/test_upkeep.py flags it after 90 days.
+BEDROCK_CAPABILITIES_CHECKED_AT = date(2026, 11, 1)
+BEDROCK_CAPABILITIES_SOURCE = "https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html"
+
+#: Context window and maximum output per base model, from the Bedrock model cards
+#: (``model-card-anthropic-<model>.html``, checked 2026-11-06: "1M tokens", "128K", the same
+#: 1,000,000 and 128,000 that Anthropic documents for these models). Other models: unknown.
+_DOCUMENTED_LIMITS: dict[str, tuple[int, int]] = {
+    "anthropic.claude-opus-5-5": (1_000_000, 128_000),
+    "anthropic.claude-sonnet-5-5": (1_000_000, 128_000),
+    "anthropic.claude-haiku-5-5": (1_000_000, 128_000),
+}
 
 _COMMON_REASONS = {
     "system_messages": "Converse has no system messages inside the conversation; use system_prompt",
@@ -483,6 +499,12 @@ class BedrockProvider(Provider):
     def _session(self, options: BedrockOptions) -> Any:
         if options.session is not None:
             return options.session
+        if options.require_session:
+            raise ConfigurationError(
+                "BedrockOptions(require_session=True) needs session=boto3.Session(...) "
+                "(or an injected client=, and control_client= for residency checks); "
+                "the host's default AWS credential chain is not used"
+            )
         boto3 = require_module("boto3", "bedrock")
         return boto3.Session(profile_name=options.profile_name, region_name=options.region_name)
 
@@ -558,9 +580,17 @@ class BedrockProvider(Provider):
         return bedrock_capabilities(parse_model_id(model).base_model)
 
     def limits(self, model: str) -> ModelLimits:
-        """The effort levels of the Claude model behind the id; Anthropic's ``thinking`` options
-        are not part of Converse. Token limits on Bedrock are not documented to Orkexa (unknown)."""
+        """The effort levels of the Claude model behind the id (Anthropic's ``thinking`` options
+        are not part of Converse) and the token limits of the model cards Orkexa lists."""
         base = parse_model_id(model).base_model or ""
+        documented = _DOCUMENTED_LIMITS.get(base)
+        tokens: dict[str, Any] = {}
+        if documented is not None:
+            tokens = {
+                "context_window": documented[0],
+                "max_output_tokens": documented[1],
+                "source": "documented",
+            }
         efforts = None
         if _CLAUDE.match(base):
             from .anthropic import model_limits
@@ -568,7 +598,7 @@ class BedrockProvider(Provider):
             efforts = model_limits(base).efforts
             if efforts is None and not _CLAUDE_5.match(base):
                 efforts = ()  # Converse sends no effort for older Claude models
-        return ModelLimits(efforts=efforts, thinking_modes=(), thinking_budget=False)
+        return ModelLimits(efforts=efforts, thinking_modes=(), thinking_budget=False, **tokens)
 
     def reasoning_stream(self, model: str, capabilities: ModelCapabilities | None = None) -> ReasoningStream:
         # Converse marks reasoning blocks (``reasoningContent``), also redacted ones.

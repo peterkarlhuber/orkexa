@@ -22,7 +22,11 @@
   ignores `AWS_ENDPOINT_URL*` from the environment and the AWS config file, and
   accepts only an `https` `base_url` (signed requests carry the access key id and
   session token). Treat a configurable `base_url` as security-relevant: it receives
-  the full conversation.
+  the full conversation. `compatible`/`ollama`/`vllm` never follow a redirect: an
+  endpoint that answers with one gets a `ProviderError` naming the configured address,
+  and the request goes nowhere else (pass your own `client=` to allow redirects). They
+  accept any host, also one that is not on loopback; restrict `base_url` yourself
+  where that matters (Nodestro checks it against the operator's allow list).
 * **Tools** run only in Orkexa, after `before_tool`; SDK automatic function calling is
   disabled. Tool inputs are validated; tool rounds, tool calls per response
   (`max_tool_calls_per_round`, default 64), parallelism and timeouts are limited.
@@ -58,7 +62,11 @@ Keep stores in a directory with suitable ACLs.
   limits. If Docker or the image is missing, every validation or call fails with a
   `SandboxError` (wrapped in `ToolExecutionError` for tool calls) that explains the
   options; no code runs. Build the image with
-  `docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`.
+  `docker build -t orkexa-sandbox -f docker/sandbox.Dockerfile .`. Behind a proxy that
+  intercepts TLS, build `docker/sandbox-ca.Dockerfile` instead and pass its CA certificate
+  as a build secret (`--secret id=pip-ca,src=proxy-ca.pem`, with
+  `--build-arg HTTPS_PROXY=...`; needs BuildKit or Podman): pip trusts it for the install
+  step only, and it is not stored in the image.
 * **The Docker host must prove the sandbox before code runs.** The preflight
   (`orkexa.dynamic.docker.preflight`) refuses a daemon that does not run Linux containers
   (`os-type`), cannot enforce memory, process or CPU limits (`limits`, e.g. a rootless
@@ -91,8 +99,12 @@ Keep stores in a directory with suitable ACLs.
   Use it only for code you trust or have reviewed, e.g. on a development machine.
 * The static check rejects imports outside an allow list, dunder access,
   `eval`/`exec`, file and network access patterns and access to modules through the
-  attributes of allowed modules (`calendar.sys`, `json.codecs`, `enum.bltns` ...). A
-  test walks every module reachable from the allow list, so a new Python or dependency
+  attributes of allowed modules (`calendar.sys`, `json.codecs`, `enum.bltns` ...,
+  and `annotationlib` on Python 3.14). Forward-reference evaluation, which runs a
+  string as code (`ForwardRef`, `get_type_hints`, `evaluate`), is rejected, and string
+  constants that are expressions with a call or an attribute (as typing and pydantic
+  would evaluate them) are checked like code. A string built at run time cannot be
+  checked this way. A test walks every module reachable from the allow list, so a new Python or dependency
   version that exposes another module fails CI until it is reviewed. **It is a filter,
   not a sandbox**: it reduces what reaches the sandbox, it does not replace it.
 * `AutoApprover` is an **unsafe opt-in**: it emits `UnsafeOptInWarning` unless created
@@ -332,7 +344,8 @@ yours. See [Data flows and retention](../compliance/data-flows.md) and
 ## Remaining risks
 
 * The static check is a deny list on top of an import allow list; it is not a proof
-  that code cannot escape. Only the sandbox is the boundary.
+  that code cannot escape (for example, it cannot see strings built at run time that a
+  library evaluates). Only the sandbox is the boundary.
 * Unmapped exceptions (programming errors, `KeyboardInterrupt`) and every exception of
   `ClaudeAgent` are raised as they are; an SDK exception there can still print request
   details in a traceback. Do not log tracebacks of `ClaudeAgent` errors verbatim where

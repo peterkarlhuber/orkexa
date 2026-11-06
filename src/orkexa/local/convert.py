@@ -177,14 +177,18 @@ def _input(
     if local is not None:
         path = Path(local)
         if not path.is_file():
-            raise OllamaError("source_missing", f"{path} does not exist")
+            raise OllamaError("source_missing", f"{path} does not exist; check the --weights/--template path")
         if path.stat().st_size < source.size or (not header and path.stat().st_size != source.size):
             raise OllamaError("checksum_mismatch", f"{path.name} has the wrong size")
         if _sha256_file(path, source.size if header else None) != source.sha256:
             raise OllamaError("checksum_mismatch", f"{path.name} does not match the pinned SHA-256")
         return path
     if not download:
-        raise OllamaError("source_missing", "Pass the local files or download=True")
+        raise OllamaError(
+            "source_missing",
+            "Pass the local files (weights=/template=, or --weights FILE --template FILE) "
+            "or allow the download (download=True, or --download)",
+        )
     target = work / ("template.gguf" if header else "weights.safetensors")
     _download(source, target, header=header, cancel=cancel, transferred=transferred)
     if _sha256_file(target) != source.sha256:

@@ -66,7 +66,7 @@ reserves before each request uses the same `max_tokens` (`orkexa.core.cost_bound
 | | anthropic | openai | gemini | bedrock | compatible / ollama / vllm |
 | --- | --- | --- | --- | --- | --- |
 | `max_tokens` is sent as | `max_tokens` | `max_output_tokens` | `config.max_output_tokens` | `inferenceConfig.maxTokens` | `max_tokens` or `max_completion_tokens` (`CompatibleOptions.max_tokens_param`); Ollama maps it to `num_predict` |
-| context window / max output | documented for current Claude models (e.g. 1M / 128K; Haiku 4.5: 200K / 64K) | unknown | unknown | unknown | unknown (`ModelLimits.declared(...)` for endpoint values) |
+| context window / max output | documented for current Claude models (e.g. 1M / 128K; Haiku 4.5: 200K / 64K) | documented for GPT-6 (`gpt-6-astra`, `gpt-6-luna`, `gpt-6.1-sol`, `gpt-6.1-terra`) and `gpt-5.5`: 1,050,000 / 128,000; other models unknown | max output documented for Gemini 3.8 Flash, 3.6 Flash, 3.5 Flash-Lite, 3.1 Pro Preview and 2.5 Pro/Flash/Flash-Lite: 65,536 (context window unknown); other models unknown | documented for Claude Opus, Sonnet and Haiku 5.5 (model cards): 1M / 128K; other models unknown | unknown (`ModelLimits.declared(...)` for endpoint values) |
 | effort is sent as | `output_config.effort` | `reasoning.effort` | `thinking_config.thinking_level` (Gemini 3/4: low, medium, high) | `outputConfig.effort` (Claude 5.x) | `reasoning_effort` with `send_reasoning_effort=True` |
 | effort levels | per model (Opus/Sonnet 4.6: no `xhigh`; Haiku 4.5: none) | GPT-6: low to max; classic models: none; others unknown | low, medium, high | as the Claude model | unknown |
 | thinking switch | `AnthropicOptions(thinking=...)`: per model `adaptive`, `between_tools` (Sonnet 5.5), `disabled` | none | `GeminiOptions(thinking_budget=...)` on Gemini 2.5 | none | none |
@@ -86,8 +86,10 @@ content elsewhere with HTTP 400 `invalid message content type: <nil>`.
 Reasoning is sent back only where the endpoint declares a field for it
 (`ChatCompletionsProvider.message_rules`, a `ChatMessageRules`): the `ollama` preset sends an
 assistant turn's reasoning as `reasoning`, which Ollama passes to the chat template as that turn's
-thinking (thinking models such as Qwen 3.x continue a tool loop with their own reasoning).
-`compatible` and `vllm` send none. Reasoning of another model or provider is never sent
+thinking (thinking models such as Qwen 3.x continue a tool loop with their own reasoning). The
+`vllm` preset sends it the same way: vLLM passes an assistant message's `reasoning` to the chat
+template for interleaved thinking (checked in vLLM 0.33.0; older servers ignore the field).
+`compatible` sends none. Reasoning of another model or provider is never sent
 (`prepare_history`).
 
 ## What each adapter does
@@ -178,6 +180,10 @@ agent = Agent(
   the `AWS_*` key variables, or a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK`. You
   can also pass `BedrockOptions(session=boto3.Session(...))` or a `bedrock-runtime`
   client as `client=`. See [Installation](installation.md#aws-credentials-for-amazon-bedrock).
+* On a host that serves several tenants, set `BedrockOptions(require_session=True)`: the
+  provider then never builds a session from the host's credential chain and fails with
+  `ConfigurationError` unless you pass `session=` (or a `client=` plus a
+  `control_client=` for residency checks).
 * `api_key=` is rejected with `ConfigurationError`, and the provider never reads
   `ANTHROPIC_API_KEY` or another provider's key.
 * The region is `BedrockOptions(region_name=...)`, else the session's region

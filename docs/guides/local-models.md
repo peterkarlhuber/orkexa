@@ -85,6 +85,12 @@ with ManagedOllama("~/.orkexa/local", models_dir="/Volumes/SSD/models") as serve
   secrets of the parent process). `offline=True` removes proxy variables. It stops only the process it
   started. An Ollama that already runs (for example on port 11434) is only detected with
   `detect_ollama()`, never stopped or reconfigured.
+* On a host that several users share, the server's files stay private to the user that runs it: the
+  server's home (its key pair), `logs/` and `runtime/` are created with mode `0700`, the log and
+  `ollama.state.json` with `0600`. `logs/ollama.log` is rotated at a start once it is larger than 10 MB
+  (`LOG_ROTATE_BYTES`; one older log, `ollama.log.1`, is kept). A start fails with `start_failed` when the
+  executable cannot be run or the home cannot be used, and with `port_in_use` when another server answered on
+  the chosen port while Ollama gave up: its address is never handed out.
 * **Progress, resume and errors.** `install_runtime(..., progress=, phase=, cancel=)` reports the bytes
   of the download and, with `phase`, the phases `download`, `verify` and `unpack` (`INSTALL_PHASES`).
   The checksum also reports its progress. A download is kept in `<home>/runtime/.downloads/<archive>.partial`,

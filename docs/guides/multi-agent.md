@@ -76,3 +76,8 @@ orchestrator = Orchestrator(
   default is `DockerSandbox`, which fails closed without Docker; see
   [Security](security.md#dynamic-code).
   A tool built by one provider's Coding Agent can be used by an agent of any provider.
+* `ToolRegistry(path)` and `AgentRegistry(path)` persist one JSON file per version.
+  Several processes may share the directory, but each registry reads it once and then
+  works on that snapshot: call `refresh()` to see tools and agents that another process
+  added, approved or revoked since. A new version never overwrites a version file that
+  another process stored meanwhile.

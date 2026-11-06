@@ -79,6 +79,9 @@ class ToolRecord:
 class ToolRegistry:
     """Tool versions, metadata, approval status and persistence.
 
+    Several processes may share ``path``; each registry works on the snapshot it read
+    and sees the changes of the others after :meth:`refresh`.
+
     Args:
         path: Directory for generated tools (one JSON file per version). ``None``
             keeps everything in memory.
@@ -94,7 +97,7 @@ class ToolRegistry:
         self._records: dict[str, list[ToolRecord]] = {}
         self._trusted: dict[str, Tool] = {}
         if self.path is not None:
-            self._load()
+            self._records = self._load()
 
     # ---- persistence --------------------------------------------------------
 
@@ -112,8 +115,10 @@ class ToolRegistry:
             return
         _write_json_atomic(self._file(record), asdict(record))
 
-    def _load(self) -> None:
+    def _load(self) -> dict[str, list[ToolRecord]]:
+        """The valid generated records in :attr:`path`, by name, versions in ascending order."""
         assert self.path is not None
+        records: dict[str, list[ToolRecord]] = {}
         for file in sorted(self.path.glob("*/v*.json")):
             try:
                 record = ToolRecord(**json.loads(file.read_text(encoding="utf-8")))
@@ -126,9 +131,41 @@ class ToolRegistry:
             if record.kind != "generated" or record.code is None or record.sha256 != _sha256(record.code):
                 logger.warning("Skipping tool record %s: code does not match its stored hash", file)
                 continue
-            self._records.setdefault(record.name, []).append(record)
-        for versions in self._records.values():
+            records.setdefault(record.name, []).append(record)
+        for versions in records.values():
             versions.sort(key=lambda r: r.version)
+        return records
+
+    def refresh(self) -> None:
+        """Read the registry directory again, e.g. after another process changed it.
+
+        A registry reads its directory once when it is created and then works on that
+        snapshot: tools that another process (sharing the directory) added, approved or
+        revoked become visible only after ``refresh()``. Trusted tools of this registry stay
+        registered, and a stored tool of the same name stays hidden behind them. Without a
+        ``path`` nothing happens.
+        """
+        if self.path is None:
+            return
+        records = self._load()
+        for name in self._trusted:
+            records.pop(name, None)
+            records[name] = self._records[name]
+        self._records = records
+
+    def _next_version(self, name: str) -> int:
+        """One more than the newest version of ``name`` in memory or on disk.
+
+        The files on disk count too, so that a version another process stored meanwhile
+        is never overwritten by a registry that has not refreshed since.
+        """
+        versions = [r.version for r in self._records.get(name, [])]
+        if self.path is not None:
+            for file in (self.path / name).glob("v*.json"):
+                number = file.stem[1:]
+                if number.isdigit():
+                    versions.append(int(number))
+        return max(versions, default=0) + 1
 
     # ---- registration -------------------------------------------------------
 
@@ -176,7 +213,7 @@ class ToolRegistry:
             raise RegistryError(f"Tool name is taken by a trusted tool: {name}")
         record = ToolRecord(
             name=name,
-            version=(versions[-1].version + 1) if versions else 1,
+            version=self._next_version(name),
             kind="generated",
             status="pending",
             description=description,

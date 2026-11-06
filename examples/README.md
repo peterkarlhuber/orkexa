@@ -42,9 +42,9 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
 
 ## Provider-specific
 
-| Script | Mode | What it shows | What you see |
-|--------|------|---------------|--------------|
-| `bedrock_agent.py` | Live (AWS account) | Claude on Amazon Bedrock with an AWS profile or role, an EU inference profile and `data_residency="eu_only"`; a chat, a tool call and an optional image | The answers, then usage records with an unknown cost (no Bedrock price registered) |
+| # | Script | Mode | What it shows | What you see |
+|---|--------|------|---------------|--------------|
+| 14 | `14_bedrock_agent.py` | Live (AWS account) | Claude on Amazon Bedrock with an AWS profile or role, an EU inference profile and `data_residency="eu_only"`; a chat, a tool call and an optional image | The answers, then usage records with an unknown cost (no Bedrock price registered) |
 
 ## Prerequisites and limitations
 
@@ -61,7 +61,7 @@ Install the extras first: `pip install -e ".[all]"` from a clone (or
   (`chat_completions` or `responses`), `ORKEXA_COMPATIBLE_API_KEY` if the server needs
   one. `OPENAI_API_KEY` is never sent to such a server. Whether tool calling works
   depends on the model and the server.
-* **`bedrock_agent.py`** needs `pip install -e ".[bedrock]"`, AWS credentials
+* **Example 14** needs `pip install -e ".[bedrock]"`, AWS credentials
   (`AWS_PROFILE`, SSO, a role or `AWS_BEARER_TOKEN_BEDROCK`), access to the model in
   `eu-central-1`, and `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`
   and `bedrock:GetInferenceProfile` permissions. `ORKEXA_BEDROCK_MODEL` (default

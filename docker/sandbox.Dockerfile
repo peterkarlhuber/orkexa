@@ -17,6 +17,9 @@
 # and replace it here; tests/test_dockerfiles.py refuses a FROM without a digest.
 FROM python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
 
+# Behind a proxy that intercepts TLS, build docker/sandbox-ca.Dockerfile instead: it is this
+# file plus a build secret for the proxy's CA certificate (it needs BuildKit or Podman). This
+# file stays buildable with every builder, including the legacy one (Colima's default).
 COPY docker/sandbox-requirements.txt /tmp/sandbox-requirements.txt
 RUN pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/sandbox-requirements.txt \
     && rm -rf /root/.cache /tmp/sandbox-requirements.txt

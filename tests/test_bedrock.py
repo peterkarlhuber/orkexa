@@ -308,6 +308,33 @@ def test_an_injected_session_is_used(monkeypatch: pytest.MonkeyPatch) -> None:
         BedrockOptions(session=session, profile_name="prod")
 
 
+def test_require_session_never_builds_a_default_session(sessions: list[RecordingSession]) -> None:
+    """ORK-005: fail closed on multi-tenant hosts instead of using the host's credential chain."""
+    agent = Agent(model=f"bedrock:{CLAUDE_45}", options=BedrockOptions(require_session=True))
+    with pytest.raises(ConfigurationError, match="require_session=True"):
+        agent.client  # noqa: B018
+    assert sessions == []
+    with pytest.raises(ConfigurationError, match="profile_name"):
+        BedrockOptions(require_session=True, profile_name="prod")
+    session = RecordingSession(region_name="eu-west-3")
+    sessions.clear()
+    agent = Agent(model=f"bedrock:{CLAUDE_45}", options=BedrockOptions(require_session=True, session=session))
+    agent.client  # noqa: B018
+    assert session.clients[0][0] == "bedrock-runtime"
+
+
+def test_require_session_also_guards_the_residency_control_client(
+    sessions: list[RecordingSession],
+) -> None:
+    from orkexa.providers.bedrock import BedrockProvider
+
+    provider = BedrockProvider()
+    options = BedrockOptions(require_session=True, data_residency="eu_only")
+    with pytest.raises(ConfigurationError, match="require_session=True"):
+        provider._control_client(options, "eu-central-1", injected=False)
+    assert sessions == []
+
+
 def test_api_key_is_rejected() -> None:
     with pytest.raises(ConfigurationError, match="AWS credentials"):
         Agent(model=f"bedrock:{CLAUDE_45}", api_key="sk-something-1234567890")
