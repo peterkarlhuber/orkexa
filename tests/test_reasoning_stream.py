@@ -578,3 +578,23 @@ def test_fake_provider_scripts_both_kinds_and_omitted_reasoning() -> None:
         ("status", "finished", "thinking", False),
         ("text", "b"),
     ]
+
+
+def test_summary_options_are_not_sent_to_models_that_do_not_reason() -> None:
+    from orkexa import GeminiOptions, OpenAIOptions
+    from orkexa.core.types import Message, ModelRequest, TextPart
+
+    messages = [Message(role="user", content=[TextPart(text="hi")])]
+    openai_adapter = _adapter("openai")
+    for model, expected in (("gpt-5.5", {"summary": "auto"}), ("gpt-4o", None)):
+        request = ModelRequest(
+            model=model, messages=messages, options=OpenAIOptions(reasoning_summary="auto")
+        )
+        assert openai_adapter.prepare(request).get("reasoning") == expected
+    gemini_adapter = _adapter("gemini")
+    for model, expected in (("gemini-3-pro", {"include_thoughts": True}), ("gemini-2.0-flash", None)):
+        request = ModelRequest(model=model, messages=messages, options=GeminiOptions(include_thoughts=True))
+        config = gemini_adapter.prepare(request)["config"]
+        assert (
+            config.get("thinking_config") if isinstance(config, dict) else config.thinking_config
+        ) == expected

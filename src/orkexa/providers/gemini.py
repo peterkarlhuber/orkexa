@@ -435,7 +435,8 @@ class GeminiProvider(Provider):
             thinking["thinking_level"] = _LEVELS[request.effort]
         if options.thinking_budget is not None:
             thinking["thinking_budget"] = options.thinking_budget
-        if options.include_thoughts:
+        if options.include_thoughts and self.reasoning_stream(request.model).text != "none":
+            # Thought summaries are display information: not asked of a model that does not think.
             thinking["include_thoughts"] = True
         if thinking:
             config["thinking_config"] = thinking

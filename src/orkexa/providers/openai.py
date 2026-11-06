@@ -480,11 +480,13 @@ class OpenAIProvider(Provider):
         reasoning: dict[str, Any] = {}
         if request.effort is not None:
             reasoning["effort"] = request.effort
-        if options.reasoning_summary is not None:
+        caps = self.request_capabilities(request)
+        if options.reasoning_summary is not None and caps.reasoning != "unsupported":
+            # Summaries are display information: a model that does not reason gets no request
+            # for them (the API would refuse the whole request).
             reasoning["summary"] = options.reasoning_summary
         if reasoning:
             args["reasoning"] = reasoning
-        caps = self.request_capabilities(request)
         if options.include_encrypted_reasoning and not options.store and caps.reasoning == "supported":
             args["include"] = ["reasoning.encrypted_content"]
         if options.service_tier is not None:
