@@ -183,6 +183,16 @@ def _function(body: str, imports: str) -> str:
         ("", '"".__class__.__mro__[1].__subclasses__()'),
         ("", '__import__("os").getcwd()'),
         ("", 'getattr(str, "mro")'),
+        # Strings evaluated as code by forward-reference resolution (typing, pydantic):
+        ("import dataclasses", "str(dataclasses.annotationlib)"),
+        ("import typing", "str(typing._lazy_annotationlib)"),
+        ("import typing", 'str(typing.ForwardRef("1")._evaluate({}, {}, recursive_guard=frozenset()))'),
+        ("from typing import ForwardRef", 'str(ForwardRef("1"))'),
+        ("import typing", "str(typing.get_type_hints(f))"),
+        ("import typing", 'str(typing.evaluate_forward_ref("1"))'),
+        ("import pydantic", """str(pydantic.TypeAdapter("open('/etc/hostname').read()"))"""),
+        ("import pydantic", 'str(pydantic.create_model("M", x=("open(1)", ...)))'),
+        ("import typing", 'str(typing.Optional["json.codecs"])'),
     ],
 )
 def test_static_check_rejects_indirect_module_access(imports: str, body: str) -> None:
@@ -235,6 +245,20 @@ def test_every_module_reachable_from_allowed_imports_is_reviewed() -> None:
     for name in sorted(ALLOWED_IMPORTS - {"__future__"}):
         walk(importlib.import_module(name), name, 0)
     assert unreviewed == {}
+
+
+@pytest.mark.parametrize(
+    "text", ['"open"', '"type"', '"Total: 3.5 (approx.)"', '"e.g. foo(bar)"', '"3.14"', '"sum(values)"']
+)
+def test_static_check_accepts_ordinary_strings(text: str) -> None:
+    assert check_tool_source(_function(text, "import json"), "f").ok
+
+
+def test_static_check_accepts_literal_annotations() -> None:
+    code = _function('"low"', "from typing import Literal").replace(
+        "-> str:", '-> Literal["low", "high level", "open"]:'
+    )
+    assert check_tool_source(code, "f").ok
 
 
 def test_static_check_still_accepts_ordinary_code() -> None:

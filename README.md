@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/peterkarlhuber/orkexa/actions/workflows/ci.yml"><img src="https://github.com/peterkarlhuber/orkexa/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
-  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-16243B" alt="Python 3.11 | 3.12 | 3.13">
+  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-16243B" alt="Python 3.11 | 3.12 | 3.13 | 3.14">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0079FE" alt="MIT License"></a>
 </p>
 

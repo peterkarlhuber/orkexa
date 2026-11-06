@@ -95,8 +95,12 @@ Keep stores in a directory with suitable ACLs.
   Use it only for code you trust or have reviewed, e.g. on a development machine.
 * The static check rejects imports outside an allow list, dunder access,
   `eval`/`exec`, file and network access patterns and access to modules through the
-  attributes of allowed modules (`calendar.sys`, `json.codecs`, `enum.bltns` ...). A
-  test walks every module reachable from the allow list, so a new Python or dependency
+  attributes of allowed modules (`calendar.sys`, `json.codecs`, `enum.bltns` ...,
+  and `annotationlib` on Python 3.14). Forward-reference evaluation, which runs a
+  string as code (`ForwardRef`, `get_type_hints`, `evaluate`), is rejected, and string
+  constants that are expressions with a call or an attribute (as typing and pydantic
+  would evaluate them) are checked like code. A string built at run time cannot be
+  checked this way. A test walks every module reachable from the allow list, so a new Python or dependency
   version that exposes another module fails CI until it is reviewed. **It is a filter,
   not a sandbox**: it reduces what reaches the sandbox, it does not replace it.
 * `AutoApprover` is an **unsafe opt-in**: it emits `UnsafeOptInWarning` unless created
@@ -336,7 +340,8 @@ yours. See [Data flows and retention](../compliance/data-flows.md) and
 ## Remaining risks
 
 * The static check is a deny list on top of an import allow list; it is not a proof
-  that code cannot escape. Only the sandbox is the boundary.
+  that code cannot escape (for example, it cannot see strings built at run time that a
+  library evaluates). Only the sandbox is the boundary.
 * Unmapped exceptions (programming errors, `KeyboardInterrupt`) and every exception of
   `ClaudeAgent` are raised as they are; an SDK exception there can still print request
   details in a traceback. Do not log tracebacks of `ClaudeAgent` errors verbatim where

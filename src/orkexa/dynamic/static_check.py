@@ -85,6 +85,13 @@ FORBIDDEN_NAMES = frozenset(
         "ImportString",
         "attrgetter",
         "methodcaller",
+        # Evaluate a string as code (typing and annotationlib forward references):
+        "ForwardRef",
+        "evaluate_forward_ref",
+        "call_annotate_function",
+        "call_evaluate_function",
+        "get_annotations",
+        "get_type_hints",
     }
 )
 
@@ -103,6 +110,11 @@ FORBIDDEN_ATTRIBUTES = FORBIDDEN_NAMES | {
     "mro",
     "tb_frame",
     "tb_next",
+    # Forward reference evaluation (eval of a string): typing's private helpers and
+    # annotationlib's ForwardRef.evaluate (Python 3.14).
+    "_eval_type",
+    "_evaluate",
+    "evaluate",
 }
 
 #: Modules that allowed modules re-export as attributes (``calendar.sys``,
@@ -118,6 +130,10 @@ FORBIDDEN_MODULE_ATTRIBUTES = frozenset(
         "_sys",
         "_thread",
         "_types",
+        # Python 3.14: typing and dataclasses expose annotationlib, which evaluates
+        # strings as code (ForwardRef.evaluate) and itself exposes builtins and sys.
+        "_lazy_annotationlib",
+        "annotationlib",
         "asyncio",
         "bltns",
         "builtins",
@@ -176,6 +192,8 @@ FORBIDDEN_MODULE_ATTRIBUTES = frozenset(
 )
 
 _DUNDER_IN_STRING = re.compile(r"__\w+__")
+#: Nodes that make a string constant worth checking as code (see _Checker.visit_Constant).
+_CODE_LIKE = (ast.Call, ast.Lambda, ast.Attribute)
 
 MAX_SOURCE_CHARS = 20_000
 
@@ -200,6 +218,7 @@ class _Checker(ast.NodeVisitor):
         self.label = label
         self.allowed = ALLOWED_IMPORTS | extra_imports
         self.errors: list[str] = []
+        self._checked_strings: set[str] = set()
 
     def error(self, node: ast.AST, message: str) -> None:
         line = getattr(node, "lineno", "?")
@@ -243,11 +262,27 @@ class _Checker(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:
-        if isinstance(node.value, str) and _DUNDER_IN_STRING.search(node.value):
+        if not isinstance(node.value, str):
+            return
+        if _DUNDER_IN_STRING.search(node.value):
             self.error(node, "strings containing dunder names are not allowed")
+            return
+        # A string can become code: typing and pydantic evaluate strings as forward
+        # references (``list["..."]``, ``TypeAdapter("...")``, ``create_model(x=("...", ...))``).
+        # A string that is an expression with a call or an attribute is checked like code.
+        if ("(" in node.value or "." in node.value) and node.value not in self._checked_strings:
+            try:
+                parsed = ast.parse(node.value.strip(), mode="eval")
+            except (SyntaxError, ValueError):
+                return
+            if any(isinstance(child, _CODE_LIKE) for child in ast.walk(parsed)):
+                self._checked_strings.add(node.value)
+                ast.increment_lineno(parsed, getattr(node, "lineno", 1) - 1)
+                self.visit(parsed)
 
     def _check_string_annotation(self, annotation: ast.expr | None) -> None:
         # String annotations are evaluated by typing.get_type_hints(); check them as code.
+        # (Strings nested in an annotation, ``list["..."]``, are checked by visit_Constant.)
         if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
             try:
                 parsed = ast.parse(annotation.value, mode="eval")
