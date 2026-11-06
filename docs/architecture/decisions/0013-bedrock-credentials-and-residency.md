@@ -23,8 +23,9 @@ key-based providers of [ADR 0007](0007-credentials-and-endpoints.md):
 Center, named profile, the `AWS_*` variables, a Bedrock API key in
 `AWS_BEARER_TOKEN_BEDROCK`), a `boto3.Session` or a ready `bedrock-runtime` client the
 caller passes. `api_key=` is rejected, and no other provider's key is ever read. Hosts
-that serve several tenants pass a session per call (Nodestro enforces this with its
-`require_session` guard; a library-level fail-closed flag is ORK-005).
+that serve several tenants pass a session per call; `BedrockOptions(require_session=True)`
+makes that fail closed: no session is ever built from the host's credential chain
+(Nodestro also enforces this in its own `require_session` guard).
 
 **Endpoints.** `AWS_ENDPOINT_URL*` from the environment and the config file are ignored,
 so signed requests go to the regional AWS endpoint. An explicit `base_url` must be

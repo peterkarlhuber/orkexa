@@ -492,6 +492,12 @@ class BedrockProvider(Provider):
     def _session(self, options: BedrockOptions) -> Any:
         if options.session is not None:
             return options.session
+        if options.require_session:
+            raise ConfigurationError(
+                "BedrockOptions(require_session=True) needs session=boto3.Session(...) "
+                "(or an injected client=, and control_client= for residency checks); "
+                "the host's default AWS credential chain is not used"
+            )
         boto3 = require_module("boto3", "bedrock")
         return boto3.Session(profile_name=options.profile_name, region_name=options.region_name)
 

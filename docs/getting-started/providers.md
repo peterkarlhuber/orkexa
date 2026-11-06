@@ -178,6 +178,10 @@ agent = Agent(
   the `AWS_*` key variables, or a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK`. You
   can also pass `BedrockOptions(session=boto3.Session(...))` or a `bedrock-runtime`
   client as `client=`. See [Installation](installation.md#aws-credentials-for-amazon-bedrock).
+* On a host that serves several tenants, set `BedrockOptions(require_session=True)`: the
+  provider then never builds a session from the host's credential chain and fails with
+  `ConfigurationError` unless you pass `session=` (or a `client=` plus a
+  `control_client=` for residency checks).
 * `api_key=` is rejected with `ConfigurationError`, and the provider never reads
   `ANTHROPIC_API_KEY` or another provider's key.
 * The region is `BedrockOptions(region_name=...)`, else the session's region
