@@ -45,7 +45,14 @@ jobs:
       - name: System
         run: python -c "import platform, sys; print(sys.platform, platform.machine(), platform.platform())"
       - run: pytest -v -s tests/test_sandbox_lifecycle.py
-      - run: pytest -q
+      - run: pytest -q -rs --junitxml=junit-offline.xml
+      # MUP-ONA A0: the skipped tests of this platform must match its expectation file.
+      - run: python scripts/check_skips.py junit-offline.xml "tests/ci/skipped-offline-${{ matrix.os }}.txt"
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-offline-${{ matrix.os }}
+          path: junit-offline.xml
 
   docker:
     # ORK-006/019/020/021: DockerSandbox against real daemons. Each job builds docker/sandbox.Dockerfile, runs the

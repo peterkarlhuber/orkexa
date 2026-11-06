@@ -1,0 +1,60 @@
+{
+  "fixture": "FX-SQ-0",
+  "plan": "MUP-ONA 5.2 (package MP-A0)",
+  "orkexa_commit": "80b95e53bbcc45edba7a9fcaddf01a23fc54c3eb",
+  "orkexa_version": "0.1.0",
+  "python": "3.13.18",
+  "sqlite": "3.53.1",
+  "sqlite_vec": "0.1.9",
+  "checksums": {
+    "index_fts.db": "00a795ba433746186dee42769dd828430a16e532166cbb9cd737897d8f66a3d6",
+    "index_vec.db": "6d9988f7a58609e82e3a5b9114a5b79e3998e824245ceda747c03debcc1cd3eb",
+    "files.db": "1e8cd9b6ea7d5d0216d870d99585d48de38e49f3ff4e64efca80465b92ff7cdd",
+    "memory.db": "66f543ec21b1047fc8b96883dc9b7e90bd71020084d32e4837ffef0ac428d8f9"
+  },
+  "contents": {
+    "index_fts.db": {
+      "handbook": [
+        "privacy.md",
+        "shipping.md",
+        "warranty.md"
+      ],
+      "tickets": [
+        "ticket-1001",
+        "ticket-1002"
+      ]
+    },
+    "index_vec.db": {
+      "spaces": [
+        "alpha.txt",
+        "beta.txt",
+        "gamma.txt",
+        "zero.txt"
+      ],
+      "legacy": [
+        "legacy-a.txt",
+        "legacy-b.txt"
+      ],
+      "embedding_model": "fx-sq-0-synthetic",
+      "dimensions": 4
+    },
+    "files.db": {
+      "alpha": [
+        "d04350a4472e38ce",
+        "ce3be742efa675e7"
+      ],
+      "beta": [
+        "1f7b9ed3a74bacfc"
+      ]
+    },
+    "memory.db": {
+      "alpha": [
+        "/memories/profile.md",
+        "/memories/projects/alpha/status.md"
+      ],
+      "beta": [
+        "/memories/profile.md"
+      ]
+    }
+  }
+}

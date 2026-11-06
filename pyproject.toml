@@ -107,7 +107,8 @@ replacement = '](https://github.com/peterkarlhuber/orkexa/blob/master/\1)'
 packages = ["src/orkexa"]
 
 [tool.hatch.build.targets.sdist]
-exclude = [".github/", "assets/", "docs/assets/"]
+# The legacy SQLite fixtures (tests/fixtures/legacy) are binary test data for the repository's tests only.
+exclude = [".github/", "assets/", "docs/assets/", "tests/fixtures/legacy/**/*.db"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
