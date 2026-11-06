@@ -511,8 +511,11 @@ def test_compatible_reasoning_deltas_tool_call_and_text_interleave(field: str) -
         ("status", "finished", "thinking", False),
         ("text", "Five."),
     ]
-    # Reasoning is never sent back to the server.
-    assert all("reasoning" not in message for message in seen[1]["messages"])
+    # Ollama gets its reasoning back in the field it reads (``reasoning``, its message's thinking),
+    # whatever field it was streamed in; nothing else is added.
+    assistant = [message for message in seen[1]["messages"] if message["role"] == "assistant"]
+    assert [message.get("reasoning") for message in assistant] == ["Need a sum."]
+    assert all("reasoning_content" not in message and "thinking" not in message for message in assistant)
 
 
 def test_compatible_model_without_reasoning_streams_text_only() -> None:

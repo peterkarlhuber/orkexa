@@ -7,7 +7,7 @@ derive from the closest builtin exception (``TypeError``, ``ValueError``,
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from .evaluation import Evaluation
@@ -22,6 +22,7 @@ __all__ = [
     "HistoryConversionError",
     "IncompleteResponseError",
     "InvalidRequestError",
+    "InvalidRequestReason",
     "MaxToolCallsError",
     "MaxToolRoundsError",
     "MemoryToolError",
@@ -321,8 +322,43 @@ class RateLimitError(ProviderError):
     """The provider rate-limited the request (HTTP 429)."""
 
 
+InvalidRequestReason = Literal["messages", "context_length", "model_not_found", "parameter"]
+"""What a provider rejected in a request, as far as its answer tells (see :class:`InvalidRequestError`)."""
+
+
 class InvalidRequestError(ProviderError):
-    """The provider rejected the request as invalid (HTTP 400/404/409/413/422)."""
+    """The provider rejected the request as invalid (HTTP 400/404/409/413/422).
+
+    Retrying the same request cannot succeed (``retryable`` is ``False``).
+
+    Attributes:
+        reason: What was rejected, read from the status and the provider's answer:
+            ``messages`` (the conversation: a message's content, role or tool call/result
+            pairing), ``context_length`` (the request is larger than the model's context
+            window), ``model_not_found`` (the endpoint does not know the model),
+            ``parameter`` (another request field or option); ``None`` when the answer does
+            not say.
+        outline: The conversation of the rejected request without its content, one entry
+            per message with its role and part kinds (``#3 assistant[reasoning]``), for
+            ``reason="messages"``; ``None`` otherwise.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str,
+        status_code: int | None = None,
+        request_id: str | None = None,
+        retryable: bool = False,
+        reason: InvalidRequestReason | None = None,
+        outline: str | None = None,
+    ) -> None:
+        super().__init__(
+            message, provider=provider, status_code=status_code, request_id=request_id, retryable=retryable
+        )
+        self.reason = reason
+        self.outline = outline
 
 
 class ProviderConnectionError(ProviderError):

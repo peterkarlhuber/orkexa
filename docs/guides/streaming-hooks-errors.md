@@ -173,7 +173,11 @@ requests (`Evaluator.evaluate_many(batch=True)`) cannot be suspended: there,
 | no API key found (every agent and provider) | `MissingCredentialsError` (an `AuthenticationError`) |
 
 `ProviderError` has `provider`, `status_code`, `request_id` and `retryable`; its message
-is redacted (API keys never appear) and names the SDK exception type. The SDK exception
+is redacted (API keys never appear) and names the SDK exception type. `InvalidRequestError` also has `reason` (`messages`, `context_length`, `model_not_found`,
+`parameter` or `None`, read from the status and the provider's answer, see
+`Provider.invalid_request_reason()`) and, for `messages`, `outline`: the refused conversation as
+roles and part kinds (`#3 assistant[reasoning]`), never its content; the message ends with it.
+An invalid request is never retryable. The SDK exception
 itself is not attached: `__cause__` and `__context__` are `None`, so a traceback or
 `logging.exception()` cannot print the request or its headers.
 `ClaudeAgent` raises the Anthropic SDK exceptions unchanged. The

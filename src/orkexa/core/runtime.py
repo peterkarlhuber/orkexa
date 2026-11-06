@@ -38,6 +38,7 @@ from ..errors import (
     ConcurrentTurnError,
     ConfigurationError,
     IncompleteResponseError,
+    InvalidRequestError,
     MaxToolCallsError,
     MaxToolRoundsError,
     MemoryToolError,
@@ -64,6 +65,7 @@ from .checkpoint import CHECKPOINT_FORMAT, CHECKPOINT_VERSION, TurnCheckpoint, W
 from .conversion import (
     HistoryPolicy,
     dump_history,
+    message_outline,
     parse_history,
     prepare_history,
     result_content,
@@ -309,6 +311,8 @@ class AgentCore(Generic[OutputT]):
         pricing_basis(pricing)  # validate the type early
         self.pricing = pricing
         self._request_basis: PricingBasis | None = None
+        #: The request being sent (its conversation outline goes into a refused request's error).
+        self._sending: ModelRequest | None = None
         self.system_prompt = system_prompt
         self._init_messages(messages)
         self.output_format = output_format
@@ -846,6 +850,7 @@ class AgentCore(Generic[OutputT]):
                 raise TurnSuspended(self._request_checkpoint(history, round_number, exc)) from exc
             try:
                 self._request_basis = basis
+                self._sending = request
                 response: ModelResponse = yield CallModel(request)
                 record = self._record(response)
             finally:
@@ -1170,6 +1175,12 @@ class AgentCore(Generic[OutputT]):
         if isinstance(failure, ProviderError):
             # Adapters build some errors from native response text themselves.
             failure.args = tuple(self.adapter.redact(a) if isinstance(a, str) else a for a in failure.args)
+        sending = self._sending
+        if isinstance(failure, InvalidRequestError) and failure.reason == "messages" and sending is not None:
+            # Which message the provider may have refused, without any of its content.
+            failure.outline = message_outline(sending.messages)
+            if failure.args and isinstance(failure.args[0], str):
+                failure.args = (f"{failure.args[0]} [request messages: {failure.outline}]", *failure.args[1:])
         return failure
 
     @staticmethod

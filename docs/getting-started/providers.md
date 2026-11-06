@@ -74,6 +74,22 @@ reserves before each request uses the same `max_tokens` (`orkexa.core.cost_bound
 Ollama's context window (`num_ctx`) is a server setting (`OLLAMA_CONTEXT_LENGTH`); its
 OpenAI-compatible API takes no per-request context size.
 
+## Chat Completions messages
+
+Every Chat Completions request (`compatible`, `ollama`, `vllm` with `api="chat_completions"`) is
+checked against the protocol's message rules before it is sent; a violation is a local
+`HistoryConversionError` naming the message by position and role. `content` is `null` only in an
+assistant message with tool calls; an assistant turn without text and without tool calls (a
+reasoning model that only thought, or an empty answer) is sent as `""`. Ollama answers a `null`
+content elsewhere with HTTP 400 `invalid message content type: <nil>`.
+
+Reasoning is sent back only where the endpoint declares a field for it
+(`ChatCompletionsProvider.message_rules`, a `ChatMessageRules`): the `ollama` preset sends an
+assistant turn's reasoning as `reasoning`, which Ollama passes to the chat template as that turn's
+thinking (thinking models such as Qwen 3.x continue a tool loop with their own reasoning).
+`compatible` and `vllm` send none. Reasoning of another model or provider is never sent
+(`prepare_history`).
+
 ## What each adapter does
 
 **Anthropic** supports prompt caching, thinking modes, betas through
