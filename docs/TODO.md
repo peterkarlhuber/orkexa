@@ -13,7 +13,7 @@
 | P1 High | 0 |
 | P2 Medium | 2 |
 | P3 Low | 16 |
-| P4 Optional | 12 |
+| P4 Optional | 14 |
 
 **Release blockers:** None. Orkexa 0.1.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
@@ -207,6 +207,18 @@ None known.
 - **Next step:** Add the base URL (without credentials) and a start hint to connection errors, catch `OrkexaError` in
   the CLI (`error (<code>): <message>`, exit 1), name the next step in those messages and in `status`, add `help=` to
   every option, and refuse an empty model after a provider prefix with an example.
+
+### ORK-039 · Output maxima of OpenAI, Gemini and Bedrock models are not declared
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** settings/providers round 2026-11-06 (params stream)
+- **What:** `ModelLimits` knows the documented `max_output_tokens` for Anthropic and the local catalog only. For OpenAI, Gemini and Bedrock models the limit is `unknown`, so Nodestro cannot cap or hint and the provider rejects too-large values itself.
+- **Next step:** Add the documented maxima with their source per model; keep `unknown` where no source exists (no guessed limits).
+
+### ORK-040 · Bedrock prompt caching (`cachePoint`) is not mapped
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** settings/providers round 2026-11-06 (params stream)
+- **What:** The caching option is shown as `not_mapped` for Bedrock models.
+- **Next step:** Map `cachePoint` behind an explicit option, priced, with tests against the Converse request shape.
 
 ## Tests and quality assurance
 
