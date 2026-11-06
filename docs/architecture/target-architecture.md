@@ -23,7 +23,8 @@ Provider protocol (orkexa.providers.base) + capabilities (orkexa.core.capabiliti
     +-- AnthropicProvider     -> Anthropic Messages API        (anthropic SDK)
     +-- OpenAIProvider        -> OpenAI Responses API          (openai SDK)
     +-- GeminiProvider        -> Gemini generate_content       (google-genai SDK)
-    +-- ChatCompletionsProvider / CompatibleProvider
+    +-- BedrockProvider       -> Amazon Bedrock Converse        (boto3)
+    +-- ChatCompletionsProvider / CompatibleProvider (+ Ollama, vLLM presets)
     |                         -> Chat Completions or Responses on any base_url
     +-- FakeProvider          -> scripted, no SDK (tests)
 ```
@@ -76,6 +77,7 @@ A provider implements (see `orkexa.providers.base.Provider`):
 | `map_error(exc)` | SDK exception → normalized `ProviderError` (secrets redacted) |
 | `parse_block(dict)` | provider-specific input block parsing (Anthropic keeps extras) |
 | optional `run_batch(...)` | native batch processing (Anthropic Message Batches) |
+| `limits(model)` | documented token limits and reasoning settings (`ModelLimits`; unknown is `None`) |
 
 No adapter contains a tool loop. Automatic SDK tool execution is never used
 (Gemini: `automatic_function_calling.disable=True`; no Python callables are passed to
@@ -166,6 +168,7 @@ a non-streamed call returns, so history and results are identical. Hooks:
 | Anthropic | as reported | as reported | as reported | as reported (includes thinking) | `output_tokens_details.thinking_tokens` |
 | OpenAI Responses / Chat | input − cached − cache-write | `cached_tokens` | `cache_write_tokens` | as reported (includes reasoning) | `reasoning_tokens` |
 | Gemini | prompt − cached + tool-use prompt | `cached_content_token_count` | 0 | candidates + thoughts | `thoughts_token_count` |
+| Bedrock | input (excludes cache reads and writes) | `cacheReadInputTokens` | `cacheWriteInputTokens` (split by 5 min / 1 h lifetime) | as reported | — |
 
 Costs come from the pricing engine (`orkexa.pricing`, ADR 0008): immutable,
 versioned `PriceSnapshot`s of `ModelPrice`s, isolated `PriceResolver`s and one pinned
@@ -174,7 +177,7 @@ versioned `PriceSnapshot`s of `ModelPrice`s, isolated `PriceResolver`s and one p
 `known_cost_usd` and the price basis (`pricing_version`, `pricing_quality`,
 `pricing_conditions`, itemized `cost`). Only Anthropic prices ship (sourced); other
 providers are priced through `pricing=`, a tracker's `price_resolver` or
-`register_pricing()`. `BudgetTracker` checks before every request and after every
+`register_pricing()`; no Bedrock prices ship (they differ by region, profile and tier). `BudgetTracker` checks before every request and after every
 recorded response; unpriced requests follow `on_unpriced="ignore" | "warn" | "reject"`,
 price-policy violations `on_price_issue`.
 
@@ -187,7 +190,10 @@ API keys are kept in `ProviderConfig` (`SecretStr`, hidden in `repr`), never
 serialized, never passed to sandboxes, and never shared between providers.
 `CompatibleProvider` never reads `OPENAI_API_KEY`; the OpenAI/Anthropic providers
 refuse a non-default `base_url` without an explicit `api_key` (no implicit
-environment key to third-party hosts). See [ADR 0007](decisions/0007-credentials-and-endpoints.md).
+environment key to third-party hosts). OpenAI-compatible endpoints never follow a
+redirect. See [ADR 0007](decisions/0007-credentials-and-endpoints.md). Bedrock uses only
+AWS credentials, ignores endpoint URLs from the environment and verifies data residency
+before the first paid request ([ADR 0013](decisions/0013-bedrock-credentials-and-residency.md)).
 
 ### Concurrency and cancellation
 
@@ -213,6 +219,24 @@ what runs next in a workflow and drivers execute it
 ([ADR 0009](decisions/0009-flow-kernel.md)). It depends only on the data model and
 Pydantic, never on an agent or provider.
 
+`orkexa.orchestration` defines how a model chooses which member of a fixed pool works
+next (`Delegate`, `Parallel`, `Staff`, `Finish`), validates every decision against the
+pool and its limits, records it as plain JSON and replays it
+([ADR 0010](decisions/0010-orchestration-protocol.md),
+[ADR 0011](decisions/0011-dynamic-teams-and-paused-delegations.md)). Its reference driver
+never runs a member itself: the caller's `delegate` does, with its own permissions.
+
+Retrieval ranks by full text (`fts`, BM25), by vectors (`vector`) or both (`hybrid`);
+a mode the index cannot serve raises instead of falling back to another. Vectors come
+from an `EmbeddingModel` (`orkexa.embeddings`: `OllamaEmbeddings`, `CallableEmbeddings`)
+whose identity is stored with the index, so vectors of two models are never mixed.
+
+`orkexa.local` manages local models with Ollama: the management API (`OllamaClient`,
+loopback only unless allowed), a pinned runtime installed from a verified archive
+(`install_runtime`), a managed server on a free loopback port (`ManagedOllama`), offline
+model packages and pinned model recipes (`build_model`). Nothing there runs on import;
+`orkexa-local` is its command line.
+
 ## Package layout
 
 ```text
@@ -225,13 +249,21 @@ src/orkexa/
   core/conversion.py     prompt parsing, cross-provider history, history files
   core/runtime.py        AgentCore (turn state machine)
   core/schema.py         provider schema conversion/validation
-  providers/base.py      Provider, ProviderConfig, ProviderOptions
+  core/checkpoint.py     signed turn checkpoints (pausing at a tool call or request)
+  providers/base.py      Provider, ProviderConfig
+  providers/options.py   typed per-provider options (AnthropicOptions, BedrockOptions, ...)
   providers/registry.py  registry and model resolution
-  providers/anthropic.py, openai.py, gemini.py, chat_completions.py, compatible.py, fake.py
-  tools.py, content.py, errors.py, usage.py, pricing.py
-  memory.py, files.py, retrieval.py, evaluation.py
-  dynamic/               dynamic tools and agents
+  providers/anthropic.py, anthropic_codec.py, openai.py, gemini.py, chat_completions.py,
+    compatible.py, fake.py
+  providers/bedrock.py, bedrock_residency.py   Converse adapter, region checks
+  pricing/               price model, snapshots, resolver, cost, built-in Anthropic prices
+  tools.py, content.py, errors.py, usage.py
+  memory.py, files.py, retrieval.py, embeddings.py, evaluation.py
+  dynamic/               dynamic tools and agents, sandboxes, registries
+  dynamic/docker/        Docker host checks, container shape, self-test
   flow/                  flow kernel, reference driver, conformance cases
+  orchestration/         orchestration protocol and reference driver
+  local/                 Ollama client, runtime install, managed server, packages, CLI
 ```
 
 ## Decisions
@@ -244,6 +276,13 @@ src/orkexa/
 * [ADR 0007 – credentials and endpoints](decisions/0007-credentials-and-endpoints.md)
 * [ADR 0008 – pricing engine](decisions/0008-pricing-engine.md)
 * [ADR 0009 – flow kernel](decisions/0009-flow-kernel.md)
+* [ADR 0010 – orchestration protocol](decisions/0010-orchestration-protocol.md)
+* [ADR 0011 – dynamic teams, parallel delegation and paused delegations](decisions/0011-dynamic-teams-and-paused-delegations.md)
+* [ADR 0012 – MacOSSandbox removed (Docker-first)](decisions/0012-macos-sandbox-removed.md)
+* [ADR 0013 – Amazon Bedrock: credentials, endpoints and data residency](decisions/0013-bedrock-credentials-and-residency.md)
+
+ADR 0004 (a separate distribution for legacy imports) was withdrawn on 2026-10-31,
+when that compatibility layer was removed; its number is not reused.
 
 ## Design risks
 

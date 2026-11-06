@@ -1,5 +1,5 @@
 site_name: Orkexa
-site_description: One agent runtime for Anthropic Claude, OpenAI, Google Gemini and OpenAI-compatible endpoints.
+site_description: One agent runtime for Anthropic Claude, OpenAI, Google Gemini, Amazon Bedrock and OpenAI-compatible endpoints (Ollama, vLLM).
 repo_url: https://github.com/peterkarlhuber/orkexa
 repo_name: peterkarlhuber/orkexa
 copyright: Copyright &copy; 2026 Peter Karlhuber – MIT License
@@ -119,6 +119,7 @@ nav:
       - ADR 0010 orchestration protocol: architecture/decisions/0010-orchestration-protocol.md
       - ADR 0011 dynamic teams and paused delegations: architecture/decisions/0011-dynamic-teams-and-paused-delegations.md
       - ADR 0012 MacOSSandbox removed (Docker-first): architecture/decisions/0012-macos-sandbox-removed.md
+      - ADR 0013 Bedrock credentials and residency: architecture/decisions/0013-bedrock-credentials-and-residency.md
   - Development:
       - development/index.md
       - Releasing: development/releasing.md
