@@ -1,0 +1,4 @@
+# MUP-ONA fixtures are compared byte for byte (SHA-256); never convert their line endings.
+tests/fixtures/ranking/FX-RANK-0.json -text
+tests/fixtures/ranking/*.sha256 -text
+tests/fixtures/legacy/FX-SQ-0/* -text
