@@ -15,6 +15,22 @@ First release of Orkexa.
   `tests/test_sandbox_lifecycle.py` uses a temporary directory of its own (another test run on the machine made it
   fail).
 
+### Added: PDF budgets and isolated PDF extraction (MUP-ONA A1, 2026-11-06)
+
+* Added: `orkexa.retrieval.pdf_pages(data, *, max_pages=2000, max_chars=5_000_000)` stops between pages and raises
+  `RetrievalError("document.too_complex")` with `reason` `pages`, `chars` or `limit` (a pypdf limit);
+  `Index.add_file` uses it for every backend.
+* Added: `pdf_pages_isolated(data, *, timeout=30.0, max_memory_mb=512, max_pages, max_chars)` extracts in a
+  separate interpreter (`python -I -m orkexa._pdf_worker`, started with `subprocess.Popen`, not `fork` or
+  `multiprocessing`) with an allowlisted environment, no inherited descriptors, an empty private working directory
+  and resource limits (Linux: memory, CPU, open files, file size); at the timeout the process group gets `SIGTERM`,
+  then `SIGKILL`. Reasons: `timeout`, `memory`, `pages`, `chars`, `limit`, `crash`. `PdfLimits` holds the defaults.
+* Changed: very large PDFs are refused (more than 2000 pages or 5,000,000 characters of text); the text of other
+  PDFs is unchanged. `RetrievalError` has a `reason` attribute (`None` except for `document.too_complex`).
+* Changed: the `pdf` extra needs `pypdf>=6.21.4`, the first release without a known advisory (OSV, 2026-11-06).
+* Deprecation notice: `orkexa.retrieval._pdf_pages` stays as an alias of `pdf_pages` (no warning yet); it is
+  removed no earlier than in the next-but-one minor version.
+
 ### Fixed: concurrent SQLite deletes; Added: query limits and storage error codes (MUP-ONA A10, 2026-11-06)
 
 * Fixed (PS-8): two `SQLiteIndex` instances or processes deleting the same source no longer fail with

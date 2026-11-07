@@ -10,7 +10,7 @@
 | Priority | Count |
 |---|---|
 | P0 Critical | 0 |
-| P1 High | 1 |
+| P1 High | 0 |
 | P2 Medium | 5 |
 | P3 Low | 11 |
 | P4 Optional | 7 |
@@ -270,16 +270,8 @@ None known.
 ## MUP-ONA
 
 Packages of the MUP-ONA plan (security and database backends for Orkexa, Nodestro and Axentra; [plan](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md))
-that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0 and FX-RANK-0, skip expectations) and MP-A10 (SQLite
-robustness) are in place; each entry is removed in the change that completes its package.
-
-### ORK-MUP-A1 · PDF extraction with budgets and process isolation
-
-- **Priority:** P1 High · **Status:** Open · **Refs:** [MUP-ONA MP-A1](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md), PS-1
-- **What:** `Index.add_file` extracts PDF text without a page, character, time or memory limit; a thread timeout
-  cannot stop `pypdf`.
-- **Next step:** `pdf_pages` with budgets and `pdf_pages_isolated` in a separate interpreter (T-PDF-1..7, 11..14);
-  raise the `pdf` extra's lower bound to a `pypdf` without known DoS advisories.
+that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0 and FX-RANK-0, skip expectations) MP-A10 (SQLite
+robustness) and the Orkexa part of MP-A1 (PDF budgets and isolation) are in place; each entry is removed in the change that completes its package.
 
 ### ORK-MUP-B0 · Versioning, public API snapshot and release rules
 

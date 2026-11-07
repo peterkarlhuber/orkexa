@@ -24,6 +24,12 @@
 
 ::: orkexa.retrieval.MAX_QUERY_WORDS
 
+::: orkexa.retrieval.PdfLimits
+
+::: orkexa.retrieval.pdf_pages
+
+::: orkexa.retrieval.pdf_pages_isolated
+
 ::: orkexa.citations
 
 ::: orkexa.retrieval_sources

@@ -27,6 +27,39 @@ URL/file annotations).
 (`embeddings=`, `orkexa[vector]`; see [Local models, embeddings and retrieval modes](local-models.md))
 and PDF extraction (`orkexa[pdf]`). The older `embedder=` callables keep working.
 
+## PDF limits
+
+`Index.add_file()` extracts PDF text with `orkexa.retrieval.pdf_pages()` (needs `orkexa[pdf]`, pypdf 6.21.4 or
+later), which stops between pages at a page and a character budget. For PDFs from untrusted sources, extract the
+text with `pdf_pages_isolated()` and index it yourself: it runs pypdf in a separate interpreter that is stopped at
+the time budget, whatever pypdf does.
+
+```python
+from orkexa.retrieval import RetrievalError, pdf_pages_isolated
+
+try:
+    pages = pdf_pages_isolated(data, timeout=30, max_memory_mb=512, max_pages=2000, max_chars=5_000_000)
+except RetrievalError as exc:  # exc.code == "document.too_complex"
+    print(exc.reason)  # "timeout", "memory", "pages", "chars", "limit" (pypdf's own limit) or "crash"
+for number, text in enumerate(pages, start=1):
+    index.add(text, source="report.pdf", title=f"Report, p. {number}", metadata={"page": str(number)})
+```
+
+| Budget (`PdfLimits`) | Default | `pdf_pages` | `pdf_pages_isolated` |
+| --- | --- | --- | --- |
+| `max_pages` | 2000 | yes (checked before the page tree is read, and while reading it) | yes |
+| `max_chars` | 5,000,000 | yes, between pages | yes, between pages; the parent also reads at most `max_chars * 4 + 64 KiB` bytes |
+| `timeout` (seconds, wall clock) | 30 | no | yes: `SIGTERM` to the worker's process group, `SIGKILL` 2 seconds later (Windows: terminate, then kill) |
+| `max_memory_mb` | 512 | no | Linux only (`RLIMIT_AS`) |
+
+The worker (`python -I -m orkexa._pdf_worker`) gets a minimal environment (`LC_ALL`, `PYTHONIOENCODING`,
+`PYTHONHASHSEED`; on Windows `SYSTEMROOT` instead of `LC_ALL`), so no keys, database URLs, credentials or proxy
+settings reach it; it inherits no file descriptors, runs in an empty private directory that is deleted afterwards,
+and lowers its own limits before it imports pypdf (Linux: memory, CPU time, 16 open files, no file writes; macOS:
+the same without the memory limit; Windows: none). It is not a sandbox: it runs as the same operating-system user
+without namespaces, seccomp or network isolation, so a code-execution flaw in pypdf could reach that user's files
+and the network. Starting the interpreter costs about 0.1 to 0.3 seconds per document.
+
 ## SQLite limits and error codes
 
 `SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` can share one database file between threads, instances and
@@ -52,6 +85,7 @@ other searches or writes. The search tool reports the error to the model like an
 | `vector.dimension` | `SQLiteIndex.retrieve` (`vector`, `hybrid`) | the query vector's length differs from the stored vectors' |
 | `storage.symlink` | the SQLite classes' constructors | the database path, or its `-wal`, `-shm` or `-journal` file, is a symbolic link; it is refused, not followed |
 | `storage.corrupt` | the SQLite classes | the file is damaged or not a SQLite database; the `sqlite3.DatabaseError` is `__cause__` |
+| `document.too_complex` | `pdf_pages`, `pdf_pages_isolated`, `Index.add_file` | a PDF exceeds a budget; `exc.reason` says which (see [PDF limits](#pdf-limits)) |
 | `mode_unsupported`, `vector_unavailable`, `reindex_required`, `vector_incomplete`, `cancelled` | `SQLiteIndex` vector search and `reindex()` | see [Local models](local-models.md) |
 
 Error messages never contain file paths.
