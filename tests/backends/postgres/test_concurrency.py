@@ -8,11 +8,15 @@
   ranked by the database (pgvector) and in Python; exact counts, no marker leak. Taken over from
   nodestro-runtime ``tests/test_pg_partitions.py`` (76f9cb2) with Orkexa's classes, as are the two reindex
   cases under steady writes.
+* A chunk deleted between a vector store's read of it and the foreign key check (``READ COMMITTED``) fails the
+  store; the reindex stores again without it, in a round and in the switch. T-PART-CC hit this race in about
+  one of four 60-second runs; the case here makes it deterministic.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 import os
 import threading
 import time
@@ -369,3 +373,75 @@ def test_the_switch_embeds_what_the_last_round_left(
     if switch_chunks >= 20:
         final = make(new).vector_status()
         assert final.chunks == 20 + added[0] and final.embedded == final.chunks, final
+
+
+class _Vanished(Exception):
+    """A foreign key violation as psycopg raises it (``psycopg.errors.ForeignKeyViolation``)."""
+
+    sqlstate = "23503"
+
+
+class _VanishingSource:
+    """Wraps a source: the first ``failures`` vector stores in a reindex round (``in_switch=False``) or in the
+    switch (``in_switch=True``, the transaction that locked the spaces ``FOR UPDATE``) fail as if their chunk
+    had been deleted meanwhile."""
+
+    def __init__(self, inner: Any, *, in_switch: bool, failures: int = 1) -> None:
+        self.inner = inner
+        self.lock = inner.lock
+        self.in_switch = in_switch
+        self.failures = failures
+        self.failed = 0
+
+    @contextmanager
+    def transaction(self, mode: Any = "transaction", *, tenant_id: str | None = None) -> Iterator[Any]:
+        with self.inner.transaction(mode, tenant_id=tenant_id) as connection:
+            yield _VanishingConnection(self, connection)
+
+
+class _VanishingConnection:
+    def __init__(self, source: _VanishingSource, connection: Any) -> None:
+        self.source = source
+        self.connection = connection
+        self.locked = False
+
+    def execute(self, query: Any, params: Any = None) -> Any:
+        text = query.as_string(self.connection)
+        self.locked = self.locked or "FOR UPDATE" in text
+        store = "INSERT INTO" in text and "SELECT c.tenant_id" in text
+        if store and self.locked == self.source.in_switch and self.source.failed < self.source.failures:
+            self.source.failed += 1
+            raise _Vanished("insert or update violates foreign key constraint (chunk deleted meanwhile)")
+        return self.connection.execute(query, params)
+
+
+# MUP-ONA T-PART-7
+@pytest.mark.parametrize("where", ["round", "switch"])
+def test_a_chunk_deleted_under_a_vector_store_repeats_the_store(db: support.Database, where: str) -> None:
+    psycopg_errors = pytest.importorskip("psycopg.errors")
+    assert psycopg_errors.ForeignKeyViolation.sqlstate == _Vanished.sqlstate
+    source = _VanishingSource(db.source, in_switch=where == "switch")
+    index = PostgresIndex(source, "vanish", layout=db.layout, namespace="vanish")
+    for number in range(4):
+        index.add(f"Chunk {number} about alpha.", source=f"c{number}.md")
+    plain = PostgresIndex(db.source, "vanish", layout=db.layout, namespace="vanish")
+    late: list[list[int]] = []
+
+    def add_late(_texts: Any) -> None:  # after the round's high-water mark: left for the switch
+        if not late:
+            late.append(plain.add("A late chunk about alpha.", source="late.md"))
+
+    status = index.reindex(KeywordEmbeddings("vanish", on_embed=add_late), batch_size=4)
+    assert source.failed == 1 and late
+    assert (status.chunks, status.embedded, status.building, status.complete) == (5, 5, None, True)
+
+
+# MUP-ONA T-PART-7
+def test_a_store_that_keeps_failing_ends_the_reindex(db: support.Database) -> None:
+    source = _VanishingSource(db.source, in_switch=False, failures=pg_index._STORE_ATTEMPTS)
+    index = PostgresIndex(source, "vanish", layout=db.layout, namespace="vanish")
+    index.add("Chunk about alpha.", source="c.md")
+    with pytest.raises(_Vanished):
+        index.reindex(KeywordEmbeddings("vanish"), batch_size=4)
+    assert source.failed == pg_index._STORE_ATTEMPTS
+    assert index.vector_status().active is None

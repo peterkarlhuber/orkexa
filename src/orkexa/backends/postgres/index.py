@@ -60,6 +60,10 @@ _REINDEX_ROUNDS = 5
 #: namespace wait. The unlocked rounds leave about what writers add during one round; more than this means
 #: writes outpace the model.
 _REINDEX_SWITCH_CHUNKS = 256
+#: Attempts of one store of vectors (a round's batch, or the switch) when a chunk vanished meanwhile.
+_STORE_ATTEMPTS = 5
+#: SQLSTATE foreign_key_violation: a chunk was deleted between a store's read of it and the foreign key check.
+_VANISHED = "23503"
 #: Most sources one search may be limited to (``retrieve(sources=...)``), as in ``orkexa.SQLiteIndex``.
 MAX_SOURCES = 50_000
 
@@ -97,6 +101,13 @@ def _word_queries(query: str) -> dict[str, str]:
 def _tsquery(query: str) -> str:
     """Any query word of ``query`` (:func:`_word_queries`); empty: nothing to search for."""
     return " | ".join(f"({expression})" for expression in _word_queries(query).values())
+
+
+def _vanished(exc: BaseException) -> bool:
+    """Whether ``exc`` is a foreign key violation of a vector store: its chunk was deleted after the store
+    read it and before the vector's foreign key was checked (``READ COMMITTED``). The transaction was rolled
+    back; a new attempt stores nothing for that chunk (``vectors_store`` reads it again)."""
+    return getattr(exc, "sqlstate", None) == _VANISHED
 
 
 class PostgresVectorStatus(VectorStatus):
@@ -369,8 +380,14 @@ class PostgresIndex(Index):
                 if not rows:
                     break
                 vectors = embed_batch(model, identity, rows)
-                with self._sql.transaction():
-                    self._store_batch(space, rows, vectors)
+                for attempt in range(_STORE_ATTEMPTS):
+                    try:
+                        with self._sql.transaction():
+                            self._store_batch(space, rows, vectors)
+                        break
+                    except Exception as exc:
+                        if not _vanished(exc) or attempt == _STORE_ATTEMPTS - 1:
+                            raise
                 if progress is not None:
                     progress(self._count_vectors(space), total)
             if self._count_missing(space) <= batch_size:
@@ -378,8 +395,35 @@ class PostgresIndex(Index):
         # The switch: under a lock on the namespace's spaces that every write takes too (add_chunks, FOR
         # SHARE), so no chunk can be added between embedding the last ones and switching. Before, a chunk
         # written in that moment made the switch fail (vector_incomplete) and a reindex under steady writes
-        # could fail every time.
+        # could fail every time. A chunk deleted meanwhile (not under that lock) fails the foreign key check
+        # of its vector; the switch then runs again, without it.
         changed = False
+        for attempt in range(_STORE_ATTEMPTS):
+            try:
+                changed = self._switch(model, identity, space, batch_size, cancel)
+                break
+            except Exception as exc:  # a chunk deleted while the switch embedded it: the switch again
+                if not _vanished(exc) or attempt == _STORE_ATTEMPTS - 1:
+                    raise
+        if changed:
+            # The model changed on its server while it embedded: the new space may mix two builds.
+            self._discard(space)
+            raise RetrievalError(
+                "reindex_required",
+                f"{identity.model} changed during the reindex; its new vectors were discarded, start it"
+                " again",
+            )
+        if progress is not None:
+            progress(self._count_vectors(space), total)
+        self.embeddings = model
+        return self.vector_status()
+
+    def _switch(
+        self, model: EmbeddingModel, identity: EmbeddingIdentity, space: str, batch_size: int, cancel: Any
+    ) -> bool:
+        """Embed what the rounds left and activate ``space``, in one transaction under the lock on the
+        namespace's spaces (see :meth:`reindex`). Returns whether the model changed meanwhile (then nothing
+        was activated)."""
         with self._sql.transaction():
             self._rows("spaces_lock_exclusive")
             limit = max(batch_size, _REINDEX_SWITCH_CHUNKS)
@@ -402,18 +446,7 @@ class PostgresIndex(Index):
             if not changed:
                 self._sql.execute("spaces_delete_others", self._key(space=space))
                 self._sql.execute("spaces_activate", self._key(space=space))
-        if changed:
-            # The model changed on its server while it embedded: the new space may mix two builds.
-            self._discard(space)
-            raise RetrievalError(
-                "reindex_required",
-                f"{identity.model} changed during the reindex; its new vectors were discarded, start it"
-                " again",
-            )
-        if progress is not None:
-            progress(self._count_vectors(space), total)
-        self.embeddings = model
-        return self.vector_status()
+        return changed
 
     def _count_missing(self, space: str) -> int:
         return int(self._rows("chunks_count_missing", space=space)[0][0])

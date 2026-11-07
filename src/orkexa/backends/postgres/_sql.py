@@ -268,16 +268,16 @@ _ENTRIES = (
     # ---- index: vector spaces ------------------------------------------------------------------------------
     Statement(
         "spaces_lock_shared",
-        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY"
-        " space"
+        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s"
+        " ORDER BY space"
         " FOR SHARE",
         _p(),
         "read",
     ),
     Statement(
         "spaces_lock_exclusive",
-        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY"
-        " space"
+        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s"
+        " ORDER BY space"
         " FOR UPDATE",
         _p(),
         "read",

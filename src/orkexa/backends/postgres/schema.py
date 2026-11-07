@@ -257,12 +257,14 @@ class SchemaReport:
     """What :func:`verify_schema` found.
 
     Attributes:
-        prefix: The table prefix of the checked layout. schema: The schema that holds the first table found
-        (``None``: no table found). version: The version recorded by :func:`migrate` (``None``: no version
-        table, e.g. a product that runs its own migrations). pgvector: Whether the pgvector extension is
-        installed in the database (``CREATE EXTENSION vector``); the index then ranks vectors in the database
-        (mode B), else in Python (mode A). Either is valid. pgvector_version: The installed extension version,
-        or ``None``. problems: Every difference from schema version 1; empty when the schema is usable.
+        prefix: The table prefix of the checked layout.
+        schema: The schema that holds the first table found (``None``: no table found).
+        version: The version recorded by :func:`migrate` (``None``: no version table, e.g. a product that runs
+            its own migrations).
+        pgvector: Whether the pgvector extension is installed in the database (``CREATE EXTENSION vector``);
+            the index then ranks vectors in the database (mode B), else in Python (mode A). Either is valid.
+        pgvector_version: The installed extension version, or ``None``.
+        problems: Every difference from schema version 1; empty when the schema is usable.
     """
 
     prefix: str
@@ -420,7 +422,8 @@ def migrate(source: ConnectionSource, layout: PostgresLayout) -> int:
         RetrievalError: ``schema.mismatch`` with ``reason`` ``permission`` (the role may not create tables in
             the current schema; nothing was changed), ``too_new`` (a newer version is recorded) or
             ``unrecorded`` (some of the tables exist but no version is recorded: they were created another
-            way). ImportError: psycopg is not installed.
+            way).
+        ImportError: psycopg is not installed.
     """
     if not isinstance(layout, PostgresLayout):
         raise TypeError(f"layout must be a PostgresLayout, not {type(layout).__name__}")
@@ -428,9 +431,8 @@ def migrate(source: ConnectionSource, layout: PostgresLayout) -> int:
         if not _rows(connection, _Q_CAN_CREATE)[0][0]:
             raise RetrievalError(
                 "schema.mismatch",
-                "migrate() needs a role that may create tables in the current schema (a migration or owner"
-                " role,"
-                " not the runtime role); nothing was changed",
+                "migrate() needs a role that may create tables in the current schema"
+                " (a migration or owner role, not the runtime role); nothing was changed",
                 reason="permission",
             )
         connection.execute("SELECT pg_advisory_xact_lock(hashtext(%(name)s))", {"name": layout.version_table})
@@ -439,9 +441,8 @@ def migrate(source: ConnectionSource, layout: PostgresLayout) -> int:
         if current > SCHEMA_VERSION:
             raise RetrievalError(
                 "schema.mismatch",
-                f"The database holds schema version {current} for prefix {layout.prefix!r}; this release"
-                " knows"
-                f" {SCHEMA_VERSION}",
+                f"The database holds schema version {current} for prefix {layout.prefix!r};"
+                f" this release knows {SCHEMA_VERSION}",
                 reason="too_new",
             )
         if current == SCHEMA_VERSION:
@@ -452,9 +453,8 @@ def migrate(source: ConnectionSource, layout: PostgresLayout) -> int:
         if existing:
             raise RetrievalError(
                 "schema.mismatch",
-                f"The tables {', '.join(existing)} exist but no schema version is recorded; they were not"
-                " created"
-                " by migrate() (check them with verify_schema)",
+                f"The tables {', '.join(existing)} exist but no schema version is recorded;"
+                " they were not created by migrate() (check them with verify_schema)",
                 reason="unrecorded",
             )
         for step in _STEPS:
