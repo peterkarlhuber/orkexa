@@ -151,6 +151,14 @@ class FileStore(ABC):
         self.max_document_bytes = max_document_bytes
         self._lock = threading.RLock()
 
+    @property
+    def capabilities(self) -> frozenset[str]:
+        """What this store can do beyond the base contract (MUP-ONA O1): ``partitioned`` (one storage holds
+        several partitions, such as tenants or SQLite namespaces, and an instance sees only its own) and
+        ``concurrent_writers`` (several instances or processes may write the same storage at once). The base
+        class claims none."""
+        return frozenset()
+
     # ---- storage, implemented by subclasses ---------------------------------
 
     @abstractmethod
@@ -481,6 +489,11 @@ class SQLiteFileStore(FileStore):
         except BaseException:
             self._connection.close()
             raise
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        """``partitioned`` (by ``namespace``), ``concurrent_writers``; see :attr:`FileStore.capabilities`."""
+        return frozenset({"partitioned", "concurrent_writers"})
 
     def close(self) -> None:
         """Close the database connection."""

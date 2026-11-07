@@ -313,3 +313,4 @@ tests.test_retrieval_modes::test_sources_limit_candidates_before_ranking  # sqli
 tests.test_retrieval_modes::test_the_three_modes_rank_differently  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_tool_uses_mode_and_sources  # sqlite-vec cannot be loaded here
 tests.test_sandbox_policy::test_subprocess_run_directory_stays_owner_only  # POSIX permission bits
+tests.test_storage_contracts::test_sqlite_index_capabilities_follow_its_vector_configuration  # needs sqlite-vec
