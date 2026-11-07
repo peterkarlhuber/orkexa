@@ -159,6 +159,9 @@ class PsycopgSource:
         self._closed = False
         self._available = threading.Condition()
         self._local = threading.local()
+        #: The lock the stores on this source hold for their commands (their default ``lock``): the read,
+        #: change and write of one command never interleave with another store's in this process.
+        self.lock = threading.RLock()
 
     def _acquire(self) -> Any:
         deadline = time.monotonic() + self.timeout

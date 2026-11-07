@@ -52,8 +52,9 @@ class PostgresMemory(MemoryBackend):
         self.source = source
         self._sql = Executor(source, layout=layout, tenant_id=tenant_id)
         self.layout = layout
-        if lock is not None:
-            self._lock = lock
+        shared = lock if lock is not None else getattr(source, "lock", None)
+        if shared is not None:
+            self._lock = shared
 
     def _key(self, **params: Any) -> dict[str, Any]:
         return {"tenant_id": self.tenant_id, "namespace": self.namespace, **params}

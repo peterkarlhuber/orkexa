@@ -527,7 +527,8 @@ class PostgresLayout:
 
 def check_tenant(tenant_id: object) -> str:
     """``tenant_id`` if it is a tenant the guard lets through (a string, not empty or only whitespace, at most
-    :data:`MAX_TENANT_CHARS` characters), else :class:`ValueError`."""
+    :data:`MAX_TENANT_CHARS` characters, without U+0000, which PostgreSQL text cannot hold), else
+    :class:`ValueError`."""
     if not isinstance(tenant_id, str) or not _usable_tenant(tenant_id):
         raise ValueError(f"Invalid tenant id {tenant_id!r}")
     return tenant_id
@@ -541,7 +542,12 @@ def check_namespace(namespace: str) -> str:
 
 
 def _usable_tenant(value: object) -> bool:
-    return isinstance(value, str) and bool(value.strip()) and len(value) <= MAX_TENANT_CHARS
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and len(value) <= MAX_TENANT_CHARS
+        and "\x00" not in value
+    )
 
 
 @lru_cache(maxsize=512)

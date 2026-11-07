@@ -165,7 +165,8 @@ class PostgresIndex(Index):
         self.source = source
         self._sql = Executor(source, layout=layout, tenant_id=tenant_id)
         self.layout = layout
-        self._lock = lock if lock is not None else threading.RLock()
+        shared = lock if lock is not None else getattr(source, "lock", None)
+        self._lock = shared if shared is not None else threading.RLock()
         #: The embedding model new chunks are embedded with (``None``: full-text only).
         self.embeddings = embeddings
         self.mode = check_mode(mode) if mode is not None else None

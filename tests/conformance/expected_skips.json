@@ -1,5 +1,5 @@
 {
-  "comment": "MUP-ONA B1 (T-CONF-8): the conformance cases each CI job expects to be skipped, per target; a job may name another job whose expectations it shares. Skipped cases that are not listed, and listed cases that ran, fail the conformance tests.",
+  "comment": "MUP-ONA B1 (T-CONF-8): the conformance cases each CI job expects to be skipped, per target; a job may name another job whose expectations it shares. Skipped cases that are not listed, and listed cases that ran, fail the conformance tests. MUP-ONA B5: pg-a and pg-b (also as the restricted runtime role) run the PostgreSQL targets; nothing skips there.",
   "jobs": {
     "test": {
       "sqlite-index-fts": {
@@ -76,6 +76,13 @@
       }
     },
     "lowest-versions": "test",
-    "offline": "test"
+    "offline": "test",
+    "pg-a": {
+      "pg-index": {},
+      "pg-index-python": {},
+      "pg-file-store": {},
+      "pg-memory": {}
+    },
+    "pg-b": "pg-a"
   }
 }

@@ -24,9 +24,11 @@ class PostgresFileStore(FileStore):
             A non-empty string of at most 128 characters.
         layout: Names the tables (:class:`~orkexa.backends.postgres.PostgresLayout`).
         namespace: Which store of the tenant this backend works on.
-        lock: The lock the store's commands hold (default: a lock of this store). A host whose source takes a
-            lock of its own for writes passes that lock, so a command never waits for it while holding
-            another.
+        lock: The lock the store's commands hold. Default: the source's ``lock`` attribute when it has one
+            (:class:`~orkexa.backends.postgres.PsycopgSource` does: the commands of every store on one
+            source are serialized in the process, so two instances never lose each other's change), else a
+            lock of this store. A host whose source takes a lock of its own for writes passes that lock, so a
+            command never waits for it while holding another.
         files_api: See :class:`~orkexa.FileStore`.
         max_image_bytes: See :class:`~orkexa.FileStore`.
         max_document_bytes: See :class:`~orkexa.FileStore`.
@@ -58,8 +60,9 @@ class PostgresFileStore(FileStore):
         self.source = source
         self._sql = Executor(source, layout=layout, tenant_id=tenant_id)
         self.layout = layout
-        if lock is not None:
-            self._lock = lock
+        shared = lock if lock is not None else getattr(source, "lock", None)
+        if shared is not None:
+            self._lock = shared
 
     def _key(self, **params: Any) -> dict[str, Any]:
         return {"tenant_id": self.tenant_id, "namespace": self.namespace, **params}

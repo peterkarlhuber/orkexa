@@ -129,6 +129,7 @@ addopts = "-ra --strict-markers"
 markers = [
     "live: calls a real provider API (needs API keys, costs money); run with -m live",
     "packaging: builds wheels and creates fresh virtual environments (slow)",
+    "postgres: needs a PostgreSQL server (ORKEXA_TEST_POSTGRES); skipped without one unless ORKEXA_REQUIRE_POSTGRES=1. CI jobs without a server deselect them (-m \"not postgres\"); pg-a and pg-b run them",
     "docker: needs a real Docker or Podman daemon and the orkexa-sandbox image; skipped without one unless ORKEXA_REQUIRE_DOCKER=1",
 ]
 
