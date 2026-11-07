@@ -1,4 +1,4 @@
-"""The public Orkexa API as of MUP-ONA B0, extended by B1 (T-API-1), and the import contracts (T-PKG-0).
+"""The public Orkexa API as of MUP-ONA B0, extended by B1 and B5 (T-API-1); the import contracts (T-PKG-0).
 
 The snapshot is the reference for every later compatibility claim (backend move B2, PostgreSQL backend B5):
 a name may be added (extend the snapshot in the same change), but removing or renaming one needs a minor
@@ -230,6 +230,15 @@ PUBLIC = {
         "ScriptedCall",
         "ScriptedClient",
     ],
+    "orkexa.testing.sqlcheck": [  # MUP-ONA B5
+        "ANY_REFUSED",
+        "Finding",
+        "KINDS",
+        "MISSING_PGLAST",
+        "PLACEHOLDERS",
+        "check_statement",
+        "to_postgres_params",
+    ],
 }
 """``__all__`` of every public module of the storage and retrieval layer, plus the package itself."""
 
@@ -363,8 +372,23 @@ def test_the_import_contracts_cover_every_core_module() -> None:
         "Core modules do not import orkexa.backends.postgres",
         "Core modules do not import orkexa.testing",
         "Contract modules do not import orkexa.backends at runtime",  # MUP-ONA B2, see test_import_order.py
+        "orkexa.testing.sqlcheck imports no other orkexa module",  # MUP-ONA B5, see tests/test_sqlcheck.py
     }
     for contract in _contracts():
+        if str(contract["name"]).startswith("orkexa.testing.sqlcheck"):
+            # The engine may import no other orkexa module: every core module and every sibling in testing.
+            assert contract["source_modules"] == ["orkexa.testing.sqlcheck"]
+            forbidden = set(contract["forbidden_modules"])  # type: ignore[call-overload]
+            siblings = {
+                f"orkexa.testing.{path.stem if path.is_file() else path.name}{suffix}"
+                for path in (package / "testing").iterdir()
+                if (path.suffix == ".py" and path.stem not in {"__init__", "sqlcheck"})
+                or (path / "__init__.py").is_file()
+                for suffix in ("", ".**")
+            }
+            wanted = (expected - {"orkexa"}) | siblings
+            assert forbidden >= wanted, sorted(wanted - forbidden)
+            continue
         if not str(contract["name"]).startswith("Core modules"):
             continue  # the B2 contract names only the contract modules
         sources = set(contract["source_modules"])  # type: ignore[call-overload]
@@ -388,4 +412,4 @@ def test_the_import_contracts_hold() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "3 kept, 0 broken" in result.stdout
+    assert "4 kept, 0 broken" in result.stdout

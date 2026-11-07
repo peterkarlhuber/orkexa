@@ -3,3 +3,5 @@ tests/fixtures/ranking/FX-RANK-0.json -text
 tests/fixtures/ranking/*.sha256 -text
 tests/fixtures/legacy/FX-SQ-0/* -text
 tests/fixtures/pdf/*.pdf binary
+tests/fixtures/sqlcheck/*.json -text
+tests/fixtures/sqlcheck/*.sha256 -text

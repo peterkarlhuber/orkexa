@@ -275,15 +275,17 @@ Packages of the MUP-ONA plan (security and database backends for Orkexa, Nodestr
 that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0 and FX-RANK-0, skip expectations), MP-A10 (SQLite
 robustness), the Orkexa part of MP-A1 (PDF budgets and isolation), the Orkexa part of MP-B0 (version 0.2.0.dev0,
 API snapshot, import contracts, release rules), the Orkexa part of MP-B1 (storage contracts, public conformance
-suite `orkexa.testing.conformance`, `ScriptedClient`) and MP-B2 (SQLite backends in `orkexa.backends.sqlite`)
-are in place; each entry is removed in the change that completes its package.
+suite `orkexa.testing.conformance`, `ScriptedClient`), MP-B2 (SQLite backends in `orkexa.backends.sqlite`) and the
+rule engine of MP-B5 (`orkexa.testing.sqlcheck`) are in place; each entry is removed in the change that completes its package.
 
 ### ORK-MUP-B5 · `orkexa.backends.postgres` and `orkexa.testing.sqlcheck`
 
 - **Priority:** P2 Medium · **Status:** Open · **Refs:** [MUP-ONA MP-B5](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md)
-- **What:** The generic PostgreSQL backend still lives in nodestro-runtime; there is no reusable tenant SQL rule
-  engine.
-- **Next step:** Optional extras `postgres` and `sqlcheck`, statement catalog with partition guard, T-PART/T-CAT/T-GUARD.
+- **What:** The generic PostgreSQL backend still lives in nodestro-runtime. The tenant SQL rule engine is in place
+  (PR 1: `orkexa.testing.sqlcheck`, extra `sqlcheck`, T-SQLC-1, T-SQLCHECK).
+- **Next step:** PR 2 (`mup/b5-postgres-backend`): extra `postgres`, `orkexa.backends.postgres` with statement
+  catalog and partition guard, schema v1, `verify_schema`/`migrate`, T-PART/T-CAT/T-GUARD/T-PAR-2, CI jobs `pg-a`,
+  `pg-b`, `core-no-extras`.
 
 ## Cross-repository dependencies
 

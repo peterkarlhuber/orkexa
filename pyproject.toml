@@ -47,6 +47,8 @@ vector = ["sqlite-vec>=0.1.6"]
 local = ["zstandard>=0.23"]
 # Building models from upstream weights (orkexa.local.convert), e.g. mDenseOn.
 convert = ["gguf>=0.17,<1"]
+# MUP-ONA B5: the SQL rule engine orkexa.testing.sqlcheck (PostgreSQL's parser; the range nodestro-runtime uses).
+sqlcheck = ["pglast>=7,<9"]
 docs = [
     "mkdocs>=1.6,<2",  # MkDocs 2 drops the plugin system that Material and mkdocstrings use
     "mkdocs-material>=9.5",
@@ -69,6 +71,7 @@ dev = [
     "sqlite-vec>=0.1.6",
     "zstandard>=0.23",
     "gguf>=0.17,<1",
+    "pglast>=7,<9",
     # MUP-ONA B0: import contracts ([tool.importlinter] below; CI runs lint-imports).
     "import-linter>=2.1",
 ]
@@ -295,6 +298,73 @@ ignore_imports = [
     "orkexa.retrieval -> orkexa.backends.sqlite.index",
     "orkexa.files -> orkexa.backends.sqlite.files",
     "orkexa.memory -> orkexa.backends.sqlite.memory",
+]
+
+# MUP-ONA B5: the SQL rule engine is a leaf of its own. It imports only the standard library and pglast (late), so
+# Nodestro and any other host can use it without the rest of Orkexa's dependencies; tests/test_sqlcheck.py checks
+# the import of the package root, which import-linter does not report, and of third-party packages.
+[[tool.importlinter.contracts]]
+name = "orkexa.testing.sqlcheck imports no other orkexa module"
+type = "forbidden"
+as_packages = false
+source_modules = ["orkexa.testing.sqlcheck"]
+forbidden_modules = [
+    "orkexa._aio",
+    "orkexa._aio.**",
+    "orkexa._cancel",
+    "orkexa._cancel.**",
+    "orkexa._pdf_launch",
+    "orkexa._pdf_launch.**",
+    "orkexa._pdf_probe",
+    "orkexa._pdf_probe.**",
+    "orkexa._pdf_worker",
+    "orkexa._pdf_worker.**",
+    "orkexa._storage",
+    "orkexa._storage.**",
+    "orkexa.agent",
+    "orkexa.agent.**",
+    "orkexa.async_agent",
+    "orkexa.async_agent.**",
+    "orkexa.backends",
+    "orkexa.backends.**",
+    "orkexa.claude",
+    "orkexa.claude.**",
+    "orkexa.content",
+    "orkexa.content.**",
+    "orkexa.core",
+    "orkexa.core.**",
+    "orkexa.dynamic",
+    "orkexa.dynamic.**",
+    "orkexa.embeddings",
+    "orkexa.embeddings.**",
+    "orkexa.errors",
+    "orkexa.errors.**",
+    "orkexa.evaluation",
+    "orkexa.evaluation.**",
+    "orkexa.files",
+    "orkexa.files.**",
+    "orkexa.flow",
+    "orkexa.flow.**",
+    "orkexa.local",
+    "orkexa.local.**",
+    "orkexa.memory",
+    "orkexa.memory.**",
+    "orkexa.orchestration",
+    "orkexa.orchestration.**",
+    "orkexa.pricing",
+    "orkexa.pricing.**",
+    "orkexa.providers",
+    "orkexa.providers.**",
+    "orkexa.retrieval",
+    "orkexa.retrieval.**",
+    "orkexa.tools",
+    "orkexa.tools.**",
+    "orkexa.usage",
+    "orkexa.usage.**",
+    "orkexa.testing.conformance",
+    "orkexa.testing.conformance.**",
+    "orkexa.testing.fakes",
+    "orkexa.testing.fakes.**",
 ]
 
 [tool.mypy]
