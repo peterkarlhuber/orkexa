@@ -22,6 +22,7 @@ tests.audit2.test_ork2_08_stop_container::test_without_a_kill_the_name_is_watche
 tests.audit3.test_ork3_01_runtime_links::test_install_keeps_links_inside_the_runtime  # POSIX links and process groups
 tests.audit3.test_ork3_01_runtime_links::test_install_refuses_link_chains_that_leave_the_runtime[links0]  # POSIX links and process groups
 tests.audit3.test_ork3_01_runtime_links::test_install_refuses_link_chains_that_leave_the_runtime[links1]  # POSIX links and process groups
+tests.audit3.test_ork3_04_managed_server::test_alive_counts_a_process_reaped_during_the_check_as_gone  # reads /proc (Linux only)
 tests.audit3.test_ork3_04_managed_server::test_cli_serve_stops_the_server_on_sigterm  # POSIX links and process groups
 tests.audit3.test_ork3_04_managed_server::test_managed_server_on_ipv6_loopback  # POSIX links and process groups
 tests.audit3.test_ork3_04_managed_server::test_stop_also_ends_the_runners_of_a_server_that_had_to_be_killed  # POSIX links and process groups
