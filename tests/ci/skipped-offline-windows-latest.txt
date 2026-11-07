@@ -259,4 +259,7 @@ tests.test_private_storage::test_saved_histories_are_private_new_and_overwritten
 tests.test_private_storage::test_saved_histories_are_private_new_and_overwritten[ClaudeAgent]  # POSIX permission bits
 tests.test_private_storage::test_saved_history_replaces_a_symlink_instead_of_following_it  # POSIX permission bits
 tests.test_private_storage::test_the_process_umask_is_not_changed  # POSIX permission bits
+tests.test_provider_live::test_text_tool_and_structured_output[gemini]  # live API test (pytest -m live); needs the provider's key or URL and a model
+tests.test_provider_live::test_text_tool_and_structured_output[openai]  # live API test (pytest -m live); needs the provider's key or URL and a model
+tests.test_provider_live::test_text_tool_and_structured_output[vllm]  # live API test (pytest -m live); needs the provider's key or URL and a model
 tests.test_sandbox_policy::test_subprocess_run_directory_stays_owner_only  # POSIX permission bits

@@ -65,6 +65,13 @@ def _call_in_thread(
     return outcome
 
 
+@pytest.fixture(autouse=True)
+def _private_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run directories in a folder of this test only: other processes (another test run) create and
+    remove ``orkexa-sandbox-*`` folders in the shared temporary directory, which made ``_runs()`` flaky."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+
 def _runs() -> set[str]:
     return {p.name for p in Path(tempfile.gettempdir()).glob("orkexa-sandbox-*")}
 
