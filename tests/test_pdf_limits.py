@@ -281,6 +281,8 @@ def test_the_child_environment_is_exactly_the_allowlist(probe: Callable[..., dic
     names = set(environ)
     if sys.platform == "darwin":  # set by macOS itself for every process, not inherited
         names.discard("__CF_USER_TEXT_ENCODING")
+    if sys.platform == "win32":  # set by Windows on Arm itself for every process, not inherited
+        names.discard("PROCESSOR_ARCHITECTURE")
     expected = {"PYTHONIOENCODING", "PYTHONHASHSEED"} | (
         {"SYSTEMROOT"} if sys.platform == "win32" else {"LC_ALL"}
     )
