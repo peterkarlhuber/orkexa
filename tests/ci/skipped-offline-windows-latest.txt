@@ -1,7 +1,8 @@
 # Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
 # Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
-# Job platforms.yml/offline on windows-latest: derived from the Linux run and the tests'
-# skip conditions, NOT yet verified on a real runner (the lead fixes it after the first CI run).
+# Job platforms.yml/offline on windows-latest: derived from local Linux runs (with sqlite3 extension loading
+# switched off for macOS and Windows ARM64) and the tests' skip conditions,
+# NOT yet verified on a real runner (the lead fixes it after the first CI run).
 
 tests.anthropic.test_dynamic_sandbox::test_docker_sandbox_end_to_end  # needs Docker and the image from docker/sandbox.Dockerfile
 tests.anthropic.test_dynamic_sandbox::test_memory_limit  # RLIMIT_AS is only reliable on Linux
@@ -29,6 +30,22 @@ tests.audit3.test_ork3_05_orphaned_server::test_next_start_stops_the_orphaned_se
 tests.audit3.test_ork3_05_orphaned_server::test_unrelated_processes_are_never_stopped_and_stale_files_go[OTHER]  # POSIX process groups
 tests.audit3.test_ork3_05_orphaned_server::test_unrelated_processes_are_never_stopped_and_stale_files_go[not json]  # POSIX process groups
 tests.audit3.test_ork3_05_orphaned_server::test_unrelated_processes_are_never_stopped_and_stale_files_go[{}]  # POSIX process groups
+tests.backends.sqlite.test_robustness::test_a_dangling_symlink_is_refused_and_not_created  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-SQLiteFileStore]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-SQLiteIndex]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-SQLiteMemory]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-journal-SQLiteFileStore]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-journal-SQLiteIndex]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-journal-SQLiteMemory]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-shm-SQLiteFileStore]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-shm-SQLiteIndex]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-shm-SQLiteMemory]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-wal-SQLiteFileStore]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-wal-SQLiteIndex]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_a_symlinked_database_path_is_refused[-wal-SQLiteMemory]  # symlinks need privileges on Windows
+tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteFileStore]  # POSIX permission bits
+tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteIndex]  # POSIX permission bits
+tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteMemory]  # POSIX permission bits
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
 tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging

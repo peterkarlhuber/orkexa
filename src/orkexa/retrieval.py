@@ -40,7 +40,8 @@ the model can load the whole file after a hit.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 import io
 import json
 import math
@@ -54,7 +55,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from pydantic import BaseModel, Field
 
-from ._storage import create_private_file
+from ._storage import connect_private_database, storage_errors
 from .content import ContentBlock, ToolContent
 from .core.types import Citation, Message, ModelResponse, SearchResultPart, TextPart, ToolResultPart
 from .errors import OrkexaError
@@ -67,6 +68,8 @@ if TYPE_CHECKING:
 __all__ = [
     "HYBRID_FUSIONS",
     "LEXICAL_WEIGHT",
+    "MAX_QUERY_CHARS",
+    "MAX_QUERY_WORDS",
     "RETRIEVAL_MODES",
     "SEARCH_TOOL_NAME",
     "Chunk",
@@ -106,14 +109,32 @@ _RRF_K = 60
 _MAX_SOURCES = 50_000
 #: The share of the full-text evidence in ``evidence`` fusion (the vector side gets the rest).
 LEXICAL_WEIGHT = 0.5
+#: The longest search query :class:`SQLiteIndex` accepts, in characters (``max_query_chars=`` changes it).
+MAX_QUERY_CHARS = 1000
+#: The most distinct query words (:func:`query_words`) :class:`SQLiteIndex` accepts (``max_query_words=``).
+MAX_QUERY_WORDS = 64
 
 
 class RetrievalError(OrkexaError, RuntimeError):
     """A search could not run as requested; never answered with another mode instead.
 
-    ``code``: ``mode_unsupported`` (the index cannot rank this way), ``vector_unavailable``
-    (no embedding model or no vectors), ``reindex_required`` (the vectors belong to another
-    embedding model), ``vector_incomplete`` (not every chunk has a vector yet).
+    ``code`` is one of (the only list of these codes):
+
+    * ``mode_unsupported``: the index cannot rank this way.
+    * ``vector_unavailable``: no embedding model or no vectors.
+    * ``reindex_required``: the vectors belong to another embedding model.
+    * ``vector_incomplete``: not every chunk has a vector yet.
+    * ``cancelled``: a :meth:`SQLiteIndex.reindex` was cancelled.
+    * ``query.too_long``: the query exceeds the index's character or word limit
+      (:data:`MAX_QUERY_CHARS`, :data:`MAX_QUERY_WORDS`); checked before any work or lock.
+    * ``vector.dimension``: a query vector's length differs from the stored vectors'.
+    * ``storage.symlink``: a SQLite database path (or its journal, WAL or shared-memory file) is a
+      symbolic link; :class:`SQLiteIndex`, :class:`~orkexa.SQLiteFileStore` and :class:`~orkexa.SQLiteMemory`
+      refuse it.
+    * ``storage.corrupt``: a SQLite database file is damaged or not a database; the
+      ``sqlite3.DatabaseError`` is the ``__cause__``.
+
+    Messages never contain file paths.
     """
 
     def __init__(self, code: str, message: str) -> None:
@@ -375,7 +396,8 @@ class Index(ABC):
 
         With ``store=`` the original is also stored there, and every chunk keeps
         its file id, so Claude can load the whole file after a hit. Indexing the
-        same ``source`` again replaces its chunks.
+        same ``source`` again replaces its chunks (in one transaction in :class:`SQLiteIndex`);
+        a file that cannot be read keeps the old chunks.
 
         Args:
             path: The file.
@@ -390,20 +412,27 @@ class Index(ABC):
         source = source or file.name
         title = title or file.name
         file_id = store.add(data, name=file.name, description=description).id if store is not None else None
-        self.delete(source)
         if file.suffix.lower() == ".pdf":
-            ids: list[int] = []
-            for number, page in enumerate(_pdf_pages(data), start=1):
-                if page.strip():
-                    extra = {**(metadata or {}), "page": str(number)}
-                    page_title = f"{title}, p. {number}"
-                    ids += self.add(page, source=source, title=page_title, file_id=file_id, metadata=extra)
-            return ids
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            raise ValueError(f"{file.name}: only UTF-8 text and PDF files can be indexed") from None
-        return self.add(text, source=source, title=title, file_id=file_id, metadata=metadata)
+            pages = [(number, page) for number, page in enumerate(_pdf_pages(data), start=1) if page.strip()]
+        else:
+            try:
+                pages = [(0, data.decode("utf-8"))]
+            except UnicodeDecodeError:
+                raise ValueError(f"{file.name}: only UTF-8 text and PDF files can be indexed") from None
+        chunks: list[Chunk] = []
+        for number, page in pages:
+            extra = {**(metadata or {}), "page": str(number)} if number else dict(metadata or {})
+            page_title = f"{title}, p. {number}" if number else title
+            chunks += (
+                Chunk(text=piece, source=source, title=page_title, file_id=file_id, metadata=extra)
+                for piece in split_text(page, max_chars=self.max_chars, overlap=self.overlap)
+            )
+        return self._replace(source, chunks)
+
+    def _replace(self, source: str, chunks: list[Chunk]) -> list[int]:
+        """Replace all chunks of ``source`` with ``chunks``; indexes that can make it atomic override this."""
+        self.delete(source)
+        return self.add_chunks(chunks)
 
     def blocks(self, query: str, k: int = 5, *, citations: bool = True) -> list[ContentBlock]:
         """Search results as ``search_result`` blocks to put into a prompt yourself.
@@ -458,6 +487,19 @@ class Index(ABC):
             return [hit.block(citations=citations) for hit in hits]
 
         return Tool(search, name=name)
+
+
+def _check_query(query: str, max_chars: int, max_words: int) -> None:
+    """Refuse a query over the limits with ``query.too_long`` (before any embedding, lock or SQL)."""
+    if len(query) > max_chars:
+        raise RetrievalError(
+            "query.too_long", f"The query has {len(query)} characters; at most {max_chars} are allowed"
+        )
+    words = len(query_words(query))
+    if words > max_words:
+        raise RetrievalError(
+            "query.too_long", f"The query has {words} distinct words; at most {max_words} are allowed"
+        )
 
 
 def _fts_query(query: str) -> str:
@@ -580,6 +622,12 @@ class SQLiteIndex(Index):
         fusion: How ``hybrid`` combines full text and vectors: ``evidence`` (default,
             :func:`fuse_hybrid`) or ``rrf`` (reciprocal rank fusion, k=60, the earlier behavior).
         lexical_weight: The full-text share of ``evidence`` fusion (0: vector order only).
+        max_query_chars: Longest accepted query (default :data:`MAX_QUERY_CHARS`); a longer one raises
+            :class:`RetrievalError` (``query.too_long``) before any work.
+        max_query_words: Most distinct query words accepted (default :data:`MAX_QUERY_WORDS`); full-text and
+            hybrid search run one or two full-text queries per word.
+
+    A database path that is a symbolic link raises ``storage.symlink``; a damaged file ``storage.corrupt``.
     """
 
     def __init__(
@@ -596,8 +644,14 @@ class SQLiteIndex(Index):
         overlap: int = 200,
         fusion: HybridFusion = "evidence",
         lexical_weight: float = LEXICAL_WEIGHT,
+        max_query_chars: int = MAX_QUERY_CHARS,
+        max_query_words: int = MAX_QUERY_WORDS,
     ) -> None:
         super().__init__(max_chars=max_chars, overlap=overlap)
+        if max_query_chars < 1 or max_query_words < 1:
+            raise ValueError("max_query_chars and max_query_words must be positive")
+        self.max_query_chars = max_query_chars
+        self.max_query_words = max_query_words
         if not namespace:
             raise ValueError("namespace must not be empty")
         if fusion not in HYBRID_FUSIONS:
@@ -618,14 +672,17 @@ class SQLiteIndex(Index):
         self.mode: RetrievalMode = check_mode(mode) if mode else ("hybrid" if has_vectors else "fts")
         self._lock = threading.RLock()
         self._vec_loaded = False
-        create_private_file(database)  # owner-only (0600) from the start; journals inherit it
-        self._connection = sqlite3.connect(
-            database, isolation_level=None, check_same_thread=False, timeout=30
-        )
-        # Deleted rows are overwritten instead of left in free pages of the file.
-        self._connection.execute("PRAGMA secure_delete=ON")
-        if str(database) != ":memory:":
-            self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection = connect_private_database(database)
+        try:
+            with storage_errors():
+                self._create_tables(tokenizer)
+            if has_vectors:
+                self._load_sqlite_vec()
+        except BaseException:
+            self._connection.close()
+            raise
+
+    def _create_tables(self, tokenizer: str) -> None:
         try:
             self._connection.executescript(
                 "CREATE TABLE IF NOT EXISTS index_chunks ("
@@ -647,8 +704,6 @@ class SQLiteIndex(Index):
             if "fts5" in str(exc).lower():
                 raise RuntimeError("This Python's sqlite3 lacks FTS5, which SQLiteIndex needs") from exc
             raise
-        if has_vectors:
-            self._load_sqlite_vec()
 
     def _load_sqlite_vec(self) -> None:
         if self._vec_loaded:
@@ -659,12 +714,15 @@ class SQLiteIndex(Index):
             raise ImportError('Vector search needs sqlite-vec: pip install "orkexa[vector]"') from None
         try:
             self._connection.enable_load_extension(True)
-            sqlite_vec.load(self._connection)
-            self._connection.enable_load_extension(False)
         except AttributeError:
             raise RuntimeError(
                 "This Python's sqlite3 cannot load extensions, which sqlite-vec needs"
             ) from None
+        try:
+            sqlite_vec.load(self._connection)
+        finally:
+            # Extension loading stays enabled only while sqlite-vec loads, also when loading fails.
+            self._connection.enable_load_extension(False)
         self._vec_loaded = True
 
     def close(self) -> None:
@@ -680,7 +738,7 @@ class SQLiteIndex(Index):
         after deleting data that must be erased. It rewrites the full-text index of
         every namespace in the database, so it takes time proportional to its size.
         """
-        with self._lock:
+        with self._lock, storage_errors():
             self._connection.execute("INSERT INTO index_fts (index_fts) VALUES ('optimize')")
 
     def __enter__(self) -> SQLiteIndex:
@@ -690,16 +748,19 @@ class SQLiteIndex(Index):
         self.close()
 
     def __len__(self) -> int:
-        row = self._connection.execute(
-            "SELECT count(*) FROM index_chunks WHERE namespace = ?", (self.namespace,)
-        ).fetchone()
+        with self._lock, storage_errors():
+            row = self._connection.execute(
+                "SELECT count(*) FROM index_chunks WHERE namespace = ?", (self.namespace,)
+            ).fetchone()
         return int(row[0])
 
     def sources(self) -> list[str]:
         """All indexed sources."""
-        rows = self._connection.execute(
-            "SELECT DISTINCT source FROM index_chunks WHERE namespace = ? ORDER BY source", (self.namespace,)
-        )
+        with self._lock, storage_errors():
+            rows = self._connection.execute(
+                "SELECT DISTINCT source FROM index_chunks WHERE namespace = ? ORDER BY source",
+                (self.namespace,),
+            ).fetchall()
         return [str(row[0]) for row in rows]
 
     # ---- legacy vectors (embedder= callables) ----------------------------------------
@@ -754,7 +815,7 @@ class SQLiteIndex(Index):
 
     def vector_status(self) -> VectorStatus:
         """Which embedding model the vectors of this namespace belong to, and how complete they are."""
-        with self._lock:
+        with self._lock, storage_errors():
             active = self._space("active")
             building = self._space("building")
             return VectorStatus(
@@ -828,7 +889,8 @@ class SQLiteIndex(Index):
         model.refresh_identity()  # the model's current build, not a cached one
         identity = model.identity()
         space = f"{self.namespace}:{identity.key}"
-        with self._lock:
+        with self._lock, self._write():
+            # Read and write in one transaction: another process may start or switch a reindex meanwhile.
             active = self._space("active")
             if active is None or active[0] != space:
                 building = self._space("building")
@@ -885,7 +947,7 @@ class SQLiteIndex(Index):
         model.refresh_identity()
         if model.identity().key != identity.key:
             # The model changed on the server while it embedded: the new space may mix two builds.
-            with self._lock:
+            with self._lock, self._write():
                 self._discard(space)
             raise RetrievalError(
                 "reindex_required",
@@ -925,6 +987,22 @@ class SQLiteIndex(Index):
         self.embeddings = model
         return self.vector_status()
 
+    @contextmanager
+    def _write(self) -> Iterator[None]:
+        """A write transaction (``BEGIN IMMEDIATE``): every read inside it sees the state it writes on.
+
+        Two instances or processes must not read rows outside the transaction and write based on them
+        (PS-8). Rolled back on any error; a damaged file raises ``storage.corrupt``. Callers hold the lock.
+        """
+        with storage_errors():
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+            self._connection.execute("COMMIT")
+
     def _discard(self, space: str) -> None:
         self._connection.execute("DELETE FROM index_vectors WHERE space = ?", (space,))
         self._connection.execute(
@@ -933,14 +1011,14 @@ class SQLiteIndex(Index):
 
     def discard_reindex(self) -> None:
         """Drop an unfinished reindex (the active vectors stay)."""
-        with self._lock:
+        with self._lock, self._write():
             building = self._space("building")
             if building is not None:
                 self._discard(building[0])
 
     def drop_vectors(self) -> int:
         """Delete all vectors of this namespace (full-text search stays); returns how many."""
-        with self._lock:
+        with self._lock, self._write():
             spaces = self._connection.execute(
                 "SELECT space FROM index_spaces WHERE namespace = ?", (self.namespace,)
             ).fetchall()
@@ -953,89 +1031,98 @@ class SQLiteIndex(Index):
     # ---- Index API ----------------------------------------------------------------
 
     def add_chunks(self, chunks: Iterable[Chunk]) -> list[int]:
+        return self._store(None, chunks)
+
+    def _replace(self, source: str, chunks: list[Chunk]) -> list[int]:
+        """Delete ``source`` and add ``chunks`` in one transaction: concurrent replacements never mix."""
+        return self._store(source, chunks)
+
+    def _store(self, replace: str | None, chunks: Iterable[Chunk]) -> list[int]:
+        """Add ``chunks`` (after deleting the source ``replace``, if given) in one write transaction.
+
+        The chunks are embedded first, without the lock and outside the transaction (an embedding call can
+        take long).
+        """
         chunks = [chunk for chunk in chunks if chunk.text.strip()]
-        if not chunks:
+        if not chunks and replace is None:
             return []
         texts = [chunk.text for chunk in chunks]
         vectors: list[Sequence[float]] | None = None
         identity = None
-        if self.embeddings is not None:
+        if chunks and self.embeddings is not None:
             self.embeddings.refresh_identity()  # the model's current build, not a cached one
             identity = self.embeddings.identity()
             vectors = list(self.embeddings.embed_documents(texts))
-        elif self.embedder is not None:
+        elif chunks and self.embedder is not None:
             vectors = list(self.embedder(texts))
         if vectors is not None and len(vectors) != len(chunks):
             raise ValueError("The embedder must return one vector per text")
         ids: list[int] = []
-        with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                space = self._active_for(identity) if identity is not None else None
-                for position, chunk in enumerate(chunks):
-                    cursor = self._connection.execute(
-                        "INSERT INTO index_chunks (namespace, source, title, file_id, metadata, text)"
-                        " VALUES (?, ?, ?, ?, ?, ?)",
-                        (
-                            self.namespace,
-                            chunk.source,
-                            chunk.title,
-                            chunk.file_id,
-                            json.dumps(chunk.metadata),
-                            chunk.text,
-                        ),
-                    )
-                    chunk_id = int(cursor.lastrowid or 0)
+        with self._lock, self._write():
+            if replace is not None:
+                self._delete_rows(replace)
+            if not chunks:
+                return []
+            space = self._active_for(identity) if identity is not None else None
+            for position, chunk in enumerate(chunks):
+                cursor = self._connection.execute(
+                    "INSERT INTO index_chunks (namespace, source, title, file_id, metadata, text)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        self.namespace,
+                        chunk.source,
+                        chunk.title,
+                        chunk.file_id,
+                        json.dumps(chunk.metadata),
+                        chunk.text,
+                    ),
+                )
+                chunk_id = int(cursor.lastrowid or 0)
+                self._connection.execute(
+                    "INSERT INTO index_fts (rowid, text, title) VALUES (?, ?, ?)",
+                    (chunk_id, chunk.text, chunk.title or ""),
+                )
+                if vectors is not None and space is not None:
+                    if identity is not None and len(vectors[position]) != identity.dimensions:
+                        raise ValueError("The embedding model returned a vector of another size")
+                    # REPLACE: a vector left behind for this id by a deleted chunk is stale.
                     self._connection.execute(
-                        "INSERT INTO index_fts (rowid, text, title) VALUES (?, ?, ?)",
-                        (chunk_id, chunk.text, chunk.title or ""),
+                        "INSERT OR REPLACE INTO index_vectors (space, chunk_id, embedding) VALUES (?, ?, ?)",
+                        (space, chunk_id, self._vector(vectors[position])),
                     )
-                    if vectors is not None and space is not None:
-                        if identity is not None and len(vectors[position]) != identity.dimensions:
-                            raise ValueError("The embedding model returned a vector of another size")
-                        # REPLACE: a vector left behind for this id by a deleted chunk is stale.
-                        self._connection.execute(
-                            "INSERT OR REPLACE INTO index_vectors (space, chunk_id, embedding)"
-                            " VALUES (?, ?, ?)",
-                            (space, chunk_id, self._vector(vectors[position])),
-                        )
-                    elif vectors is not None:
-                        table = self._vector_table(len(vectors[position]))
-                        self._connection.execute(
-                            f"INSERT INTO {table} (rowid, namespace, embedding) VALUES (?, ?, ?)",
-                            (chunk_id, self.namespace, self._vector(vectors[position])),
-                        )
-                    ids.append(chunk_id)
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            self._connection.execute("COMMIT")
+                elif vectors is not None:
+                    table = self._vector_table(len(vectors[position]))
+                    self._connection.execute(
+                        f"INSERT INTO {table} (rowid, namespace, embedding) VALUES (?, ?, ?)",
+                        (chunk_id, self.namespace, self._vector(vectors[position])),
+                    )
+                ids.append(chunk_id)
         return ids
 
     def delete(self, source: str) -> int:
-        with self._lock:
-            rows = self._connection.execute(
-                "SELECT id, text, title FROM index_chunks WHERE namespace = ? AND source = ?",
-                (self.namespace, source),
-            ).fetchall()
-            if not rows:
-                return 0
-            legacy = self._has_vectors() and self._vec_loaded
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                for chunk_id, text, title in rows:
-                    self._connection.execute(
-                        "INSERT INTO index_fts (index_fts, rowid, text, title) VALUES ('delete', ?, ?, ?)",
-                        (chunk_id, text, title or ""),
-                    )
-                    if legacy:
-                        self._connection.execute("DELETE FROM index_vec WHERE rowid = ?", (chunk_id,))
-                    self._connection.execute("DELETE FROM index_vectors WHERE chunk_id = ?", (chunk_id,))
-                    self._connection.execute("DELETE FROM index_chunks WHERE id = ?", (chunk_id,))
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            self._connection.execute("COMMIT")
+        # PS-8: the rows are read inside the write transaction. Read before it, two instances or processes
+        # both sent the FTS5 'delete' for the same rows, and the second one damaged the full-text index.
+        with self._lock, self._write():
+            return self._delete_rows(source)
+
+    def _delete_rows(self, source: str) -> int:
+        """Delete the chunks of ``source``; runs inside :meth:`_write`."""
+        rows = self._connection.execute(
+            "SELECT id, text, title FROM index_chunks WHERE namespace = ? AND source = ?",
+            (self.namespace, source),
+        ).fetchall()
+        if not rows:
+            return 0
+        legacy = self._has_vectors() and self._vec_loaded
+        for chunk_id, text, title in rows:
+            self._connection.execute(
+                "INSERT INTO index_fts (index_fts, rowid, text, title) VALUES ('delete', ?, ?, ?)",
+                (chunk_id, text, title or ""),
+            )
+            if legacy:
+                self._connection.execute("DELETE FROM index_vec WHERE rowid = ?", (chunk_id,))
+            self._connection.execute("DELETE FROM index_vectors WHERE chunk_id = ?", (chunk_id,))
+            self._connection.execute("DELETE FROM index_chunks WHERE id = ?", (chunk_id,))
         return len(rows)
 
     def search(self, query: str, k: int = 5) -> list[Hit]:
@@ -1058,9 +1145,14 @@ class SQLiteIndex(Index):
         score in [0, 1] (:func:`fuse_hybrid`; reciprocal-rank-fusion values with ``fusion="rrf"``).
         ``hybrid`` takes ``max(4 * k, 20)`` candidates from each ranking; ``Hit.ranks`` gives a
         hit's position in each ranking whose candidates hold it.
+
+        A query longer than ``max_query_chars`` or with more than ``max_query_words`` distinct words
+        raises ``query.too_long`` before it is embedded or the index is locked; a query vector of
+        another length than the stored vectors raises ``vector.dimension``.
         """
         if k < 1:
             raise ValueError("k must be positive")
+        _check_query(query, self.max_query_chars, self.max_query_words)
         mode = check_mode(mode) if mode else self.mode
         allowed = None if sources is None else list(dict.fromkeys(sources))
         if allowed is not None and not allowed:
@@ -1071,7 +1163,7 @@ class SQLiteIndex(Index):
         # The query is embedded before the lock is taken: an embedding call can take long (a
         # network request) and must not block writes and other searches of this index.
         vector = self._query_vector(query) if mode in ("vector", "hybrid") else None
-        with self._lock:
+        with self._lock, storage_errors():
             ranked: dict[str, list[tuple[int, float]]] = {}
             if mode in ("fts", "hybrid"):
                 ranked["fts"] = [(chunk_id, 0.0) for chunk_id in self._fts_ids(query, candidates, allowed)]
@@ -1099,12 +1191,15 @@ class SQLiteIndex(Index):
             return [self._hit(chunk_id, scores[chunk_id], ranks[chunk_id]) for chunk_id in best]
 
     def _lexical_evidence(self, query: str, chunk_ids: list[int]) -> dict[int, float]:
-        """:func:`lexical_evidence` of ``chunk_ids``; word weights count the chunks of this namespace."""
+        """:func:`lexical_evidence` of ``chunk_ids``; word weights count the chunks of this namespace.
+
+        Runs two full-text queries per word, for at most ``max_query_words`` words.
+        """
         total = len(self)
         weights: dict[str, float] = {}
         found: dict[int, list[str]] = {chunk_id: [] for chunk_id in chunk_ids}
         candidates = json.dumps(chunk_ids)
-        for word in query_words(query):
+        for word in query_words(query)[: self.max_query_words]:
             expression = f'"{word}"*'
             matching = self._connection.execute(
                 "SELECT count(*) FROM index_fts JOIN index_chunks ON index_chunks.id = index_fts.rowid"
@@ -1181,6 +1276,10 @@ class SQLiteIndex(Index):
             )
         # Checked again under the lock: a reindex may have switched the space meanwhile.
         space = self._active_space(self.embeddings.identity())
+        stored = self._connection.execute(
+            "SELECT dimensions FROM index_spaces WHERE namespace = ? AND space = ?", (self.namespace, space)
+        ).fetchone()
+        self._check_dimensions(vector, int(stored[0]))
         self._load_sqlite_vec()
         where, extra = self._source_filter(allowed)
         # A zero vector has no cosine distance (NULL): it is left out instead of breaking the ranking.
@@ -1194,9 +1293,20 @@ class SQLiteIndex(Index):
         )
         return [(int(row[0]), round(1.0 - float(row[1]), 6)) for row in rows]
 
+    @staticmethod
+    def _check_dimensions(vector: Sequence[float], dimensions: int) -> None:
+        if len(vector) != dimensions:
+            raise RetrievalError(
+                "vector.dimension",
+                f"The query vector has {len(vector)} dimensions, the stored vectors {dimensions}",
+            )
+
     def _legacy_vector_ranking(
         self, vector: Sequence[float], limit: int, allowed: list[str] | None
     ) -> list[tuple[int, float]]:
+        row = self._connection.execute("SELECT value FROM index_meta WHERE key = 'dimensions'").fetchone()
+        if row is not None:
+            self._check_dimensions(vector, int(row[0]))
         fetch = (
             limit if allowed is None else min(max(limit * 20, 200), 4096)
         )  # vec0 k-NN cannot filter sources
