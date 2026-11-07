@@ -65,6 +65,11 @@ tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secu
 tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteIndex]  # POSIX permission bits
 tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteMemory]  # POSIX permission bits
 tests.backends.sqlite.test_robustness::test_the_ranking_fixture_gives_the_recorded_sqlite_results[sqlite]  # sqlite-vec cannot be loaded here
+tests.conformance.test_runner::test_wrong_vector_scores_fail[dot-product]  # sqlite-vec cannot be loaded here
+tests.conformance.test_runner::test_wrong_vector_scores_fail[unrounded]  # sqlite-vec cannot be loaded here
+tests.conformance.test_sqlite_conformance::test_a_legacy_copy_keeps_its_content_after_conformance_cases[sqlite-index-vec]  # sqlite-vec cannot be loaded here
+tests.conformance.test_sqlite_conformance::test_the_sqlite_backends_conform[sqlite-index-vec]  # sqlite-vec cannot be loaded here
+tests.conformance.test_sqlite_conformance::test_the_suite_runs_on_a_copy_of_the_legacy_files[sqlite-index-vec]  # sqlite-vec cannot be loaded here
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
 tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging

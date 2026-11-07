@@ -106,6 +106,7 @@ nav:
       - Usage: reference/usage.md
       - Pricing: reference/pricing.md
       - Errors: reference/errors.md
+      - Testing helpers and conformance: reference/testing.md
   - Architecture:
       - Target architecture: architecture/target-architecture.md
       - ADR 0001 single runtime: architecture/decisions/0001-single-runtime.md

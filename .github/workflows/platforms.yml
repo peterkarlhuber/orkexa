@@ -46,6 +46,8 @@ jobs:
         run: python -c "import platform, sys; print(sys.platform, platform.machine(), platform.platform())"
       - run: pytest -v -s tests/test_sandbox_lifecycle.py
       - run: pytest -q -rs --junitxml=junit-offline.xml
+        env:
+          ORKEXA_CONFORMANCE_JOB: offline
       # MUP-ONA A0: the skipped tests of this platform must match its expectation file.
       - run: python scripts/check_skips.py junit-offline.xml "tests/ci/skipped-offline-${{ matrix.os }}.txt"
       - if: failure()

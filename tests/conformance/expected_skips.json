@@ -1,0 +1,81 @@
+{
+  "comment": "MUP-ONA B1 (T-CONF-8): the conformance cases each CI job expects to be skipped, per target; a job may name another job whose expectations it shares. Skipped cases that are not listed, and listed cases that ran, fail the conformance tests.",
+  "jobs": {
+    "test": {
+      "sqlite-index-fts": {
+        "index.default_mode_is_hybrid_with_embeddings": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "index.vector_and_hybrid_search": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "partition.index_failed_write_rolls_back": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "partition.index_reindex": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "partition.index_vector_joins": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.cancel_and_discard": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.chunk_deleted_during_embedding_gets_no_vector": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.chunks_added_during_a_reindex_get_vectors": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.first_vectors_for_a_full_text_index": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.identity_change_needs_a_reindex": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.identity_is_refreshed_before_writing": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.interrupted_reindex_keeps_the_old_space": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.non_finite_document_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.non_finite_query_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.score_is_the_cosine": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.scores_are_rounded_to_6_digits": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.ties_go_to_the_lower_chunk_id": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.wrong_dimension_document_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.wrong_dimension_query_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.zero_document_is_never_a_hit": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.zero_query_finds_nothing": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)"
+      },
+      "sqlite-index-fts-legacy": {
+        "index.default_mode_is_hybrid_with_embeddings": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "index.vector_and_hybrid_search": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "partition.index_failed_write_rolls_back": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "partition.index_reindex": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "partition.index_vector_joins": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.cancel_and_discard": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.chunk_deleted_during_embedding_gets_no_vector": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.chunks_added_during_a_reindex_get_vectors": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.first_vectors_for_a_full_text_index": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.identity_change_needs_a_reindex": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.identity_is_refreshed_before_writing": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "reindex.interrupted_reindex_keeps_the_old_space": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.non_finite_document_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.non_finite_query_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.score_is_the_cosine": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.scores_are_rounded_to_6_digits": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.ties_go_to_the_lower_chunk_id": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.wrong_dimension_document_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.wrong_dimension_query_refused": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.zero_document_is_never_a_hit": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)",
+        "vector.zero_query_finds_nothing": "SQLiteIndex without an embedding model has no vector space (no vectors or reindex capability)"
+      },
+      "sqlite-index-vec": {},
+      "sqlite-index-vec-legacy": {},
+      "sqlite-file-store": {},
+      "sqlite-file-store-legacy": {},
+      "sqlite-memory": {},
+      "sqlite-memory-legacy": {},
+      "local-file-store": {
+        "files.concurrent_adds_lose_nothing": "LocalFileStore is one directory for one process: no partitions, no concurrent writers",
+        "partition.files_hostile_values": "LocalFileStore is one directory for one process: no partitions, no concurrent writers",
+        "partition.files_reads": "LocalFileStore is one directory for one process: no partitions, no concurrent writers",
+        "partition.files_writes_and_deletes": "LocalFileStore is one directory for one process: no partitions, no concurrent writers"
+      },
+      "file-memory": {
+        "memory.concurrent_inserts_lose_nothing": "FileMemory is one directory for one process: no partitions, no concurrent writers",
+        "memory.second_instance_sees_the_files": "FileMemory is one directory for one process: no partitions, no concurrent writers",
+        "partition.memory_hostile_values": "FileMemory is one directory for one process: no partitions, no concurrent writers",
+        "partition.memory_reads": "FileMemory is one directory for one process: no partitions, no concurrent writers",
+        "partition.memory_updates_and_deletes": "FileMemory is one directory for one process: no partitions, no concurrent writers"
+      },
+      "ephemeral-memory": {
+        "memory.concurrent_inserts_lose_nothing": "EphemeralMemory lives in one instance: no partitions, no shared storage",
+        "memory.second_instance_sees_the_files": "EphemeralMemory lives in one instance: no partitions, no shared storage",
+        "partition.memory_hostile_values": "EphemeralMemory lives in one instance: no partitions, no shared storage",
+        "partition.memory_reads": "EphemeralMemory lives in one instance: no partitions, no shared storage",
+        "partition.memory_updates_and_deletes": "EphemeralMemory lives in one instance: no partitions, no shared storage"
+      }
+    },
+    "lowest-versions": "test",
+    "offline": "test"
+  }
+}

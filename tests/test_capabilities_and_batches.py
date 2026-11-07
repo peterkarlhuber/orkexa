@@ -1,5 +1,6 @@
 """Model capabilities of current OpenAI and Gemini families and Anthropic batch items built like
-normal requests (fake clients, no network access)."""
+normal requests (no network access). The SDK clients are ``orkexa.testing.fakes.ScriptedClient``
+(MUP-ONA B1, plan MP-B1 item j: the first test file switched from hand-written doubles)."""
 
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from orkexa import (
     UnknownCapabilityError,
     UnsupportedCapabilityError,
 )
+from orkexa.testing.fakes import ScriptedClient
 
 from .contract.harness import AnthropicHarness
 from .helpers import add
@@ -71,27 +73,21 @@ def test_gemini_effort_beyond_high_and_old_families_are_refused() -> None:
 # ---- Anthropic batches ---------------------------------------------------------------------------
 
 
-class _Batches:
-    def __init__(self) -> None:
-        self.created: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> Any:
-        self.created.append(kwargs)
-        return SimpleNamespace(id="batch-1", processing_status="ended")
-
-    def retrieve(self, batch_id: str) -> Any:  # pragma: no cover - the batch has ended
-        raise AssertionError
-
-    def results(self, batch_id: str) -> list[Any]:
-        return []
-
-
-def _agent(**kwargs: Any) -> tuple[Agent[Any], _Batches, _Batches]:
-    plain, beta = _Batches(), _Batches()
-    client = SimpleNamespace(
-        messages=SimpleNamespace(batches=plain), beta=SimpleNamespace(messages=SimpleNamespace(batches=beta))
+def _agent(**kwargs: Any) -> tuple[Agent[Any], ScriptedClient]:
+    ended = SimpleNamespace(id="batch-1", processing_status="ended")
+    client = ScriptedClient(
+        {
+            "messages.batches.create": [ended],
+            "messages.batches.results": [[]],
+            "beta.messages.batches.create": [ended],
+            "beta.messages.batches.results": [[]],
+        }
     )
-    return Agent(model="anthropic:claude-opus-5-5", client=client, **kwargs), plain, beta
+    return Agent(model="anthropic:claude-opus-5-5", client=client, **kwargs), client
+
+
+def _created(client: ScriptedClient, path: str) -> list[dict[str, Any]]:
+    return [call.kwargs for call in client.calls_to(path)]
 
 
 def _keys(typed_dict: Any) -> set[str]:
@@ -108,11 +104,11 @@ def test_batch_items_are_built_like_normal_requests() -> None:
         tool_choice={"type": "auto", "disable_parallel_tool_use": True},
         request_options={"metadata": {"user_id": "u1"}, "extra_body": {"service_tier": "auto"}},
     )
-    agent, plain, beta = _agent(options=options, effort="high", server_tools=[WEB_SEARCH])
+    agent, client = _agent(options=options, effort="high", server_tools=[WEB_SEARCH])
     normal = agent.adapter.prepare(agent._build_request([]))
     agent._run_batch({"case-0": "Analyze this"}, poll_interval=0, timeout=None)
-    (created,) = plain.created
-    assert beta.created == []
+    (created,) = _created(client, "messages.batches.create")
+    assert _created(client, "beta.messages.batches.create") == []
     params = created["requests"][0]["params"]
     assert set(params) <= _keys(message_create_params.MessageCreateParamsNonStreaming)
     for field in ("tools", "tool_choice", "thinking", "cache_control", "output_config", "metadata", "system"):
@@ -127,10 +123,10 @@ class _Verdict(BaseModel):
 
 
 def test_batch_items_with_a_beta_go_to_the_beta_batches() -> None:
-    agent, plain, beta = _agent(options=AnthropicOptions(thinking_display="updates"), output_format=_Verdict)
+    agent, client = _agent(options=AnthropicOptions(thinking_display="updates"), output_format=_Verdict)
     agent._run_batch({"case-0": "x"}, poll_interval=0, timeout=None)
-    assert plain.created == []
-    (created,) = beta.created
+    assert _created(client, "messages.batches.create") == []
+    (created,) = _created(client, "beta.messages.batches.create")
     assert created["betas"]
     params = created["requests"][0]["params"]
     assert set(params) <= _keys(beta_message_create_params.MessageCreateParamsNonStreaming)
@@ -140,20 +136,22 @@ def test_batch_items_with_a_beta_go_to_the_beta_batches() -> None:
 
 
 def test_batch_rejects_what_a_batch_item_cannot_do() -> None:
-    agent, plain, _ = _agent(tools=[add])
+    agent, client = _agent(tools=[add])
     with pytest.raises(UnsupportedCapabilityError, match="local tools"):
         agent._run_batch({"case-0": "x"}, poll_interval=0, timeout=None)
-    agent, plain, _ = _agent(options=AnthropicOptions(request_options={"extra_headers": {"x": "y"}}))
+    agent, client = _agent(options=AnthropicOptions(request_options={"extra_headers": {"x": "y"}}))
     with pytest.raises(ConfigurationError, match="extra_headers"):
         agent._run_batch({"case-0": "x"}, poll_interval=0, timeout=None)
-    assert plain.created == []
+    assert _created(client, "messages.batches.create") == []
 
 
 def test_evaluator_batch_keeps_the_judge_configuration() -> None:
     from orkexa.evaluation import Criterion, EvaluationCase, Evaluator
 
     harness = AnthropicHarness()
-    batches = _Batches()
+    batches = ScriptedClient(
+        {"create": [SimpleNamespace(id="batch-1", processing_status="ended")], "results": [[]]}
+    )
     client = harness.client(False)
     client.messages.batches = batches
     evaluator = Evaluator(
@@ -163,7 +161,7 @@ def test_evaluator_batch_keeps_the_judge_configuration() -> None:
     )
     with pytest.raises(Exception, match="no result"):
         evaluator.evaluate_many([EvaluationCase(task="Task", output="Result")], batch=True)
-    params = batches.created[0]["requests"][0]["params"]
+    params = batches.calls_to("create")[0].kwargs["requests"][0]["params"]
     assert params["thinking"] == {"type": "adaptive"}
     assert params["cache_control"]["ttl"] == "1h"
     assert params["output_config"]["format"]["type"] == "json_schema"
