@@ -1,4 +1,4 @@
-"""The public Orkexa API as of MUP-ONA B0 (T-API-1), and the import contracts (T-PKG-0).
+"""The public Orkexa API as of MUP-ONA B0, extended by B1 (T-API-1), and the import contracts (T-PKG-0).
 
 The snapshot is the reference for every later compatibility claim (backend move B2, PostgreSQL backend B5):
 a name may be added (extend the snapshot in the same change), but removing or renaming one needs a minor
@@ -147,20 +147,26 @@ PUBLIC = {
         "MAX_QUERY_CHARS",
         "MAX_QUERY_WORDS",
         "PdfLimits",
+        "RETRIEVAL_ERROR_CODES",
         "RETRIEVAL_MODES",
+        "ReindexableIndex",
         "RetrievalError",
         "RetrievalMode",
         "SEARCH_TOOL_NAME",
         "SQLiteIndex",
+        "VectorError",
         "VectorStatus",
         "citations",
+        "fold",
         "fuse_hybrid",
+        "fuse_rrf",
         "lexical_evidence",
         "pdf_pages",
         "pdf_pages_isolated",
         "query_words",
         "retrieval_sources",
         "split_text",
+        "tokenize",
         "word_weight",
     ],
     "orkexa.files": [
@@ -187,6 +193,7 @@ PUBLIC = {
         "KNOWN_PREFIXES",
         "OllamaEmbeddings",
         "QWEN3_QUERY_INSTRUCTION",
+        "validate_vector",
     ],
 }
 """``__all__`` of every public module of the storage and retrieval layer, plus the package itself."""
