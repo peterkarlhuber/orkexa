@@ -1,41 +1,54 @@
-"""Rule engine of the tenant SQL check: is one PostgreSQL statement bound to one tenant? (MUP-ONA B4)
+"""A rule engine for tenant-partitioned SQL: is a PostgreSQL statement bound to one tenant? (MUP-ONA B5)
 
-:func:`check_statement` parses a statement with PostgreSQL's own grammar (``pglast``) and reports every way it may read
-or change rows of another tenant. It knows nothing of where the statement comes from, of Nodestro's tables or of an
-allowlist: the tables that are partitioned by tenant, the name of the partition column and the placeholder style are
-parameters. It imports only ``pglast`` (late, so importing this module needs no parser) and the standard library, so
-it can be taken over unchanged as ``orkexa.testing.sqlcheck`` (MUP-ONA B5); an import-linter contract in
-``pyproject.toml`` keeps it so. Nodestro's source code check (:mod:`nodestro_runtime.tenant_sql_check`) rebuilds the
-statements from Python source and calls this engine for each.
+Install it with ``pip install "orkexa[sqlcheck]"`` (``pglast``, PostgreSQL's own parser).
+:func:`check_statement` parses one or more statements and reports every way they may read or change rows of
+another tenant::
 
-The rules, with ``tenant_id`` standing for ``column`` and a *tenant table* for any name in ``tenant_tables`` (in any
-case):
+    from orkexa.testing.sqlcheck import check_statement
+
+    findings = check_statement(
+        "SELECT body FROM docs WHERE id = %s", tenant_tables={"docs", "notes"}, column="tenant_id"
+    )
+    assert [f.kind for f in findings] == ["leak"]
+
+The engine knows nothing of where a statement comes from or of an application's tables: the tables that are
+partitioned by tenant, the name of the partition column and the placeholder style are parameters, and there is
+no allowlist and no configuration file (a caller that accepts a finding decides that itself). It imports only
+the standard library at module level and ``pglast`` on first use, so importing it needs no parser; a missing
+``pglast`` raises :class:`ImportError` naming the extra when :func:`check_statement` is called. Taken over
+without a change of behavior from ``nodestro_runtime.sqlcheck_rules`` (nodestro-runtime 2ef5b3b, MUP-ONA B4).
+
+The rules, with ``tenant_id`` standing for ``column`` and a *tenant table* for any name in ``tenant_tables``
+(in any case):
 
 - every reference to a tenant table -- in ``FROM``, joins, ``USING``, the target of ``UPDATE``/``DELETE``,
-  subqueries, CTEs and set operations -- is bound by a top-level ``AND`` conjunct of its statement's ``WHERE`` (or of
-  an inner join's ``ON``; a left join's ``ON`` binds its right side, a right join's its left side) of the form
-  ``<ref>.tenant_id = <param>`` (a type cast around either side is allowed), or by ``<ref>.tenant_id =
-  <other>.tenant_id`` with ``<other>`` bound (in the same statement or an enclosing one; a name of the statement's own
-  ``FROM`` hides an outer one). An unqualified ``tenant_id`` binds only when the statement has a single tenant table
-  reference. A CTE named like a tenant table is a leak (it would hide the table);
-- ``<ref>.tenant_id = ANY(<param>)`` may hold several tenants: it binds only with ``allow_any=True``. Without it the
-  reference is a ``leak``, with a second finding that says why;
-- ``INSERT`` into a tenant table must list ``tenant_id`` with a parameter (or the ``tenant_id`` of a reference of its
-  own ``SELECT``) as the value; an upsert that updates must have ``tenant_id`` in its conflict target; ``UPDATE``
-  (and an upsert, except ``tenant_id = excluded.tenant_id``) must not set ``tenant_id``;
+  subqueries, CTEs and set operations -- is bound by a top-level ``AND`` conjunct of its statement's ``WHERE``
+  (or of an inner join's ``ON``; a left join's ``ON`` binds its right side, a right join's its left side) of
+  the form ``<ref>.tenant_id = <param>`` (a type cast around either side is allowed), or by ``<ref>.tenant_id
+  = <other>.tenant_id`` with ``<other>`` bound (in the same statement or an enclosing one; a name of the
+  statement's own ``FROM`` hides an outer one). An unqualified ``tenant_id`` binds only when the statement has
+  a single tenant table reference. A CTE named like a tenant table is a leak (it would hide the table);
+- ``<ref>.tenant_id = ANY(<param>)`` may hold several tenants: it binds only with ``allow_any=True``. Without
+  it the reference is a ``leak``, with a second finding that says why (:data:`ANY_REFUSED`);
+- ``INSERT`` into a tenant table must list ``tenant_id`` with a parameter (or the ``tenant_id`` of a reference
+  of its own ``SELECT``) as the value; an upsert that updates must have ``tenant_id`` in its conflict target;
+  ``UPDATE`` (and an upsert, except ``tenant_id = excluded.tenant_id``) must not set ``tenant_id``;
 - a string constant that names a tenant table and is more than a (qualified) name (``DO $$ ... $$``,
-  ``query_to_xml('...')``), and every statement other than ``SELECT``/``INSERT``/``UPDATE``/``DELETE``/``EXPLAIN``
-  and the schema statements (``CREATE``, ``ALTER``, ``CREATE INDEX``, ``COMMENT``, ``GRANT``, ``DROP``, ``VACUUM``,
-  ``LOCK``, policies) that names a tenant table (``TRUNCATE``, ``COPY``, ``MERGE`` ...) is ``unsupported``;
+  ``query_to_xml('...')``), and every statement other than ``SELECT``/``INSERT``/``UPDATE``/``DELETE``/
+  ``EXPLAIN`` and the schema statements (``CREATE``, ``ALTER``, ``CREATE INDEX``, ``COMMENT``, ``GRANT``,
+  ``DROP``, ``VACUUM``, ``LOCK``, policies) that names a tenant table (``TRUNCATE``, ``COPY``, ``MERGE`` ...)
+  is ``unsupported``;
 - a text the parser rejects is ``unparsed``.
 
-A statement passes only when the list is empty; ``unparsed`` and ``unsupported`` are failures too, never a pass.
+A statement passes only when the list is empty; ``unparsed`` and ``unsupported`` are failures too, never a
+pass.
 
-Blind spots (what the engine cannot see): whether the bound parameter holds the right tenant (the caller passes it);
-SQL inside a string or function body (refused as ``unsupported`` when it names a tenant table, not checked); views,
-functions, triggers and rules on the server that reach a tenant table under another name; a tenant table reached by
-a name not in ``tenant_tables`` (a schema-qualified name counts by its last part; a ``search_path`` that resolves
-an unlisted name to a tenant table does not); and a placeholder bound to an expression that is not one tenant.
+Blind spots (what the engine cannot see): whether the bound parameter holds the right tenant (the caller
+passes it); SQL inside a string or function body (refused as ``unsupported`` when it names a tenant table, not
+checked); views, functions, triggers and rules on the server that reach a tenant table under another name; a
+tenant table reached by a name not in ``tenant_tables`` (a schema-qualified name counts by its last part; a
+``search_path`` that resolves an unlisted name to a tenant table does not); and a placeholder bound to an
+expression that is not one tenant.
 """
 
 from __future__ import annotations
@@ -46,12 +59,21 @@ import importlib
 import re
 from typing import Any, Literal
 
-__all__ = ["ANY_REFUSED", "KINDS", "PLACEHOLDERS", "Finding", "check_statement", "to_postgres_params"]
+__all__ = [
+    "ANY_REFUSED",
+    "KINDS",
+    "MISSING_PGLAST",
+    "PLACEHOLDERS",
+    "Finding",
+    "check_statement",
+    "to_postgres_params",
+]
 
-#: The kinds of finding: a reference that may reach another tenant's rows, a text the parser rejects, a statement the
-#: rules cannot decide.
+#: The kinds of finding: a reference that may reach another tenant's rows, a text the parser rejects, a
+#: statement the rules cannot decide.
 KINDS = frozenset({"leak", "unparsed", "unsupported"})
-#: Placeholder styles: psycopg's (``%s``, ``%(name)s``, ``%b``, ``%t``; ``%%`` is ``%``) or PostgreSQL's own (``$1``).
+#: Placeholder styles: psycopg's (``%s``, ``%(name)s``, ``%b``, ``%t``; ``%%`` is ``%``) or PostgreSQL's own
+#: (``$1``).
 PLACEHOLDERS = frozenset({"psycopg", "postgres"})
 
 #: Statements that change the schema, not rows: allowed on tenant tables (migrations, indexes, grants).
@@ -82,8 +104,11 @@ ANY_REFUSED = "an array of tenant ids may hold several tenants"
 class Finding:
     """One reason why a statement may read or change another tenant's rows, or cannot be decided.
 
-    ``position`` is the offset (in characters, from 0) in the text as given of the table reference or statement the
-    finding is about, as far as the parser tells it (best effort: a hint for the reader, not part of the rule)."""
+    ``kind`` is one of :data:`KINDS`. ``position`` is the offset (in characters, from 0) in the text as given
+    of the table reference or statement the finding is about, as far as the parser tells it (best effort: a
+    hint for the reader, not part of the rule). ``message`` says what is wrong, naming the table and the
+    column.
+    """
 
     kind: Literal["leak", "unparsed", "unsupported"]
     position: int
@@ -93,14 +118,26 @@ class Finding:
         return f"[{self.kind}] at {self.position}: {self.message}"
 
 
+#: The message of the :class:`ImportError` raised on first use without ``pglast``.
+MISSING_PGLAST = 'The SQL rule engine needs pglast: pip install "orkexa[sqlcheck]"'
+
+
 def _pglast(module: str) -> Any:
-    """pglast (or one of its modules), untyped: its node attributes are all optional in its stubs."""
-    return importlib.import_module(f"pglast.{module}" if module else "pglast")
+    """pglast (or one of its modules), untyped: its node attributes are all optional in its stubs.
+
+    Without pglast this raises :class:`ImportError` naming the ``sqlcheck`` extra."""
+    try:
+        package = importlib.import_module("pglast")
+    except ModuleNotFoundError as exc:
+        if exc.name != "pglast":
+            raise
+        raise ImportError(MISSING_PGLAST, name="pglast") from exc
+    return importlib.import_module(f"pglast.{module}") if module else package
 
 
 def _to_postgres(text: str) -> tuple[str, list[int]]:
-    """psycopg's placeholders as ``$n``, with the offset in ``text`` of every character of the result (and of its
-    end)."""
+    """psycopg's placeholders as ``$n``, with the offset in ``text`` of every character of the result (and of
+    its end)."""
     out: list[str] = []
     origin: list[int] = []
     names: dict[str, int] = {}
@@ -222,7 +259,8 @@ class _Checker:
         self.tables = tables
         #: The partition column (``tenant_id``).
         self.column = column
-        #: Whether ``tenant_id = ANY(<param>)`` binds a reference (off by default: the array may hold several tenants).
+        #: Whether ``tenant_id = ANY(<param>)`` binds a reference (off by default: the array may hold several
+        #: tenants).
         self.allow_any = allow_any
         #: Where the statement starts (for problems without a location of their own).
         self.start = start
@@ -244,9 +282,11 @@ class _Checker:
             return None
         return tuple(str(n) for n in names[:-1])
 
-    def _from_refs(self, items: Any, ctes: set[str]) -> tuple[list[_Ref], list[tuple[Any, list[_Ref]]], set[str]]:
-        """Tenant table references of a FROM list, the join conditions that bind them (``quals``, refs) and every name
-        the FROM list defines (tenant table or not: an inner name hides an outer one)."""
+    def _from_refs(
+        self, items: Any, ctes: set[str]
+    ) -> tuple[list[_Ref], list[tuple[Any, list[_Ref]]], set[str]]:
+        """Tenant table references of a FROM list, the join conditions that bind them (``quals``, refs) and
+        every name the FROM list defines (tenant table or not: an inner name hides an outer one)."""
         pg = _pglast("ast")
         JoinType = _pglast("enums").JoinType
 
@@ -263,7 +303,11 @@ class _Checker:
                     names.add(item.relname)  # an alias hides the table's own name
                 table = item.relname.lower()
                 if table in self.tables and not (item.schemaname is None and item.relname in ctes):
-                    ref = _Ref(item.alias.aliasname if item.alias else item.relname, table, _location(item, self.start))
+                    ref = _Ref(
+                        item.alias.aliasname if item.alias else item.relname,
+                        table,
+                        _location(item, self.start),
+                    )
                     refs.append(ref)
                     return [ref]
                 return []
@@ -290,9 +334,9 @@ class _Checker:
         outer: list[tuple[set[str], list[_Ref]]],
         names: set[str],
     ) -> None:
-        """Mark refs bound by ``tenant_id = param`` (``= ANY(param)`` only with ``allow_any``) or by equality with a
-        bound ref. A qualifier means the nearest name: this statement's own (which hides an outer one of the same
-        name), then the enclosing statements' from the inside out."""
+        """Mark refs bound by ``tenant_id = param`` (``= ANY(param)`` only with ``allow_any``) or by equality
+        with a bound ref. A qualifier means the nearest name: this statement's own (which hides an outer one
+        of the same name), then the enclosing statements' from the inside out."""
         pg = _pglast("ast")
         A_Expr_Kind = _pglast("enums").A_Expr_Kind
 
@@ -317,7 +361,11 @@ class _Checker:
             changed = False
             for expr, applies in pools:
                 for conjunct in _conjuncts(expr):
-                    if not isinstance(conjunct, pg.A_Expr) or conjunct.lexpr is None or conjunct.rexpr is None:
+                    if (
+                        not isinstance(conjunct, pg.A_Expr)
+                        or conjunct.lexpr is None
+                        or conjunct.rexpr is None
+                    ):
                         continue
                     if [getattr(n, "sval", None) for n in conjunct.name] != ["="]:
                         continue
@@ -343,14 +391,19 @@ class _Checker:
                             ref.bound = changed = True
                             continue
                         other_qualifier = self._partition_column(other)
-                        if conjunct.kind != A_Expr_Kind.AEXPR_OP or other_qualifier is None or not other_qualifier:
+                        if (
+                            conjunct.kind != A_Expr_Kind.AEXPR_OP
+                            or other_qualifier is None
+                            or not other_qualifier
+                        ):
                             continue
                         if partner_binds(other_qualifier[-1], ref):
                             ref.bound = changed = True
 
     def _check_insert(self, node: Any, table: str) -> None:
-        """``tenant_id`` is listed and its value is a parameter (or a bound ``tenant_id``); an upsert's conflict target
-        includes ``tenant_id``, so the update it turns into cannot hit another tenant's row."""
+        """``tenant_id`` is listed and its value is a parameter (or a bound ``tenant_id``); an upsert's
+        conflict target includes ``tenant_id``, so the update it turns into cannot hit another tenant's
+        row."""
         pg = _pglast("ast")
         OnConflictAction = _pglast("enums").OnConflictAction
 
@@ -375,9 +428,12 @@ class _Checker:
         else:
             values = [None]
         if not all(
-            value is not None and (_is_param(value) or self._partition_column(value) is not None) for value in values
+            value is not None and (_is_param(value) or self._partition_column(value) is not None)
+            for value in values
         ):
-            self._problem(location, f"the {column} written into {table} is not a parameter or a bound {column}")
+            self._problem(
+                location, f"the {column} written into {table} is not a parameter or a bound {column}"
+            )
         clause = node.onConflictClause
         if clause is not None and clause.action == OnConflictAction.ONCONFLICT_UPDATE:
             infer = clause.infer
@@ -385,7 +441,8 @@ class _Checker:
             if column not in target_columns:
                 self._problem(
                     _location(clause, location),
-                    f"the conflict target of an upsert into {table} lacks {column}: it may update another tenant's row",
+                    f"the conflict target of an upsert into {table} lacks {column}: "
+                    "it may update another tenant's row",
                 )
             for item in clause.targetList or ():
                 if item.name == column and not (
@@ -406,7 +463,9 @@ class _Checker:
             if with_clause is not None:
                 for cte in with_clause.ctes or ():
                     if cte.ctename in self.tables:
-                        self._problem(_location(cte, self.start), f"CTE named like the tenant table {cte.ctename}")
+                        self._problem(
+                            _location(cte, self.start), f"CTE named like the tenant table {cte.ctename}"
+                        )
                     ctes = ctes | {cte.ctename}
         if isinstance(node, pg.SelectStmt):
             own, quals, names = self._from_refs(node.fromClause, ctes)
@@ -421,8 +480,8 @@ class _Checker:
                     if item.name == self.column:
                         self._problem(
                             _location(item, self.start),
-                            f"the UPDATE of {node.relation.relname} sets {self.column}: it moves a row to another "
-                            "tenant",
+                            f"the UPDATE of {node.relation.relname} sets {self.column}: "
+                            "it moves a row to another tenant",
                         )
                         break
         elif isinstance(node, pg.InsertStmt):
@@ -451,11 +510,27 @@ def check_statement(
     placeholder: str = "psycopg",
     allow_any: bool = False,
 ) -> list[Finding]:
-    """Why ``sql`` (one or more PostgreSQL statements) may read or change rows of another tenant, or cannot be decided;
-    empty when every reference to a table of ``tenant_tables`` is bound to one tenant by ``column`` (see the module's
-    rules). ``placeholder``: ``"psycopg"`` (``%s``, ``%(name)s``) or ``"postgres"`` (``$1``). ``allow_any``: ``column =
-    ANY(<param>)`` binds too (off by default: the array may hold several tenants). Never raises for a text the parser
-    rejects: that is an ``unparsed`` finding."""
+    """Why ``sql`` (one or more PostgreSQL statements) may read or change rows of another tenant.
+
+    Returns one :class:`Finding` per problem; the list is empty when every reference to a table of
+    ``tenant_tables`` is bound to one tenant by ``column`` (see the module's rules). Table names match in any
+    case.
+
+    Args:
+        sql: The statement text, with placeholders in the ``placeholder`` style.
+        tenant_tables: The names of the tables that are partitioned by tenant.
+        column: The partition column, an unquoted lower-case PostgreSQL name.
+        placeholder: ``"psycopg"`` (``%s``, ``%(name)s``, ``%b``, ``%t``; ``%%`` is ``%``) or ``"postgres"``
+            (``$1``).
+        allow_any: Whether ``column = ANY(<param>)`` binds too (off by default: the array may hold several
+            tenants).
+
+    Raises:
+        ValueError: ``placeholder`` or ``column`` is invalid.
+        ImportError: pglast is not installed (``pip install "orkexa[sqlcheck]"``).
+
+    Never raises for a text the parser rejects: that is an ``unparsed`` finding.
+    """
     parser = _pglast("parser")
 
     if placeholder not in PLACEHOLDERS:
@@ -481,7 +556,8 @@ def check_statement(
         stmt = raw.stmt
         start = raw.stmt_location or 0
         kind = type(stmt).__name__
-        # SQL in a string (a DO block, a function body, query_to_xml('...')) is run by the server, not checked here.
+        # SQL in a string (a DO block, a function body, query_to_xml('...')) is run by the server, not checked
+        # here.
         for node in _walk(stmt):
             value = getattr(node, "sval", None) if type(node).__name__ == "String" else None
             if isinstance(value, str) and _words(value) & tables and not _IDENTIFIER.fullmatch(value):
@@ -503,6 +579,10 @@ def check_statement(
         if not touched or kind in _SCHEMA_STATEMENTS:
             continue
         findings.append(
-            Finding("unsupported", position(start), f"{kind} on {', '.join(touched)} is not supported by the check")
+            Finding(
+                "unsupported",
+                position(start),
+                f"{kind} on {', '.join(touched)} is not supported by the check",
+            )
         )
     return findings
