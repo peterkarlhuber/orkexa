@@ -1,20 +1,24 @@
-"""The statement catalog of the generic PostgreSQL part, its executor and the partition guard (MUP-ONA B4).
+"""The statement catalog of the PostgreSQL backend, its executor and the partition guard.
 
-Every SQL text of the index, the file store and the memory is a named :class:`Statement` of :data:`CATALOG`: its
-template names the tables as ``{chunks}``, ``{vectors}``, ``{spaces}``, ``{files}`` and ``{memory}`` and binds every
-value as a named psycopg placeholder (``%(tenant_id)s``); variants (with or without a source filter, ranked by
-pgvector or in Python) are separate entries. A template is rendered with ``psycopg.sql.Identifier(prefix + table)``
-for a prefix that matches :data:`PREFIX` (``nodestro_`` for Nodestro's tables), never with a value in the text: values
-are only bound (no ``sql.Literal``).
+Every SQL text of the index, the file store and the memory is a named :class:`Statement` of :data:`CATALOG`:
+its template names the tables as ``{chunks}``, ``{vectors}``, ``{spaces}``, ``{files}`` and ``{memory}`` and
+binds every value as a named psycopg placeholder (``%(tenant_id)s``); variants (with or without a source
+filter, ranked by pgvector or in Python) are separate entries. A template is rendered with
+``psycopg.sql.Identifier(prefix + table)`` for the prefix of a :class:`PostgresLayout` (it matches
+:data:`PREFIX`), never with a value in the text: values are only bound (no ``sql.Literal``). Column names are
+fixed; only the table prefix is configurable.
 
-:class:`Executor` is the only place that runs a statement (``tests/test_sql_catalog.py`` checks that no other module
-of the package calls ``execute``). It runs catalog names only, with exactly the parameters the entry lists, and its
-**partition guard** refuses a ``partitioned`` statement unless ``tenant_id`` is bound to a non-empty string of at most
-:data:`MAX_TENANT_CHARS` characters that is the executor's own tenant: :class:`~orkexa.retrieval.RetrievalError`
-``partition.missing``, raised before any database access.
+:class:`Executor` is the only place that runs a statement (``tests/backends/postgres/test_catalog.py`` checks
+that no other module of the package calls ``execute``). It runs catalog names only, with exactly the
+parameters the entry lists, and its **partition guard** refuses a ``partitioned`` statement unless
+``tenant_id`` is bound to a non-empty string of at most :data:`MAX_TENANT_CHARS` characters that is the
+executor's own tenant: :class:`~orkexa.retrieval.RetrievalError` ``partition.missing``, raised before any
+database access.
 
-The tenant SQL check proves every rendered entry bound to one tenant (``tests/test_sql_catalog.py``, T-CAT-1/2) and
-that no statement of the source before the catalog was lost (``tests/test_sql_parity.py``, T-PAR-1).
+The rule engine :mod:`orkexa.testing.sqlcheck` proves every rendered entry bound to one tenant, and a mutation
+probe proves that it would see a lost tenant predicate (``tests/backends/postgres/test_catalog.py``, MUP-ONA
+T-CAT-1/2). The catalog came from nodestro-runtime 76f9cb2 (MUP-ONA B4) unchanged; T-PAR-2 compares it,
+rendered with ``nodestro_``, with Nodestro's.
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from orkexa.retrieval import RetrievalError
 
-from .connection import Connection, ConnectionSource, TransactionMode
+from .connection import Connection, ConnectionSource, TransactionMode, psycopg_sql
 
 if TYPE_CHECKING:
     from psycopg import sql
@@ -41,6 +45,7 @@ __all__ = [
     "PREFIX",
     "TABLES",
     "Executor",
+    "PostgresLayout",
     "Result",
     "Statement",
     "check_namespace",
@@ -50,7 +55,8 @@ __all__ = [
     "render",
 ]
 
-#: A table prefix: a lower-case ASCII letter, then up to 30 lower-case letters, digits or ``_``, ending in ``_``.
+#: A table prefix: a lower-case ASCII letter, then up to 30 lower-case letters, digits or ``_``, ending in
+#: ``_``.
 PREFIX = re.compile(r"^[a-z][a-z0-9_]{0,30}_$")
 #: The table of each placeholder of a template (the table's name is the prefix plus this).
 TABLES: Mapping[str, str] = {
@@ -72,15 +78,16 @@ _NAME = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+")
 _PARAM = re.compile(r"%\((\w+)\)s")
 _POSITIONAL = re.compile(r"%[sbt]")
 
-#: Vectors a search may use: no NaN or infinity (stored before vectors were checked; pgvector refuses to cast them),
-#: and not all zeros (no direction, no cosine). Braces are doubled for ``psycopg.sql.SQL.format``.
+#: Vectors a search may use: no NaN or infinity (stored before vectors were checked; pgvector refuses to cast
+#: them), and not all zeros (no direction, no cosine). Braces are doubled for ``psycopg.sql.SQL.format``.
 _USABLE = (
     "NOT (v.embedding && '{{NaN,Infinity,-Infinity}}'::real[])"
     " AND v.embedding <> array_fill(0::real, ARRAY[cardinality(v.embedding)])"
 )
 #: Chunks of a namespace without a vector in a space.
 _MISSING = (
-    "SELECT c.id, c.text FROM {chunks} c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND NOT"
+    "SELECT c.id, c.text FROM {chunks} c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s"
+    " AND NOT"
     " EXISTS (SELECT 1 FROM {vectors} v WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s"
     " AND v.chunk_id = c.id)"
 )
@@ -97,7 +104,8 @@ _CANDIDATES = (
     " AND c.namespace = %(namespace)s"
 )
 _FTS = (
-    "SELECT id, source, title, file_id, metadata::text, text FROM {chunks}, to_tsquery('simple', %(query)s) AS query"
+    "SELECT id, source, title, file_id, metadata::text, text FROM {chunks}, to_tsquery('simple', %(query)s)"
+    " AS query"
     " WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND search @@ query"
 )
 _SPACE_ROW = (
@@ -111,9 +119,9 @@ class Statement:
     """One entry of the catalog: a SQL template with named parameters.
 
     ``params`` lists every placeholder of the template (each bound by name, so a parameter used twice is bound
-    once); ``kind`` says whether it reads, writes or deletes; ``partitioned`` whether it touches tenant rows (then
-    ``tenant_id`` is one of its parameters and the partition guard checks it). ``rows``: whether it returns rows
-    (every read, and a write with ``RETURNING``)."""
+    once); ``kind`` says whether it reads, writes or deletes; ``partitioned`` whether it touches tenant rows
+    (then ``tenant_id`` is one of its parameters and the partition guard checks it). ``rows``: whether it
+    returns rows (every read, and a write with ``RETURNING``)."""
 
     name: str
     template: str
@@ -128,12 +136,15 @@ class Statement:
         used = _PARAM.findall(self.template)
         if set(used) != set(self.params) or len(set(self.params)) != len(self.params):
             raise ValueError(
-                f"Statement {self.name!r}: the parameters {self.params} are not the template's {sorted(set(used))}"
+                f"Statement {self.name!r}: the parameters {self.params} are not the template's"
+                f" {sorted(set(used))}"
             )
         if _POSITIONAL.search(_PARAM.sub("", self.template.replace("%%", ""))):
             raise ValueError(f"Statement {self.name!r}: positional placeholders are not allowed")
         if self.partitioned != (PARTITION in self.params):
-            raise ValueError(f"Statement {self.name!r}: {PARTITION} is a parameter exactly when it is partitioned")
+            raise ValueError(
+                f"Statement {self.name!r}: {PARTITION} is a parameter exactly when it is partitioned"
+            )
         if not set(self.tables) <= set(TABLES):
             raise ValueError(f"Statement {self.name!r}: unknown table placeholder in {sorted(self.tables)}")
         if self.kind == "read" and not self.rows:
@@ -146,8 +157,8 @@ class Statement:
 
     @property
     def mode(self) -> TransactionMode:
-        """How the statement runs on its own (outside :meth:`Executor.transaction`): a read as ``read``, a write that
-        returns rows in a ``transaction``, any other write as ``write``."""
+        """How the statement runs on its own (outside :meth:`Executor.transaction`): a read as ``read``, a
+        write that returns rows in a ``transaction``, any other write as ``write``."""
         if self.kind == "read":
             return "read"
         return "transaction" if self.rows else "write"
@@ -158,7 +169,7 @@ def _p(*names: str) -> tuple[str, ...]:
 
 
 _ENTRIES = (
-    # ---- file store (files) -------------------------------------------------------------------------------------
+    # ---- file store (files) --------------------------------------------------------------------------------
     Statement(
         "files_update_entry",
         "UPDATE {files} SET entry = %(entry)s::jsonb"
@@ -176,13 +187,15 @@ _ENTRIES = (
     ),
     Statement(
         "files_entry",
-        "SELECT entry::text FROM {files} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id = %(id)s",
+        "SELECT entry::text FROM {files} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND"
+        " id = %(id)s",
         _p("id"),
         "read",
     ),
     Statement(
         "files_data",
-        "SELECT data FROM {files} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id = %(id)s",
+        "SELECT data FROM {files} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id ="
+        " %(id)s",
         _p("id"),
         "read",
     ),
@@ -198,7 +211,7 @@ _ENTRIES = (
         _p("id"),
         "delete",
     ),
-    # ---- index: chunks ------------------------------------------------------------------------------------------
+    # ---- index: chunks -------------------------------------------------------------------------------------
     Statement(
         "chunks_count",
         "SELECT count(*) FROM {chunks} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s",
@@ -215,7 +228,8 @@ _ENTRIES = (
     Statement(
         "chunks_insert",
         "INSERT INTO {chunks} (tenant_id, namespace, source, title, file_id, metadata, text, search_text)"
-        " VALUES (%(tenant_id)s, %(namespace)s, %(source)s, %(title)s, %(file_id)s, %(metadata)s::jsonb, %(text)s,"
+        " VALUES (%(tenant_id)s, %(namespace)s, %(source)s, %(title)s, %(file_id)s, %(metadata)s::jsonb,"
+        " %(text)s,"
         " %(search_text)s) RETURNING id",
         _p("source", "title", "file_id", "metadata", "text", "search_text"),
         "write",
@@ -223,13 +237,15 @@ _ENTRIES = (
     ),
     Statement(
         "chunks_delete_source",
-        "DELETE FROM {chunks} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND source = %(source)s",
+        "DELETE FROM {chunks} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND source ="
+        " %(source)s",
         _p("source"),
         "delete",
     ),
     Statement(
         "chunks_max_id",
-        "SELECT coalesce(max(id), 0) FROM {chunks} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s",
+        "SELECT coalesce(max(id), 0) FROM {chunks} WHERE tenant_id = %(tenant_id)s AND namespace ="
+        " %(namespace)s",
         _p(),
         "read",
     ),
@@ -242,23 +258,26 @@ _ENTRIES = (
     Statement("chunks_missing", _MISSING + " ORDER BY c.id LIMIT %(limit)s", _p("space", "limit"), "read"),
     Statement(
         "chunks_count_missing",
-        "SELECT count(*) FROM {chunks} c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND NOT"
+        "SELECT count(*) FROM {chunks} c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s"
+        " AND NOT"
         " EXISTS (SELECT 1 FROM {vectors} v WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s"
         " AND v.chunk_id = c.id)",
         _p("space"),
         "read",
     ),
-    # ---- index: vector spaces -----------------------------------------------------------------------------------
+    # ---- index: vector spaces ------------------------------------------------------------------------------
     Statement(
         "spaces_lock_shared",
-        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY space"
+        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY"
+        " space"
         " FOR SHARE",
         _p(),
         "read",
     ),
     Statement(
         "spaces_lock_exclusive",
-        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY space"
+        "SELECT space FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY"
+        " space"
         " FOR UPDATE",
         _p(),
         "read",
@@ -291,13 +310,15 @@ _ENTRIES = (
     ),
     Statement(
         "spaces_delete",
-        "DELETE FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space = %(space)s",
+        "DELETE FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space ="
+        " %(space)s",
         _p("space"),
         "delete",
     ),
     Statement(
         "spaces_delete_others",
-        "DELETE FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space <> %(space)s",
+        "DELETE FROM {spaces} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space <>"
+        " %(space)s",
         _p("space"),
         "delete",
     ),
@@ -307,7 +328,7 @@ _ENTRIES = (
         _p(),
         "delete",
     ),
-    # ---- index: vectors -----------------------------------------------------------------------------------------
+    # ---- index: vectors ------------------------------------------------------------------------------------
     Statement(
         "vectors_insert",
         "INSERT INTO {vectors} (tenant_id, namespace, space, chunk_id, embedding)"
@@ -339,7 +360,7 @@ _ENTRIES = (
         "read",
     ),
     Statement("vectors_pgvector", "SELECT to_regtype('vector') IS NOT NULL", (), "read", partitioned=False),
-    # ---- index: searches ----------------------------------------------------------------------------------------
+    # ---- index: searches -----------------------------------------------------------------------------------
     Statement(
         "search_fts",
         _FTS + " ORDER BY ts_rank(search, query, 1) DESC, id LIMIT %(limit)s",
@@ -360,7 +381,10 @@ _ENTRIES = (
     ),
     Statement(
         "search_pgvector_sources",
-        _PGVECTOR + " AND c.source = ANY(%(sources)s) AND " + _USABLE + " ORDER BY score DESC, c.id LIMIT %(limit)s",
+        _PGVECTOR
+        + " AND c.source = ANY(%(sources)s) AND "
+        + _USABLE
+        + " ORDER BY score DESC, c.id LIMIT %(limit)s",
         _p("vector", "space", "sources", "limit"),
         "read",
     ),
@@ -380,8 +404,10 @@ _ENTRIES = (
     ),
     Statement(
         "search_word_counts",
-        "SELECT t.w, (SELECT count(*) FROM {chunks} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s"
-        " AND search @@ to_tsquery('simple', t.q)) FROM unnest(%(words)s::text[], %(queries)s::text[]) AS t(w, q)",
+        "SELECT t.w, (SELECT count(*) FROM {chunks} WHERE tenant_id = %(tenant_id)s AND namespace ="
+        " %(namespace)s"
+        " AND search @@ to_tsquery('simple', t.q)) FROM unnest(%(words)s::text[], %(queries)s::text[]) AS"
+        " t(w, q)",
         _p("words", "queries"),
         "read",
     ),
@@ -393,7 +419,7 @@ _ENTRIES = (
         _p("words", "queries", "ids"),
         "read",
     ),
-    # ---- memory (memory) ----------------------------------------------------------------------------------------
+    # ---- memory (memory) -----------------------------------------------------------------------------------
     Statement(
         "memory_read",
         "SELECT content FROM {memory} WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s"
@@ -450,7 +476,7 @@ def _catalog(entries: tuple[Statement, ...]) -> Mapping[str, Statement]:
     return found
 
 
-#: Every statement of the generic part, by name.
+#: Every statement of the backend, by name.
 CATALOG: Mapping[str, Statement] = _catalog(_ENTRIES)
 
 
@@ -459,6 +485,44 @@ def check_prefix(prefix: object) -> str:
     if not isinstance(prefix, str) or not PREFIX.fullmatch(prefix):
         raise ValueError(f"Invalid table prefix {prefix!r}: it must match {PREFIX.pattern}")
     return prefix
+
+
+@dataclass(frozen=True)
+class PostgresLayout:
+    """Where the backend's tables are: the prefix of their names in the current schema (``search_path``).
+
+    The five tables are ``<prefix>files``, ``<prefix>chunks``, ``<prefix>memory_files``,
+    ``<prefix>vector_spaces`` and ``<prefix>chunk_vectors`` (:data:`TABLES`), and :func:`migrate
+    <orkexa.backends.postgres.migrate>` records its schema version in ``<prefix>orkexa_schema``. Column names
+    are fixed. Several products (or several stores of one product) can share a database with different
+    prefixes; Nodestro's tables are ``PostgresLayout("nodestro_")``.
+
+    Args:
+        prefix: A lower-case ASCII letter, then up to 30 lower-case letters, digits or ``_``, ending in ``_``
+            (:data:`PREFIX`); at most 32 characters.
+
+    Raises:
+        ValueError: ``prefix`` does not match :data:`PREFIX`.
+    """
+
+    prefix: str = "orkexa_"
+
+    def __post_init__(self) -> None:
+        check_prefix(self.prefix)
+
+    def table(self, key: str) -> str:
+        """The name of the table of a template placeholder (``"chunks"`` -> ``"<prefix>chunks"``)."""
+        return self.prefix + TABLES[key]
+
+    @property
+    def tables(self) -> dict[str, str]:
+        """Every table of the layout by its template placeholder (:data:`TABLES`)."""
+        return {key: self.prefix + name for key, name in TABLES.items()}
+
+    @property
+    def version_table(self) -> str:
+        """The table in which :func:`~orkexa.backends.postgres.migrate` records the schema version."""
+        return self.prefix + "orkexa_schema"
 
 
 def check_tenant(tenant_id: object) -> str:
@@ -482,22 +546,24 @@ def _usable_tenant(value: object) -> bool:
 
 @lru_cache(maxsize=512)
 def _rendered(name: str, prefix: str) -> sql.Composed:
-    from psycopg import sql as psql
-
+    psql = psycopg_sql()
     entry = CATALOG[name]
     tables = {key: psql.Identifier(prefix + TABLES[key]) for key in entry.tables}
-    return psql.SQL(entry.template).format(**tables)
+    composed: sql.Composed = psql.SQL(entry.template).format(**tables)
+    return composed
 
 
 def render(name: str, prefix: str) -> sql.Composed:
-    """The statement ``name`` for the tables of ``prefix``: ``psycopg.sql`` with the table names as identifiers."""
+    """The statement ``name`` for the tables of ``prefix``: ``psycopg.sql`` with the table names as
+    identifiers."""
     if name not in CATALOG:
         raise ValueError(f"Unknown statement {name!r}")
     return _rendered(name, check_prefix(prefix))
 
 
 def jsonb_text(text: str) -> str:
-    """JSON text for a ``jsonb`` column: jsonb cannot hold U+0000, so an escaped one (``\\u0000``) becomes U+FFFD."""
+    """JSON text for a ``jsonb`` column: jsonb cannot hold U+0000, so an escaped one (``\\u0000``) becomes
+    U+FFFD."""
     if "\\u0000" not in text:
         return text
     import json
@@ -516,7 +582,8 @@ def jsonb_text(text: str) -> str:
 
 @dataclass(frozen=True)
 class Result:
-    """What a statement gave: its rows (a statement that returns rows) and how many rows it returned or changed."""
+    """What a statement gave: its rows (a statement that returns rows) and how many rows it returned or
+    changed."""
 
     rows: list[tuple[Any, ...]]
     rowcount: int
@@ -525,12 +592,14 @@ class Result:
 class Executor:
     """Runs the catalog's statements for one tenant and one table prefix on a :class:`ConnectionSource`.
 
-    :meth:`execute` runs one statement on its own (in the mode of :attr:`Statement.mode`), or on the connection of an
-    open :meth:`transaction` of the calling thread. Nothing else of the generic part runs SQL."""
+    :meth:`execute` runs one statement on its own (in the mode of :attr:`Statement.mode`), or on the
+    connection of an open :meth:`transaction` of the calling thread. Nothing else of the backend runs SQL."""
 
-    def __init__(self, source: ConnectionSource, *, prefix: str, tenant_id: str) -> None:
+    def __init__(self, source: ConnectionSource, *, layout: PostgresLayout, tenant_id: str) -> None:
+        if not isinstance(layout, PostgresLayout):
+            raise TypeError(f"layout must be a PostgresLayout, not {type(layout).__name__}")
         self.source = source
-        self.prefix = check_prefix(prefix)
+        self.prefix = check_prefix(layout.prefix)
         self.tenant_id = check_tenant(tenant_id)
         self._local = threading.local()
 
@@ -542,7 +611,8 @@ class Executor:
             )
 
     def execute(self, name: str, params: Mapping[str, Any]) -> Result:
-        """Run the catalog statement ``name`` with ``params`` (exactly the entry's parameters, bound by name)."""
+        """Run the catalog statement ``name`` with ``params`` (exactly the entry's parameters, bound by
+        name)."""
         entry = CATALOG.get(name)
         if entry is None:
             raise ValueError(f"Unknown statement {name!r}")

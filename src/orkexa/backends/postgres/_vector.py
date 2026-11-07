@@ -1,7 +1,8 @@
-"""Vector helpers of the generic PostgreSQL index: embedding batches and ranking in Python (MUP-ONA B4).
+"""Vector helpers of the PostgreSQL index: embedding batches and ranking in Python.
 
-Without pgvector the index ranks the stored vectors itself (:func:`cosine`), with the same result as pgvector's
-``<=>``. Whether the database has pgvector is detected by the index (``PostgresIndex.pgvector``/``refresh``).
+Without pgvector the index ranks the stored vectors itself (:func:`cosine`), with the same result as
+pgvector's ``<=>``. Whether the database has pgvector is detected by the index
+(``PostgresIndex.pgvector``/``refresh``).
 """
 
 from __future__ import annotations
@@ -17,15 +18,17 @@ __all__ = ["cosine", "embed_batch", "pgvector_literal", "refresh_identity"]
 
 
 def refresh_identity(model: EmbeddingModel) -> None:
-    """``model.refresh_identity()``; a model that only has the methods of the protocol (no ``refresh_identity``, e.g.
-    a test double that does not subclass :class:`~orkexa.embeddings.EmbeddingModel`) caches nothing to forget."""
+    """``model.refresh_identity()``; a model that only has the methods of the protocol (no
+    ``refresh_identity``, e.g. a test double that does not subclass
+    :class:`~orkexa.embeddings.EmbeddingModel`) caches nothing to forget."""
     refresh: Callable[[], Any] | None = getattr(model, "refresh_identity", None)
     if refresh is not None:
         refresh()
 
 
 def cosine(query: list[float], query_norm: float, stored: list[float]) -> float:
-    """The cosine similarity of a query vector (with its length) and a stored vector (neither is all zeros)."""
+    """The cosine similarity of a query vector (with its length) and a stored vector (neither is all
+    zeros)."""
     dot = math.fsum(a * b for a, b in zip(query, stored, strict=True))
     return dot / (query_norm * math.sqrt(math.fsum(x * x for x in stored)))
 

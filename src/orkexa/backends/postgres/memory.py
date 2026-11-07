@@ -1,4 +1,4 @@
-"""An Orkexa memory (``/memories``) of one tenant and namespace on PostgreSQL (table ``<prefix>memory_files``)."""
+"""An Orkexa memory (``/memories``) of one tenant and namespace on PostgreSQL (``<prefix>memory_files``)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 from orkexa import MemoryToolError
 from orkexa.memory import MemoryBackend
 
-from ._sql import Executor, check_namespace, check_tenant
+from ._sql import Executor, PostgresLayout, check_namespace, check_tenant
 from .connection import ConnectionSource
 
 __all__ = ["PostgresMemory"]
@@ -19,15 +19,28 @@ __all__ = ["PostgresMemory"]
 class PostgresMemory(MemoryBackend):
     """An Orkexa memory (``/memories``) of one tenant and namespace (table ``<prefix>memory_files``).
 
-    Every command runs in one transaction of the source, as with ``SQLiteMemory``. ``lock`` as for
-    :class:`~nodestro_runtime.pg_generic.files.PostgresFileStore`."""
+    Every command runs in one transaction of the source, as with :class:`~orkexa.SQLiteMemory`.
+
+    Args:
+        source: Gives the connections (:class:`~orkexa.backends.postgres.ConnectionSource`).
+        tenant_id: The partition (as for :class:`~orkexa.backends.postgres.PostgresFileStore`).
+        layout: Names the tables (:class:`~orkexa.backends.postgres.PostgresLayout`).
+        namespace: Which memory of the tenant this backend works on.
+        lock: As for :class:`~orkexa.backends.postgres.PostgresFileStore`.
+        max_file_chars: See :class:`~orkexa.memory.MemoryBackend`.
+        max_view_chars: See :class:`~orkexa.memory.MemoryBackend`.
+
+    Raises:
+        ValueError: An invalid ``tenant_id`` or an empty ``namespace``.
+        TypeError: ``layout`` is not a :class:`~orkexa.backends.postgres.PostgresLayout`.
+    """
 
     def __init__(
         self,
         source: ConnectionSource,
         tenant_id: str,
         *,
-        prefix: str,
+        layout: PostgresLayout,
         namespace: str = "default",
         lock: threading.RLock | None = None,
         max_file_chars: int = 100_000,
@@ -37,7 +50,8 @@ class PostgresMemory(MemoryBackend):
         self.tenant_id = check_tenant(tenant_id)
         self.namespace = check_namespace(namespace)
         self.source = source
-        self._sql = Executor(source, prefix=prefix, tenant_id=tenant_id)
+        self._sql = Executor(source, layout=layout, tenant_id=tenant_id)
+        self.layout = layout
         if lock is not None:
             self._lock = lock
 
@@ -46,8 +60,9 @@ class PostgresMemory(MemoryBackend):
 
     @property
     def capabilities(self) -> frozenset[str]:
-        """``partitioned`` (by tenant) and ``concurrent_writers`` (:attr:`orkexa.memory.MemoryBackend.capabilities`):
-        the commands of one process are serialized on the lock."""
+        """``partitioned`` (by tenant) and ``concurrent_writers``
+        (:attr:`orkexa.memory.MemoryBackend.capabilities`): the commands of one process are serialized on the
+        lock."""
         return frozenset({"partitioned", "concurrent_writers"})
 
     def close(self) -> None:

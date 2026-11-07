@@ -1,21 +1,28 @@
-"""The generic PostgreSQL part of Nodestro's knowledge index, file store and memory (MUP-ONA B4).
+"""The PostgreSQL storage backends: :class:`PostgresIndex`, :class:`PostgresFileStore` and
+:class:`PostgresMemory` (extra ``postgres``: ``pip install "orkexa[postgres]"``).
 
-Everything here is meant to be taken over into orkexa unchanged (``orkexa.backends.postgres``, MUP-ONA B5): it imports
-nothing of Nodestro (an import-linter contract in ``pyproject.toml`` and ``tests/test_sql_catalog.py`` keep it so),
-gets its connections only through a :class:`~nodestro_runtime.pg_generic.connection.ConnectionSource`, and runs SQL
-only through the statement catalog of :mod:`nodestro_runtime.pg_generic._sql` (named statements, tables rendered from
-a prefix, the partition guard). psycopg is imported only when a statement is rendered.
+The classes keep the rows of many tenants in one set of tables and enforce the partition: every statement is a
+named entry of a fixed catalog that binds ``tenant_id``, and a guard refuses any statement not bound to the
+instance's tenant before it reaches the database. They never check permissions; who may act for a tenant is
+the host's decision. Connections come from a :class:`ConnectionSource` (:class:`PsycopgSource` is a ready-made
+one); the tables are named by a :class:`PostgresLayout` (a prefix).
 
-Modules: :mod:`.connection` (the protocol), :mod:`._sql` (catalog, executor, guard), :mod:`._vector` (vector helpers),
-:mod:`.index` (:class:`PostgresIndex`), :mod:`.files` (:class:`PostgresFileStore`), :mod:`.memory`
-(:class:`PostgresMemory`). Nodestro's wiring and its own additions (chunk counts, attaching files, a source's text)
-are in :mod:`nodestro_runtime.postgres_tables`.
+Importing this package needs no psycopg and opens no connection: psycopg is imported when a
+:class:`PsycopgSource` is built or the first statement is rendered.
 """
 
 from __future__ import annotations
 
-from ._sql import CATALOG, PREFIX, Executor, Result, Statement, check_prefix, render
-from .connection import MODES, Connection, ConnectionSource, Cursor, TransactionMode
+from ._sql import CATALOG, PostgresLayout, Statement, render
+from .connection import (
+    MISSING_PSYCOPG,
+    MODES,
+    Connection,
+    ConnectionSource,
+    Cursor,
+    PsycopgSource,
+    TransactionMode,
+)
 from .files import PostgresFileStore
 from .index import MAX_SOURCES, PostgresIndex, PostgresVectorStatus, search_words
 from .memory import PostgresMemory
@@ -23,20 +30,19 @@ from .memory import PostgresMemory
 __all__ = [
     "CATALOG",
     "MAX_SOURCES",
+    "MISSING_PSYCOPG",
     "MODES",
-    "PREFIX",
     "Connection",
     "ConnectionSource",
     "Cursor",
-    "Executor",
     "PostgresFileStore",
     "PostgresIndex",
+    "PostgresLayout",
     "PostgresMemory",
     "PostgresVectorStatus",
-    "Result",
+    "PsycopgSource",
     "Statement",
     "TransactionMode",
-    "check_prefix",
     "render",
     "search_words",
 ]
