@@ -31,6 +31,11 @@
       "offline suite (windows-latest)"
     ]
   },
+  "advisory": [
+    "platforms.yml/DockerSandbox (podman rootless is refused)",
+    "platforms.yml/DockerSandbox (colima macOS x86-64)"
+  ],
+  "comment_advisory": "Jobs with continue-on-error (experimental): ci-ok reports them but they never decide the verdict.",
   "nightly": {
     "nightly.yml": [
       "report"
