@@ -18,6 +18,13 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Fixed: a search no longer fails when another instance deletes a ranked chunk (2026-11-07)
+
+* `SQLiteIndex.retrieve` reads its ranking and the rows of its hits in one read transaction (one WAL snapshot).
+  Before, an instance or process that deleted a ranked chunk between the two reads made the search fail with
+  `TypeError: cannot unpack non-iterable NoneType object` (seen once in T-PART-CC, `sqlite-index-fts`).
+  Test: `test_a_chunk_deleted_by_another_instance_during_a_search_is_no_error`.
+
 ### Added: the PostgreSQL backends `orkexa.backends.postgres` (MUP-ONA B5, 2026-11-07)
 
 * Added: `PostgresIndex`, `PostgresFileStore` and `PostgresMemory`, the storage contracts on PostgreSQL with many
