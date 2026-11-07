@@ -38,7 +38,6 @@ from datetime import UTC, datetime
 import os
 from pathlib import Path
 import shutil
-import sqlite3
 import threading
 from typing import Annotated, Any, Literal
 from urllib.parse import unquote
@@ -46,7 +45,7 @@ import uuid
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from ._storage import create_private_file, make_private_dirs
+from ._storage import connect_private_database, make_private_dirs, storage_errors
 from .core.types import ToolDefinition
 from .errors import MemoryToolError
 
@@ -635,6 +634,9 @@ class SQLiteMemory(MemoryBackend):
         namespace: Which memory in the database this backend works on.
         max_file_chars: See :class:`MemoryBackend`.
         max_view_chars: See :class:`MemoryBackend`.
+
+    A database path that is a symbolic link raises :class:`~orkexa.retrieval.RetrievalError`
+    (``storage.symlink``); a damaged file raises it with ``storage.corrupt``.
     """
 
     def __init__(
@@ -649,19 +651,17 @@ class SQLiteMemory(MemoryBackend):
         if not namespace:
             raise ValueError("namespace must not be empty")
         self.namespace = namespace
-        create_private_file(database)  # owner-only (0600) from the start; journals inherit it
-        self._connection = sqlite3.connect(
-            database, isolation_level=None, check_same_thread=False, timeout=30
-        )
-        # Deleted rows are overwritten instead of left in free pages of the file.
-        self._connection.execute("PRAGMA secure_delete=ON")
-        if str(database) != ":memory:":
-            self._connection.execute("PRAGMA journal_mode=WAL")
-        self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS memory_files ("
-            " namespace TEXT NOT NULL, path TEXT NOT NULL, content TEXT NOT NULL,"
-            " updated_at TEXT NOT NULL, PRIMARY KEY (namespace, path))"
-        )
+        self._connection = connect_private_database(database)  # refuses symlinks and damaged files
+        try:
+            with storage_errors():
+                self._connection.execute(
+                    "CREATE TABLE IF NOT EXISTS memory_files ("
+                    " namespace TEXT NOT NULL, path TEXT NOT NULL, content TEXT NOT NULL,"
+                    " updated_at TEXT NOT NULL, PRIMARY KEY (namespace, path))"
+                )
+        except BaseException:
+            self._connection.close()
+            raise
 
     def close(self) -> None:
         """Close the database connection."""
@@ -676,13 +676,14 @@ class SQLiteMemory(MemoryBackend):
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
-        self._connection.execute("BEGIN IMMEDIATE")
-        try:
-            yield
-        except BaseException:
-            self._connection.execute("ROLLBACK")
-            raise
-        self._connection.execute("COMMIT")
+        with storage_errors():
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+            self._connection.execute("COMMIT")
 
     def _read(self, key: str) -> str | None:
         row = self._connection.execute(

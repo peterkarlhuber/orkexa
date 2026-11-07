@@ -10,7 +10,7 @@
 | Priority | Count |
 |---|---|
 | P0 Critical | 0 |
-| P1 High | 2 |
+| P1 High | 1 |
 | P2 Medium | 5 |
 | P3 Low | 11 |
 | P4 Optional | 7 |
@@ -270,18 +270,8 @@ None known.
 ## MUP-ONA
 
 Packages of the MUP-ONA plan (security and database backends for Orkexa, Nodestro and Axentra; [plan](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md))
-that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0, skip expectations, T-SQL-1 as a strict
-xfail) is in place; each entry is removed in the change that completes its package.
-
-### ORK-MUP-A10 · SQLite robustness: concurrent FTS5 delete, query limits, damaged files
-
-- **Priority:** P1 High · **Status:** Open · **Refs:** [MUP-ONA MP-A10](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md), PS-8, PS-9, VB-12,
-  `tests/backends/sqlite/test_robustness.py` (T-SQL-1, strict xfail)
-- **What:** Two `SQLiteIndex` instances or processes deleting the same source both send the FTS5 `'delete'` and the
-  second fails with "database disk image is malformed" (PS-8); queries have no length or word limit (PS-9); smaller
-  findings: extension loading without `finally`, query vector dimension, `SQLiteFileStore.add` outside a transaction,
-  symlinked database paths, raw `sqlite3.DatabaseError` for damaged files.
-- **Next step:** Implement MP-A10 (T-SQL-1..10, T-RANK-1) and remove the xfail.
+that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0 and FX-RANK-0, skip expectations) and MP-A10 (SQLite
+robustness) are in place; each entry is removed in the change that completes its package.
 
 ### ORK-MUP-A1 · PDF extraction with budgets and process isolation
 

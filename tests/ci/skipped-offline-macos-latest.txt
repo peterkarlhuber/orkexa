@@ -21,6 +21,11 @@ tests.audit3.test_ork3_06_query_embedding_lock::test_writes_do_not_wait_for_a_qu
 tests.audit3.test_ork3_06_query_embedding_lock::test_writes_do_not_wait_for_a_query_embedding[vector]  # sqlite-vec cannot be loaded here
 tests.audit3.test_ork3_07_identity_refresh::test_a_model_update_during_a_reindex_discards_the_mixed_vectors  # sqlite-vec cannot be loaded here
 tests.audit3.test_ork3_07_identity_refresh::test_an_updated_model_is_not_filed_under_its_old_identity  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_failing_sqlite_vec_load_leaves_extension_loading_off  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_legacy_vector_index_is_searched_written_and_deleted  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_query_vector_of_another_length_is_refused[hybrid]  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_a_query_vector_of_another_length_is_refused[vector]  # sqlite-vec cannot be loaded here
+tests.backends.sqlite.test_robustness::test_the_ranking_fixture_gives_the_recorded_sqlite_results[sqlite]  # sqlite-vec cannot be loaded here
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
 tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging
