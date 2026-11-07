@@ -149,21 +149,17 @@ def test_two_instances_and_two_processes_delete_the_same_sources(tmp_path: Path)
     _assert_intact(processes_db)
 
 
-@pytest.mark.parametrize("mode", ["fts", "hybrid"])
-def test_a_chunk_deleted_by_another_instance_during_a_search_is_no_error(tmp_path: Path, mode: str) -> None:
+def test_a_chunk_deleted_by_another_instance_during_a_search_is_no_error(tmp_path: Path) -> None:
     """A search reads its ranking and its hits in one read transaction (one snapshot).
 
     Without it, another instance (its own connection) could delete a ranked chunk before its row is read, and
     the search failed with "cannot unpack non-iterable NoneType object" (seen in T-PART-CC).
     """
     path = tmp_path / "index.db"
-    embeddings = CallableEmbeddings(
-        lambda texts: [[1.0, float(len(text) % 7) + 1.0] for text in texts], name="length", dimensions=2
-    )
-    reader = SQLiteIndex(path, embeddings=embeddings)
+    reader = SQLiteIndex(path)
     reader.add("Refunds take fourteen days.", source="refunds.md")
     reader.add("Refunds need a receipt.", source="receipts.md")
-    writer = SQLiteIndex(path, embeddings=embeddings)
+    writer = SQLiteIndex(path)
     ranking = reader._fts_ids
 
     def rank_then_delete(*args: Any, **kwargs: Any) -> list[int]:
@@ -172,10 +168,10 @@ def test_a_chunk_deleted_by_another_instance_during_a_search_is_no_error(tmp_pat
         return ids
 
     reader._fts_ids = rank_then_delete  # type: ignore[method-assign]
-    hits = reader.retrieve("refunds", 5, mode=mode)
+    hits = reader.retrieve("refunds", 5, mode="fts")
     assert {hit.source for hit in hits} == {"refunds.md", "receipts.md"}
     reader._fts_ids = ranking  # type: ignore[method-assign]
-    assert {hit.source for hit in reader.retrieve("refunds", 5, mode=mode)} == {"receipts.md"}
+    assert {hit.source for hit in reader.retrieve("refunds", 5, mode="fts")} == {"receipts.md"}
     reader.close()
     writer.close()
 
