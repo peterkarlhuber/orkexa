@@ -49,6 +49,9 @@ local = ["zstandard>=0.23"]
 convert = ["gguf>=0.17,<1"]
 # MUP-ONA B5: the SQL rule engine orkexa.testing.sqlcheck (PostgreSQL's parser; the range nodestro-runtime uses).
 sqlcheck = ["pglast>=7,<9"]
+# MUP-ONA B5: the PostgreSQL backend orkexa.backends.postgres. Only the driver: no "binary" (libpq comes from the
+# system or the product chooses psycopg[binary]) and no "pool" (PsycopgSource keeps a small pool of its own).
+postgres = ["psycopg>=3.2,<4"]
 docs = [
     "mkdocs>=1.6,<2",  # MkDocs 2 drops the plugin system that Material and mkdocstrings use
     "mkdocs-material>=9.5",
@@ -72,6 +75,8 @@ dev = [
     "zstandard>=0.23",
     "gguf>=0.17,<1",
     "pglast>=7,<9",
+    # MUP-ONA B5: the binary wheels bring libpq, so the PostgreSQL tests run on runners without it.
+    "psycopg[binary]>=3.2,<4",
     # MUP-ONA B0: import contracts ([tool.importlinter] below; CI runs lint-imports).
     "import-linter>=2.1",
 ]
@@ -124,6 +129,7 @@ addopts = "-ra --strict-markers"
 markers = [
     "live: calls a real provider API (needs API keys, costs money); run with -m live",
     "packaging: builds wheels and creates fresh virtual environments (slow)",
+    "postgres: needs a PostgreSQL server (ORKEXA_TEST_POSTGRES); skipped without one unless ORKEXA_REQUIRE_POSTGRES=1. CI jobs without a server deselect them (-m \"not postgres\"); pg-a and pg-b run them",
     "docker: needs a real Docker or Podman daemon and the orkexa-sandbox image; skipped without one unless ORKEXA_REQUIRE_DOCKER=1",
 ]
 
@@ -156,10 +162,10 @@ known-first-party = ["orkexa"]
 "src/orkexa/dynamic/_sandbox_runner.py" = ["UP"]
 "tests/anthropic/*" = ["RUF", "B", "SIM"]
 
-# MUP-ONA B0 (T-PKG-0): core modules never import the optional PostgreSQL backend or the test helpers, even before
-# those packages exist (the wildcards then match nothing). "Core" is every top-level module of orkexa except
-# orkexa.backends.postgres and orkexa.testing; tests/test_public_api.py checks that the list below names every
-# top-level module, so a new module cannot slip past the contracts. CI runs `lint-imports` (job "test").
+# MUP-ONA B0 (T-PKG-0): core modules never import the optional PostgreSQL backend or the test helpers. "Core" is
+# every top-level module of orkexa except orkexa.backends.postgres and orkexa.testing; tests/test_public_api.py
+# checks that the lists below name every top-level module (and, in the first contract, every backend but
+# postgres, B5), so a new module cannot slip past the contracts. CI runs `lint-imports` (job "test").
 [tool.importlinter]
 root_packages = ["orkexa"]
 
@@ -186,7 +192,8 @@ source_modules = [
     "orkexa.async_agent",
     "orkexa.async_agent.**",
     "orkexa.backends",
-    "orkexa.backends.**",
+    "orkexa.backends.sqlite",
+    "orkexa.backends.sqlite.**",
     "orkexa.claude",
     "orkexa.claude.**",
     "orkexa.content",

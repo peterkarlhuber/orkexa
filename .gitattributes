@@ -5,3 +5,6 @@ tests/fixtures/legacy/FX-SQ-0/* -text
 tests/fixtures/pdf/*.pdf binary
 tests/fixtures/sqlcheck/*.json -text
 tests/fixtures/sqlcheck/*.sha256 -text
+tests/fixtures/postgres/*.json -text
+tests/fixtures/postgres/*.sha256 -text
+tests/fixtures/postgres/nodestro_migrations/* -text

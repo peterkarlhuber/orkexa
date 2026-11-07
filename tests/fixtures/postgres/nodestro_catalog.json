@@ -1,0 +1,503 @@
+{
+ "origin": "nodestro-runtime 76f9cb2: src/nodestro_runtime/pg_generic/_sql.py (MUP-ONA B4)",
+ "prefix": "nodestro_",
+ "statements": {
+  "files_update_entry": {
+   "text": "UPDATE \"nodestro_files\" SET entry = %(entry)s::jsonb WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id = %(id)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "entry",
+    "id"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "files_upsert": {
+   "text": "INSERT INTO \"nodestro_files\" (tenant_id, namespace, id, entry, data) VALUES (%(tenant_id)s, %(namespace)s, %(id)s, %(entry)s::jsonb, %(data)s) ON CONFLICT (tenant_id, namespace, id) DO UPDATE SET entry = excluded.entry, data = excluded.data",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "id",
+    "entry",
+    "data"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "files_entry": {
+   "text": "SELECT entry::text FROM \"nodestro_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id = %(id)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "id"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "files_data": {
+   "text": "SELECT data FROM \"nodestro_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id = %(id)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "id"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "files_entries": {
+   "text": "SELECT entry::text FROM \"nodestro_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "files_delete": {
+   "text": "DELETE FROM \"nodestro_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id = %(id)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "id"
+   ],
+   "kind": "delete",
+   "partitioned": true,
+   "rows": false
+  },
+  "chunks_count": {
+   "text": "SELECT count(*) FROM \"nodestro_chunks\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "chunks_sources": {
+   "text": "SELECT DISTINCT source FROM \"nodestro_chunks\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY source",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "chunks_insert": {
+   "text": "INSERT INTO \"nodestro_chunks\" (tenant_id, namespace, source, title, file_id, metadata, text, search_text) VALUES (%(tenant_id)s, %(namespace)s, %(source)s, %(title)s, %(file_id)s, %(metadata)s::jsonb, %(text)s, %(search_text)s) RETURNING id",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "source",
+    "title",
+    "file_id",
+    "metadata",
+    "text",
+    "search_text"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": true
+  },
+  "chunks_delete_source": {
+   "text": "DELETE FROM \"nodestro_chunks\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND source = %(source)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "source"
+   ],
+   "kind": "delete",
+   "partitioned": true,
+   "rows": false
+  },
+  "chunks_max_id": {
+   "text": "SELECT coalesce(max(id), 0) FROM \"nodestro_chunks\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "chunks_missing_up_to": {
+   "text": "SELECT c.id, c.text FROM \"nodestro_chunks\" c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND NOT EXISTS (SELECT 1 FROM \"nodestro_chunk_vectors\" v WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s AND v.chunk_id = c.id) AND c.id <= %(high)s ORDER BY c.id LIMIT %(limit)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space",
+    "high",
+    "limit"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "chunks_missing": {
+   "text": "SELECT c.id, c.text FROM \"nodestro_chunks\" c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND NOT EXISTS (SELECT 1 FROM \"nodestro_chunk_vectors\" v WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s AND v.chunk_id = c.id) ORDER BY c.id LIMIT %(limit)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space",
+    "limit"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "chunks_count_missing": {
+   "text": "SELECT count(*) FROM \"nodestro_chunks\" c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND NOT EXISTS (SELECT 1 FROM \"nodestro_chunk_vectors\" v WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s AND v.chunk_id = c.id)",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "spaces_lock_shared": {
+   "text": "SELECT space FROM \"nodestro_vector_spaces\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY space FOR SHARE",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "spaces_lock_exclusive": {
+   "text": "SELECT space FROM \"nodestro_vector_spaces\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s ORDER BY space FOR UPDATE",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "spaces_by_state": {
+   "text": "SELECT space, identity::text FROM \"nodestro_vector_spaces\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND state = %(state)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "state"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "spaces_insert_active": {
+   "text": "INSERT INTO \"nodestro_vector_spaces\" (tenant_id, namespace, space, identity, dimensions, state) VALUES (%(tenant_id)s, %(namespace)s, %(space)s, %(identity)s::jsonb, %(dimensions)s, 'active')",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space",
+    "identity",
+    "dimensions"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "spaces_insert_building": {
+   "text": "INSERT INTO \"nodestro_vector_spaces\" (tenant_id, namespace, space, identity, dimensions, state) VALUES (%(tenant_id)s, %(namespace)s, %(space)s, %(identity)s::jsonb, %(dimensions)s, 'building') ON CONFLICT (tenant_id, namespace, space) DO NOTHING",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space",
+    "identity",
+    "dimensions"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "spaces_activate": {
+   "text": "UPDATE \"nodestro_vector_spaces\" SET state = 'active' WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space = %(space)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "spaces_delete": {
+   "text": "DELETE FROM \"nodestro_vector_spaces\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space = %(space)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space"
+   ],
+   "kind": "delete",
+   "partitioned": true,
+   "rows": false
+  },
+  "spaces_delete_others": {
+   "text": "DELETE FROM \"nodestro_vector_spaces\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space <> %(space)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space"
+   ],
+   "kind": "delete",
+   "partitioned": true,
+   "rows": false
+  },
+  "spaces_delete_all": {
+   "text": "DELETE FROM \"nodestro_vector_spaces\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "delete",
+   "partitioned": true,
+   "rows": false
+  },
+  "vectors_insert": {
+   "text": "INSERT INTO \"nodestro_chunk_vectors\" (tenant_id, namespace, space, chunk_id, embedding) VALUES (%(tenant_id)s, %(namespace)s, %(space)s, %(chunk_id)s, %(embedding)s)",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space",
+    "chunk_id",
+    "embedding"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "vectors_store": {
+   "text": "INSERT INTO \"nodestro_chunk_vectors\" (tenant_id, namespace, space, chunk_id, embedding) SELECT c.tenant_id, c.namespace, %(space)s, c.id, %(embedding)s FROM \"nodestro_chunks\" c WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND c.id = %(chunk_id)s ON CONFLICT (tenant_id, space, chunk_id) DO UPDATE SET embedding = excluded.embedding",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space",
+    "embedding",
+    "chunk_id"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "vectors_count": {
+   "text": "SELECT count(*) FROM \"nodestro_chunk_vectors\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND space = %(space)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "vectors_count_excluded": {
+   "text": "SELECT count(*) FROM \"nodestro_chunk_vectors\" v WHERE v.tenant_id = %(tenant_id)s AND v.namespace = %(namespace)s AND v.space = %(space)s AND NOT (NOT (v.embedding && '{NaN,Infinity,-Infinity}'::real[]) AND v.embedding <> array_fill(0::real, ARRAY[cardinality(v.embedding)]))",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "vectors_pgvector": {
+   "text": "SELECT to_regtype('vector') IS NOT NULL",
+   "params": [],
+   "kind": "read",
+   "partitioned": false,
+   "rows": true
+  },
+  "search_fts": {
+   "text": "SELECT id, source, title, file_id, metadata::text, text FROM \"nodestro_chunks\", to_tsquery('simple', %(query)s) AS query WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND search @@ query ORDER BY ts_rank(search, query, 1) DESC, id LIMIT %(limit)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "query",
+    "limit"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_fts_sources": {
+   "text": "SELECT id, source, title, file_id, metadata::text, text FROM \"nodestro_chunks\", to_tsquery('simple', %(query)s) AS query WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND search @@ query AND source = ANY(%(sources)s) ORDER BY ts_rank(search, query, 1) DESC, id LIMIT %(limit)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "query",
+    "sources",
+    "limit"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_pgvector": {
+   "text": "SELECT c.id, c.source, c.title, c.file_id, c.metadata::text, c.text, round((1 - (v.embedding::vector <=> %(vector)s::vector))::numeric, 6)::float8 AS score FROM \"nodestro_chunk_vectors\" v JOIN \"nodestro_chunks\" c ON c.id = v.chunk_id WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s AND c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND NOT (v.embedding && '{NaN,Infinity,-Infinity}'::real[]) AND v.embedding <> array_fill(0::real, ARRAY[cardinality(v.embedding)]) ORDER BY score DESC, c.id LIMIT %(limit)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "vector",
+    "space",
+    "limit"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_pgvector_sources": {
+   "text": "SELECT c.id, c.source, c.title, c.file_id, c.metadata::text, c.text, round((1 - (v.embedding::vector <=> %(vector)s::vector))::numeric, 6)::float8 AS score FROM \"nodestro_chunk_vectors\" v JOIN \"nodestro_chunks\" c ON c.id = v.chunk_id WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s AND c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND c.source = ANY(%(sources)s) AND NOT (v.embedding && '{NaN,Infinity,-Infinity}'::real[]) AND v.embedding <> array_fill(0::real, ARRAY[cardinality(v.embedding)]) ORDER BY score DESC, c.id LIMIT %(limit)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "vector",
+    "space",
+    "sources",
+    "limit"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_candidates": {
+   "text": "SELECT c.id, v.embedding FROM \"nodestro_chunk_vectors\" v JOIN \"nodestro_chunks\" c ON c.id = v.chunk_id WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s AND c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND NOT (v.embedding && '{NaN,Infinity,-Infinity}'::real[]) AND v.embedding <> array_fill(0::real, ARRAY[cardinality(v.embedding)])",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_candidates_sources": {
+   "text": "SELECT c.id, v.embedding FROM \"nodestro_chunk_vectors\" v JOIN \"nodestro_chunks\" c ON c.id = v.chunk_id WHERE v.tenant_id = %(tenant_id)s AND v.space = %(space)s AND c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND c.source = ANY(%(sources)s) AND NOT (v.embedding && '{NaN,Infinity,-Infinity}'::real[]) AND v.embedding <> array_fill(0::real, ARRAY[cardinality(v.embedding)])",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "space",
+    "sources"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_hits": {
+   "text": "SELECT id, source, title, file_id, metadata::text, text FROM \"nodestro_chunks\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND id = ANY(%(ids)s)",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "ids"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_word_counts": {
+   "text": "SELECT t.w, (SELECT count(*) FROM \"nodestro_chunks\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND search @@ to_tsquery('simple', t.q)) FROM unnest(%(words)s::text[], %(queries)s::text[]) AS t(w, q)",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "words",
+    "queries"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "search_word_hits": {
+   "text": "SELECT c.id, t.w FROM \"nodestro_chunks\" c, unnest(%(words)s::text[], %(queries)s::text[]) AS t(w, q) WHERE c.tenant_id = %(tenant_id)s AND c.namespace = %(namespace)s AND c.id = ANY(%(ids)s) AND c.search @@ to_tsquery('simple', t.q)",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "words",
+    "queries",
+    "ids"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "memory_read": {
+   "text": "SELECT content FROM \"nodestro_memory_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND path = %(path)s",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "path"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "memory_write": {
+   "text": "INSERT INTO \"nodestro_memory_files\" (tenant_id, namespace, path, content) VALUES (%(tenant_id)s, %(namespace)s, %(path)s, %(content)s) ON CONFLICT (tenant_id, namespace, path) DO UPDATE SET content = excluded.content, updated_at = clock_timestamp()",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "path",
+    "content"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "memory_files": {
+   "text": "SELECT path, octet_length(content) FROM \"nodestro_memory_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND starts_with(path, %(start)s)",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "start"
+   ],
+   "kind": "read",
+   "partitioned": true,
+   "rows": true
+  },
+  "memory_delete": {
+   "text": "DELETE FROM \"nodestro_memory_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND (path = %(path)s OR starts_with(path, %(under)s))",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "path",
+    "under"
+   ],
+   "kind": "delete",
+   "partitioned": true,
+   "rows": false
+  },
+  "memory_rename": {
+   "text": "UPDATE \"nodestro_memory_files\" SET path = %(new)s || substr(path, %(cut)s), updated_at = clock_timestamp() WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND (path = %(old)s OR starts_with(path, %(under)s))",
+   "params": [
+    "tenant_id",
+    "namespace",
+    "new",
+    "cut",
+    "old",
+    "under"
+   ],
+   "kind": "write",
+   "partitioned": true,
+   "rows": false
+  },
+  "memory_clear": {
+   "text": "DELETE FROM \"nodestro_memory_files\" WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s",
+   "params": [
+    "tenant_id",
+    "namespace"
+   ],
+   "kind": "delete",
+   "partitioned": true,
+   "rows": false
+  }
+ }
+}

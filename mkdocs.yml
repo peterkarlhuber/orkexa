@@ -99,6 +99,7 @@ nav:
       - Types and events: reference/types.md
       - Tools and content: reference/tools.md
       - Memory, files, retrieval: reference/storage.md
+      - PostgreSQL backends: reference/backends-postgres.md
       - Evaluation: reference/evaluation.md
       - Dynamic agents: reference/dynamic.md
       - Flows: reference/flow.md
@@ -122,6 +123,7 @@ nav:
       - ADR 0012 MacOSSandbox removed (Docker-first): architecture/decisions/0012-macos-sandbox-removed.md
       - ADR 0013 Bedrock credentials and residency: architecture/decisions/0013-bedrock-credentials-and-residency.md
       - ADR 0014 storage contracts and conformance: architecture/decisions/0014-storage-contracts-and-conformance.md
+      - ADR 0015 statement catalog and SQL rule engine: architecture/decisions/0015-statement-catalog-and-sql-rule-engine.md
   - Development:
       - development/index.md
       - Releasing: development/releasing.md

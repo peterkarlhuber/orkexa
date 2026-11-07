@@ -196,6 +196,31 @@ PUBLIC = {
         "validate_vector",
     ],
     "orkexa.backends.sqlite": ["SQLiteFileStore", "SQLiteIndex", "SQLiteMemory"],
+    "orkexa.backends.postgres": [  # MUP-ONA B5
+        "CATALOG",
+        "Connection",
+        "ConnectionSource",
+        "Cursor",
+        "MAX_SOURCES",
+        "MISSING_PSYCOPG",
+        "MODES",
+        "PostgresFileStore",
+        "PostgresIndex",
+        "PostgresLayout",
+        "PostgresMemory",
+        "PostgresVectorStatus",
+        "PsycopgSource",
+        "SCHEMA_VERSION",
+        "SchemaProblem",
+        "SchemaReport",
+        "Statement",
+        "TransactionMode",
+        "migrate",
+        "render",
+        "schema_steps",
+        "search_words",
+        "verify_schema",
+    ],
     "orkexa.testing.conformance": [
         "ALL_FILE_STORE_CASES",
         "ALL_INDEX_CASES",
@@ -392,7 +417,20 @@ def test_the_import_contracts_cover_every_core_module() -> None:
         if not str(contract["name"]).startswith("Core modules"):
             continue  # the B2 contract names only the contract modules
         sources = set(contract["source_modules"])  # type: ignore[call-overload]
-        assert sources >= expected, sorted(expected - sources)
+        wanted = expected
+        if str(contract["name"]).endswith("orkexa.backends.postgres"):
+            # MUP-ONA B5: the backend itself is not core; every other backend is listed one by one.
+            backends = {
+                path.name for path in (package / "backends").iterdir() if (path / "__init__.py").is_file()
+            }
+            assert "postgres" in backends
+            others = backends - {"postgres"}
+            wanted = (expected - {"orkexa.backends.**"}) | {
+                f"orkexa.backends.{name}{suffix}" for name in others for suffix in ("", ".**")
+            }
+            assert not {name for name in sources if name.startswith(("orkexa.backends.postgres", "orkexa.*"))}
+            assert "orkexa.backends.**" not in sources
+        assert sources >= wanted, sorted(wanted - sources)
 
 
 # MUP-ONA T-PKG-0

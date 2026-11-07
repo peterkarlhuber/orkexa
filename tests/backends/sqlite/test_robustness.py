@@ -149,6 +149,33 @@ def test_two_instances_and_two_processes_delete_the_same_sources(tmp_path: Path)
     _assert_intact(processes_db)
 
 
+def test_a_chunk_deleted_by_another_instance_during_a_search_is_no_error(tmp_path: Path) -> None:
+    """A search reads its ranking and its hits in one read transaction (one snapshot).
+
+    Without it, another instance (its own connection) could delete a ranked chunk before its row is read, and
+    the search failed with "cannot unpack non-iterable NoneType object" (seen in T-PART-CC).
+    """
+    path = tmp_path / "index.db"
+    reader = SQLiteIndex(path)
+    reader.add("Refunds take fourteen days.", source="refunds.md")
+    reader.add("Refunds need a receipt.", source="receipts.md")
+    writer = SQLiteIndex(path)
+    ranking = reader._fts_ids
+
+    def rank_then_delete(*args: Any, **kwargs: Any) -> list[int]:
+        ids = ranking(*args, **kwargs)
+        assert writer.delete("refunds.md") == 1
+        return ids
+
+    reader._fts_ids = rank_then_delete  # type: ignore[method-assign]
+    hits = reader.retrieve("refunds", 5, mode="fts")
+    assert {hit.source for hit in hits} == {"refunds.md", "receipts.md"}
+    reader._fts_ids = ranking  # type: ignore[method-assign]
+    assert {hit.source for hit in reader.retrieve("refunds", 5, mode="fts")} == {"receipts.md"}
+    reader.close()
+    writer.close()
+
+
 # ---- T-SQL-2: query limits ----------------------------------------------------------------------------
 
 

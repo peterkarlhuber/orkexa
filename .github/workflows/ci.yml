@@ -39,7 +39,10 @@ jobs:
       # Offline only: no API keys are configured, and live tests run only with -m live.
       # MUP-ONA B1: the conformance reports (tests/conformance) are saved per target and compared with the
       # skips this job expects (tests/conformance/expected_skips.json).
-      - run: pytest --cov=orkexa --cov-report=term-missing --cov-report=xml -rs --junitxml=junit-test.xml
+      # MUP-ONA B5: the tests that need a PostgreSQL server (marker "postgres") run in pg-a and pg-b.
+      - run: >-
+          pytest -m "not postgres" --cov=orkexa --cov-report=term-missing --cov-report=xml -rs
+          --junitxml=junit-test.xml
         env:
           ORKEXA_CONFORMANCE_JOB: test
           ORKEXA_CONFORMANCE_REPORTS: conformance-reports
@@ -69,12 +72,101 @@ jobs:
           python-version: "3.11"
       - run: pip install -e ".[dev]"
       # The lower bounds of pyproject.toml (pydantic 2.9 is the minimum of google-genai 2.0; pglast 7.20 is the
-      # oldest 7.x release on PyPI).
-      - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "boto3==1.43.80" "botocore==1.43.80" "pydantic==2.9.0" "typing-extensions==4.14.0" "pglast==7.20"
-      - run: pytest -rs --junitxml=junit-lowest-versions.xml
+      # oldest 7.x release on PyPI; psycopg 3.2.0 is the lower bound of the extra "postgres"; its
+      # "binary" extra names a dev build, so psycopg-binary is pinned by name).
+      - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "boto3==1.43.80" "botocore==1.43.80" "pydantic==2.9.0" "typing-extensions==4.14.0" "pglast==7.20" "psycopg==3.2.0" "psycopg-binary==3.2.0"
+      - run: pytest -m "not postgres" -rs --junitxml=junit-lowest-versions.xml
         env:
           ORKEXA_CONFORMANCE_JOB: lowest-versions
       - run: python scripts/check_skips.py junit-lowest-versions.xml tests/ci/skipped-lowest-versions.txt
+
+  # MUP-ONA B5 (T-PKG-1, T-PKG-2): the core without any extra. orkexa and pytest only; the packages import
+  # without psycopg and pglast and open no connection, and the core suite passes.
+  core-no-extras:
+    name: core without extras
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: pip install -e . "pytest==9.1.1"
+      - run: python -c "import importlib.util as u; assert u.find_spec('psycopg') is None and u.find_spec('pglast') is None"
+      - run: pytest tests/packaging/test_core_without_extras.py -v -rs --noconftest -p no:cacheprovider
+
+  # MUP-ONA B5 (T-CONF-* (PG), T-PART-*, T-DDL-*, T-SCH-*, T-PG-*): the PostgreSQL backend against a real server.
+  # pg-a: postgres:17 without pgvector (vectors ranked in Python, mode A); pg-b: pgvector/pgvector:pg17 (mode B),
+  # where a test that needs pgvector fails instead of skipping. Both images by digest. Each job runs the suite
+  # twice: as the superuser that sets the server up, and as the restricted runtime role (no superuser, owns
+  # nothing, no CREATE, only SELECT/INSERT/UPDATE/DELETE on the tables).
+  postgres:
+    name: ${{ matrix.job }} (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [pg-a, pg-b]
+        python: ["3.11", "3.14"]
+        include:
+          - job: pg-a
+            image: postgres@sha256:748a18a54d3842d43bc156f0840d78029b8d349e0feca98c12b9c4ce3404a6b3 # postgres:17
+            pgvector: "0"
+          - job: pg-b
+            image: pgvector/pgvector@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8 # pgvector/pgvector:pg17
+            pgvector: "1"
+    services:
+      postgres:
+        image: ${{ matrix.image }}
+        env:
+          POSTGRES_PASSWORD: orkexa-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      ORKEXA_TEST_POSTGRES: host=127.0.0.1 port=5432 user=postgres password=orkexa-ci dbname=postgres
+      ORKEXA_REQUIRE_POSTGRES: "1"
+      ORKEXA_REQUIRE_PGVECTOR: ${{ matrix.pgvector }}
+      ORKEXA_CONFORMANCE_JOB: ${{ matrix.job }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - name: PostgreSQL tests (superuser)
+        run: >-
+          pytest -rs --junitxml=junit-${{ matrix.job }}.xml
+          tests/backends/postgres tests/conformance/test_postgres_conformance.py
+        env:
+          ORKEXA_CONFORMANCE_REPORTS: reports/conformance
+          ORKEXA_CATALOG_REPORTS: reports/catalog
+          ORKEXA_SCHEMA_REPORTS: reports/schema
+      - run: python scripts/check_skips.py junit-${{ matrix.job }}.xml tests/ci/skipped-${{ matrix.job }}.txt
+      - name: PostgreSQL tests (restricted runtime role)
+        run: >-
+          pytest -rs --junitxml=junit-${{ matrix.job }}-runtime-role.xml
+          tests/backends/postgres tests/conformance/test_postgres_conformance.py
+        env:
+          ORKEXA_TEST_RUNTIME_ROLE: "1"
+      - run: >-
+          python scripts/check_skips.py junit-${{ matrix.job }}-runtime-role.xml
+          tests/ci/skipped-${{ matrix.job }}-runtime-role.txt
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.job }}-reports-${{ matrix.python }}
+          path: reports/
+          if-no-files-found: ignore
 
   packaging:
     name: build and install (fresh virtual environments)
@@ -125,5 +217,5 @@ jobs:
           python-version: "3.12"
       # Every runtime dependency, all provider SDKs and optional extras, and the docs toolchain.
       - run: python -m pip install --upgrade pip
-      - run: pip install pip-audit==2.10.1 -e ".[all,pdf,vector,sqlcheck,docs]"
+      - run: pip install pip-audit==2.10.1 -e ".[all,pdf,vector,sqlcheck,postgres,docs]"
       - run: pip-audit --skip-editable --progress-spinner off

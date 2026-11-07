@@ -18,6 +18,51 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Fixed: a search no longer fails when another instance deletes a ranked chunk (2026-11-07)
+
+* `SQLiteIndex.retrieve` reads its ranking and the rows of its hits in one read transaction (one WAL snapshot).
+  Before, an instance or process that deleted a ranked chunk between the two reads made the search fail with
+  `TypeError: cannot unpack non-iterable NoneType object` (seen once in T-PART-CC, `sqlite-index-fts`).
+  Test: `test_a_chunk_deleted_by_another_instance_during_a_search_is_no_error`.
+
+### Added: the PostgreSQL backends `orkexa.backends.postgres` (MUP-ONA B5, 2026-11-07)
+
+* Added: `PostgresIndex`, `PostgresFileStore` and `PostgresMemory`, the storage contracts on PostgreSQL with many
+  tenants in one set of tables (`tenant_id` is the partition, MUP-ONA E-6: partition yes, permissions no), full
+  text (`tsvector`) and vectors (`real[]`, ranked by pgvector where it is installed, else in Python), reindex, and
+  the capabilities `partitioned` and `concurrent_writers` (plus `vectors` and `reindex` with an embedding model).
+  See `docs/reference/backends-postgres.md`.
+* Added: `PostgresLayout(prefix="orkexa_")` names the five tables (only the prefix is configurable, E-12);
+  `ConnectionSource` (protocol) and `PsycopgSource` (psycopg 3 with a small pool of its own, transactions joined
+  per thread, optional transaction-local `tenant_setting` for row-level security).
+* Added: the statement catalog (`CATALOG`, `Statement`, `render`) with an executor and a partition guard: the
+  stores run only catalog entries, values are always bound, and a statement whose `tenant_id` is not the
+  instance's raises `RetrievalError("partition.missing")` before it runs
+  (ADR 0015, `docs/architecture/decisions/0015-statement-catalog-and-sql-rule-engine.md`).
+* Added: schema version 1 as data (exactly Nodestro's migrations 0002 and 0010 for any prefix): `verify_schema`
+  (read-only, never raises, returns a `SchemaReport` of `SchemaProblem`s), `schema_steps` and `migrate` (only when
+  called, under an advisory lock, version table `<prefix>orkexa_schema`; `schema.mismatch` with reason
+  `permission`, `too_new` or `unrecorded`). No DDL at run time and no `CREATE EXTENSION` (E-13).
+* Taken over from nodestro-runtime 76f9cb2 (`pg_generic`); the first commit is the unchanged code. Changes: a
+  `PostgresLayout` instead of a prefix string, Orkexa's docstrings and line length, the catalog texts unchanged.
+  Three fixes found by the new tests: a tenant id with U+0000 is refused (PostgreSQL text cannot hold it); the
+  stores of one `PsycopgSource` share its `lock` by default, so two instances in one process no longer lose each
+  other's memory or file change; and a chunk deleted between a reindex's vector store and its foreign key check
+  no longer ends the reindex with a foreign key violation (the store runs again without it; T-PART-CC hit this
+  in about one of four runs).
+* New extra `postgres = ["psycopg>=3.2,<4"]`; `dev` gains `psycopg[binary]`. psycopg is imported on the first
+  connection only: `import orkexa` never imports the package, `import orkexa.backends.postgres` works without
+  psycopg, and `PsycopgSource()` then raises `ImportError` naming `orkexa[postgres]`. The first import-linter
+  contract names the SQLite subpackage instead of all backends, so the PostgreSQL modules may import each other.
+* tests: `tests/backends/postgres/` (T-CAT-1..4, T-GUARD-1..3, T-PAR-2 against Nodestro's catalog, T-PG-ID,
+  T-SCH-1..3 with Nodestro's migrations as fixtures, T-DDL-1..3, T-PG-5, T-PG-6, T-PG-4, T-RANK-1),
+  `tests/conformance/test_postgres_conformance.py` (T-CONF-*, T-PART-1..9) and
+  `tests/packaging/test_core_without_extras.py` (T-PKG-1, T-PKG-2). Server tests carry the marker `postgres`.
+* CI: jobs `pg-a` (`postgres:17`) and `pg-b` (`pgvector/pgvector:pg17`, `ORKEXA_REQUIRE_PGVECTOR=1`), images by
+  digest, Python 3.11 and 3.14, each as superuser and as a runtime role without DDL rights, with
+  `ORKEXA_REQUIRE_POSTGRES=1` and skip lists; job `core-no-extras`. The other jobs deselect `-m postgres`; the
+  lowest-versions job pins psycopg and psycopg-binary 3.2.0; the audit covers `postgres`.
+
 ### Added: the tenant SQL rule engine `orkexa.testing.sqlcheck` (MUP-ONA B5, 2026-11-07)
 
 * Added: `orkexa.testing.sqlcheck.check_statement(sql, *, tenant_tables, column="tenant_id",

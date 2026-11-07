@@ -1,0 +1,5 @@
+# Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
+# Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
+# Job ci.yml/postgres pg-b as superuser (Python 3.11 and 3.14), generated from local runs against postgres:17
+# (pg-a: no pgvector) and pgvector/pgvector:pg17 (pg-b) with Python 3.11 and 3.13.
+# pg-b skips nothing: ORKEXA_REQUIRE_PGVECTOR=1 fails a test that needs pgvector.

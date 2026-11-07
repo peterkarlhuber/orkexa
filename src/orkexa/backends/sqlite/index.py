@@ -485,6 +485,20 @@ class SQLiteIndex(Index):
                 raise
             self._connection.execute("COMMIT")
 
+    @contextmanager
+    def _read(self) -> Iterator[None]:
+        """A read transaction: every read inside it sees one snapshot of the file (WAL mode).
+
+        A search ranks chunk ids and then reads their rows; another instance or process may delete a ranked
+        chunk in between. Inside one transaction the search still sees it. Callers hold the lock.
+        """
+        with storage_errors():
+            self._connection.execute("BEGIN")
+            try:
+                yield
+            finally:
+                self._connection.execute("COMMIT")
+
     def _discard(self, space: str) -> None:
         self._connection.execute("DELETE FROM index_vectors WHERE space = ?", (space,))
         self._connection.execute(
@@ -647,7 +661,7 @@ class SQLiteIndex(Index):
         # The query is embedded before the lock is taken: an embedding call can take long (a
         # network request) and must not block writes and other searches of this index.
         vector = self._query_vector(query) if mode in ("vector", "hybrid") else None
-        with self._lock, storage_errors():
+        with self._lock, self._read():
             ranked: dict[str, list[tuple[int, float]]] = {}
             if mode in ("fts", "hybrid"):
                 ranked["fts"] = [(chunk_id, 0.0) for chunk_id in self._fts_ids(query, candidates, allowed)]
