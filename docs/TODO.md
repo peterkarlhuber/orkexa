@@ -3,7 +3,7 @@
 > Open work for this repository: release blockers, known bugs, security follow-ups, technical debt and planned improvements.
 > GitHub issues are the source of truth for details; this file is the entry point and summary.
 >
-> **Last full review:** 2026-11-06 against `master` at `80b95e5` (TODO abatement round 3).
+> **Last full review:** 2026-11-07 against `master` at `2da5c6c` (TODO abatement round 4).
 
 ## Summary
 
@@ -168,7 +168,11 @@ None known.
   macOS/Windows runs of `ManagedOllama` are untested. The IPv6 loopback path (`host="::1"`) and the orphan reclaim
   after a host crash (POSIX only; Windows has none) were added on 2026-11-04 (#49) without a CI run on those
   platforms. The weekly `ollama-live.yml` job runs the live tests with the small models on Linux CPU only.
-- **Next step:** Run the live tests on hardware with 32+ GB (and a GPU, and macOS/Windows) and record the results.
+  Since 2026-11-07 the managed server ends with its application (`orkexa/local/_lifeline.py`: a watcher process on
+  POSIX, tested on Linux; a job object with kill-on-close on Windows, whose tests run only in `platforms.yml` and
+  have not run yet); macOS has no local run of it either.
+- **Next step:** Run the live tests on hardware with 32+ GB (and a GPU, and macOS/Windows) and record the results;
+  check the first `platforms.yml` run of `tests/test_managed_server_lifetime.py` on Windows and macOS.
 
 ## Platform coverage
 
@@ -199,12 +203,14 @@ None known.
 
 - **Priority:** P2 Medium · **Status:** Needs decision · **Refs:** [Feature matrix](feature-matrix.md),
   Bedrock provider report 2026-11-01
-- **What:** All automated tests are offline. Opt-in live tests exist only for Anthropic and Bedrock and have not
-  been run for the current state; the Bedrock live smoke test (including CountTokens with inference profile ids)
-  is prepared but needs an AWS account, model access and owner approval for paid calls. OpenAI, Gemini, Ollama and
-  vLLM have no live tests.
-- **Next step:** Owner approves a small budget and credentials; add live smoke tests for the other providers and
-  run all of them before a release.
+- **What:** All automated tests are offline. Opt-in live smoke tests (`pytest -m live`) exist for every provider:
+  Anthropic (`tests/anthropic/test_live.py`), Bedrock (`tests/test_bedrock_live.py`, including CountTokens with
+  inference profile ids), Ollama (`tests/test_ollama_live.py`, weekly in `ollama-live.yml`) and, since 2026-11-07,
+  OpenAI, Gemini and vLLM (`tests/test_provider_live.py`: text, one tool call, structured answer; the model is named
+  by a variable, none is built in). The paid ones and vLLM have never run for the current state: they need keys,
+  model access (AWS), a vLLM server with tool calling, and owner approval for paid calls.
+- **Next step:** Owner approves a small budget and credentials; run all live smoke tests before a release and
+  record the results in the feature matrix.
 
 ### ORK-015 · No native sandbox on Windows
 
@@ -317,7 +323,8 @@ xfail) is in place; each entry is removed in the change that completes its packa
 |---|---|---|---|
 | ORK-003 | nodestro-runtime | Local Docker Ollama URL (non-loopback) | A loopback default needs the runtime's opt-in first |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
-| ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows; orphan reclaim on Windows) | The managed server lives here; runtime and desktop rerun their tests |
+| ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows) | The managed server lives here; runtime and desktop rerun their tests |
+| (done 2026-11-07) | nodestro-desktop | DSK-022 (the managed Ollama survives a killed backend) | With the next pin the server ends with its application (watcher on POSIX, job object on Windows); the desktop adds its kill test |
 | ORK-036 | nodestro-runtime | chat views of stored conversations | Agree how chat views show the synthetic request |
 | (done 2026-11-06) | nodestro-runtime | #57 workaround, `require_session` guard, RT-022, Bedrock caching option | With the next pin: `ToolRegistry.refresh()`/`AgentRegistry.refresh()`, `BedrockOptions(require_session=True)`, Python 3.14, `BedrockOptions(prompt_caching=True)` are available |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
