@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tomllib
 
 import pytest
 
@@ -16,6 +17,12 @@ pytestmark = pytest.mark.packaging
 
 ROOT = Path(__file__).resolve().parents[2]
 UV = shutil.which("uv")
+
+
+def _project_version() -> str:
+    """The version in pyproject.toml, which the installed wheel must report (``orkexa.__version__``)."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    return str(project["version"])
 
 
 def _run(*args: str | Path, check: bool = True, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -89,7 +96,7 @@ def test_core_install_has_no_provider_sdk(wheels: dict[str, Path], tmp_path: Pat
         "try:\n    bedrock.client\nexcept MissingDependencyError as e:\n    print('missing', e)\n"
         "print(orkexa.__version__)\n"
     ).stdout
-    assert "orkexa[openai]" in out and "orkexa[bedrock]" in out and "0.1.0" in out
+    assert "orkexa[openai]" in out and "orkexa[bedrock]" in out and _project_version() in out.splitlines()
 
 
 def test_extras_install_every_sdk(wheels: dict[str, Path], tmp_path: Path) -> None:
