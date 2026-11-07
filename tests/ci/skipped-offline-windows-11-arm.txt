@@ -31,6 +31,7 @@ tests.audit3.test_ork3_02_reindex_race::test_reindex_leaves_no_vector_of_a_chunk
 tests.audit3.test_ork3_03_vectors::test_a_zero_vector_does_not_break_vector_search[hybrid]  # sqlite-vec cannot be loaded here
 tests.audit3.test_ork3_03_vectors::test_a_zero_vector_does_not_break_vector_search[vector]  # sqlite-vec cannot be loaded here
 tests.audit3.test_ork3_03_vectors::test_non_finite_vectors_are_refused  # sqlite-vec cannot be loaded here
+tests.audit3.test_ork3_04_managed_server::test_alive_counts_a_process_reaped_during_the_check_as_gone  # reads /proc (Linux only)
 tests.audit3.test_ork3_04_managed_server::test_cli_serve_stops_the_server_on_sigterm  # POSIX links and process groups
 tests.audit3.test_ork3_04_managed_server::test_managed_server_on_ipv6_loopback  # POSIX links and process groups
 tests.audit3.test_ork3_04_managed_server::test_stop_also_ends_the_runners_of_a_server_that_had_to_be_killed  # POSIX links and process groups

@@ -474,6 +474,50 @@ def test_managed_server_needs_a_runtime(tmp_path: Path) -> None:
     assert error.value.code == "runtime_missing"
 
 
+def test_cli_serve_stops_on_a_sigterm_delivered_inside_a_finalizer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A SIGTERM that arrives while a finalizer runs (an HTTP response closed during ``status()``)
+    still stops ``serve``. Raising from the handler lost it there ("Exception ignored in ...")."""
+    import signal
+    from types import SimpleNamespace
+
+    from orkexa.local import __main__ as cli
+
+    class Closing:
+        def __del__(self) -> None:
+            signal.raise_signal(signal.SIGTERM)
+
+    calls: list[str] = []
+
+    class Server:
+        models_dir = tmp_path / "models"
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def start(self) -> str:
+            calls.append("start")
+            return "http://127.0.0.1:1"
+
+        def status(self) -> SimpleNamespace:
+            calls.append("status")
+            response = Closing()
+            del response  # the handler runs inside __del__
+            return SimpleNamespace(running=calls.count("status") < 4)  # ends a lost signal's loop
+
+        def stop(self) -> None:
+            calls.append("stop")
+
+    monkeypatch.setattr(cli, "ManagedOllama", Server)
+    previous = signal.getsignal(signal.SIGTERM)
+    try:
+        assert cli.main(["--home", str(tmp_path), "serve"]) == 0
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+    assert calls == ["start", "status", "stop"]
+
+
 # ---- offline packages ---------------------------------------------------------------------
 
 

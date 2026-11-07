@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 import signal
 import sys
-import time
+import threading
 
 from ..errors import OrkexaError
 from ._http import DEFAULT_OLLAMA_URL, OllamaError
@@ -94,18 +94,23 @@ def _cmd_install(args: argparse.Namespace) -> int:
 def _cmd_serve(args: argparse.Namespace) -> int:
     server = ManagedOllama(args.home, models_dir=args.models_dir, port=args.port, offline=args.offline)
 
-    def stop_on_signal(number: int, frame: object) -> None:
-        raise KeyboardInterrupt  # stops the server below like Ctrl+C (e.g. `kill`, a service manager)
+    stop = threading.Event()
 
-    signal.signal(signal.SIGTERM, stop_on_signal)
-    try:  # a signal right after the start must stop the server as well
+    def stop_on_signal(number: int, frame: object) -> None:
+        # Only set a flag: an exception raised here can land in a finalizer (for example an
+        # HTTP response closed during ``status()``), where Python ignores it and serve runs on.
+        stop.set()
+
+    signal.signal(signal.SIGTERM, stop_on_signal)  # e.g. `kill`, a service manager
+    try:
         url = server.start()
         print(
             f"Ollama {OLLAMA_VERSION} runs at {url} (models: {server.models_dir}); Ctrl+C stops it.",
             flush=True,
         )
-        while server.status().running:
-            time.sleep(1)
+        # A SIGTERM during the start is seen on the first check, before any wait.
+        while not stop.is_set() and server.status().running and not stop.wait(1):
+            pass
     except KeyboardInterrupt:
         pass
     finally:

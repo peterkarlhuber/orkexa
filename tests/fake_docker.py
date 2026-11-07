@@ -55,7 +55,12 @@ def _load(name: str, default: Any) -> Any:
 
 
 def _save(name: str, data: Any) -> None:
-    (_state() / name).write_text(json.dumps(data))
+    # Replace the file in one step: ``docker ps`` in a test thread may read it while ``docker run`` writes it,
+    # and ``write_text`` truncates first, so a reader could see an empty or half-written file.
+    path = _state() / name
+    temporary = path.with_name(f".{name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(data))
+    os.replace(temporary, path)
 
 
 def _alive(pid: int | None) -> bool:
@@ -312,8 +317,13 @@ def _remove(ref: str, *, kill_only: bool = False) -> int:
 
 def main() -> int:
     argv = sys.argv[1:]
-    with open(_state() / "log.jsonl", "a", encoding="utf-8") as log:
-        log.write(json.dumps(argv) + "\n")
+    # One write(2) with O_APPEND per line: a buffered file could split a long line (``run`` carries the
+    # bootstrap script) into several writes and let another fake process's line land between them.
+    log = os.open(_state() / "log.jsonl", os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        os.write(log, (json.dumps(argv) + "\n").encode("utf-8"))
+    finally:
+        os.close(log)
     failures = _load("fail.json", {})
     if argv and argv[0] in failures:
         sys.stderr.write(f"fake failure of {argv[0]}\n")

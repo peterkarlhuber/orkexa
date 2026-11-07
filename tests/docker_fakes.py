@@ -81,7 +81,9 @@ class FakeDocker:
         path = self.directory / "log.jsonl"
         if not path.exists():
             return []
-        return [json.loads(line) for line in path.read_text().splitlines()]
+        text = path.read_text()
+        # A running ``docker`` may be appending a line right now; read only the lines it finished.
+        return [json.loads(line) for line in text[: text.rfind("\n") + 1].splitlines()]
 
     def runs(self) -> list[list[str]]:
         """The ``docker run`` calls of tool code (self-tests left out)."""

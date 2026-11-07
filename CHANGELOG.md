@@ -18,6 +18,22 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Fixed: two test races seen on master CI (2026-11-07)
+
+* `test_cancel_kills_the_container` waited for any container with the owner label, so it could stop on the
+  self-test container (same label), which ends a moment later; the next `docker ps` then listed nothing
+  (`assert []`, macOS on Intel). It now waits for the tool's own `orkexa-sandbox-*` container. The fake `docker`
+  replaces its state files in one step and appends each log line with one write, and `FakeDocker.calls` reads only
+  complete lines, so a test that polls while the fake writes no longer reads a torn file.
+* The managed-server tests' `_alive` checked that `/proc/<pid>/stat` exists and then read it; init can reap the
+  killed, orphaned runner between the two, which raised `FileNotFoundError` (Python 3.14). A vanished entry now
+  counts as gone. Test: `test_alive_counts_a_process_reaped_during_the_check_as_gone`.
+* `orkexa-local serve` could ignore a SIGTERM: its handler raised `KeyboardInterrupt`, and when the signal arrived
+  while a finalizer ran (an HTTP response closed during the status check), Python dropped the exception
+  ("Exception ignored in ...") and the server kept running (seen as a timeout of
+  `test_cli_serve_stops_the_server_on_sigterm` on macOS). The handler now only sets a flag that the serve loop checks.
+  Test: `test_cli_serve_stops_on_a_sigterm_delivered_inside_a_finalizer`.
+
 ### Fixed: a search no longer fails when another instance deletes a ranked chunk (2026-11-07)
 
 * `SQLiteIndex.retrieve` reads its ranking and the rows of its hits in one read transaction (one WAL snapshot).
