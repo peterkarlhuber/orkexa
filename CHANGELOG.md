@@ -1,8 +1,22 @@
 # Changelog
 
-## 0.1.0 – unreleased
+## 0.2.0 – unreleased
 
-First release of Orkexa.
+First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
+listed here. The development version is `0.2.0.dev0`.
+
+### Release rules (MUP-ONA B0, 2026-11-06)
+
+* Tags are named `orkexa-vX.Y.Z` (annotated, on the release's merge commit) and are set only after the owner
+  approves; until then the merge commit's SHA stands for the version. No tag exists yet.
+* Versions follow SemVer from 0.2.0. A kept alias (such as `orkexa.retrieval._pdf_pages`) is removed only in a minor
+  release, with an entry here that names the alias and its replacement.
+* Nothing is published on PyPI.
+* `tests/test_public_api.py` (T-API-1) fixes the public names of `orkexa`, `orkexa.retrieval`, `orkexa.files`,
+  `orkexa.memory`, `orkexa.embeddings` and the deeper paths Nodestro imports, and checks that re-exports are the same
+  objects. import-linter (in the `dev` extra, `lint-imports` in CI) keeps the core modules from importing
+  `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
+  `docs/development/releasing.md`.
 
 ### Added: PDF budgets and isolated PDF extraction (MUP-ONA A1, 2026-11-06)
 
