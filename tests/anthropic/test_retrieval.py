@@ -16,7 +16,7 @@ from orkexa import (
     citations,
     split_text,
 )
-from orkexa.retrieval import _fts_query
+from orkexa.backends.sqlite.index import _fts_query
 
 from .conftest import FakeClient, make_message
 

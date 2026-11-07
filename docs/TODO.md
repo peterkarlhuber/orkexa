@@ -274,14 +274,9 @@ None known.
 Packages of the MUP-ONA plan (security and database backends for Orkexa, Nodestro and Axentra; [plan](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md))
 that change this repository. The baseline (MP-A0: legacy fixtures FX-SQ-0 and FX-RANK-0, skip expectations), MP-A10 (SQLite
 robustness), the Orkexa part of MP-A1 (PDF budgets and isolation), the Orkexa part of MP-B0 (version 0.2.0.dev0,
-API snapshot, import contracts, release rules) and the Orkexa part of MP-B1 (storage contracts, public conformance
-suite `orkexa.testing.conformance`, `ScriptedClient`) are in place; each entry is removed in the change that completes its package.
-
-### ORK-MUP-B2 · SQLite backend moves to `orkexa.backends.sqlite`
-
-- **Priority:** P2 Medium · **Status:** Open · **Refs:** [MUP-ONA MP-B2](https://github.com/peterkarlhuber/nodestro-studio/blob/master/docs/architecture/mup-ona/MUP-ONA.md)
-- **What:** `SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` live in the contract modules.
-- **Next step:** Behavior-neutral move with re-exports (T-API-1..3, T-SQL-10 against FX-SQ-0).
+API snapshot, import contracts, release rules), the Orkexa part of MP-B1 (storage contracts, public conformance
+suite `orkexa.testing.conformance`, `ScriptedClient`) and MP-B2 (SQLite backends in `orkexa.backends.sqlite`)
+are in place; each entry is removed in the change that completes its package.
 
 ### ORK-MUP-B5 · `orkexa.backends.postgres` and `orkexa.testing.sqlcheck`
 

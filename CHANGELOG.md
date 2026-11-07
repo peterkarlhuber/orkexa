@@ -29,6 +29,22 @@ listed here. The development version is `0.2.0.dev0`.
   `tests/test_sandbox_lifecycle.py` uses a temporary directory of its own (another test run on the machine made it
   fail).
 
+### Changed: the SQLite backends moved to `orkexa.backends.sqlite` (MUP-ONA B2, 2026-11-07)
+
+* Moved, no behavior change: `SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` are now defined in
+  `orkexa.backends.sqlite` (modules `index`, `files`, `memory`), their canonical path. `orkexa.SQLiteIndex`,
+  `orkexa.retrieval.SQLiteIndex`, `orkexa.files.SQLiteFileStore`, `orkexa.memory.SQLiteMemory` and the other old
+  import paths return the very same classes (`is`), also for type checkers. Only `__module__` changes (for example
+  `orkexa.backends.sqlite.index` instead of `orkexa.retrieval`); constructors, SQL, tables, pragmas, file
+  permissions and the database format stay as they were. The private helper `_fts_query` moved along
+  (`orkexa.backends.sqlite.index._fts_query`).
+* The contract modules resolve these names on first access (PEP 562 `__getattr__`) and never import a backend when
+  they load; a third import-linter contract checks it. The private attributes Nodestro uses (`_connection`,
+  `_lock`, `_save`, `_read`, `_files`) are kept and marked "preserved for compatibility".
+* tests: T-API-1 (identity of every import path), T-API-2 (each module imported first in a fresh interpreter),
+  T-API-3 (`mypy --strict` over the old paths, `tests/backends/sqlite/mypy_probe.py`), T-SQL-11 (the private
+  attributes).
+
 ### Added: generic storage contracts (MUP-ONA B1, 2026-11-07)
 
 * Added: the score semantics of every `Index` backend in `Index.search` (full text: reciprocal rank

@@ -100,8 +100,8 @@ from .evaluation import (
     refine,
     tool_results_of_last_turn,
 )
-from .files import FileStore, LocalFileStore, SQLiteFileStore, StoredFile
-from .memory import EphemeralMemory, FileMemory, MemoryBackend, SQLiteMemory
+from .files import FileStore, LocalFileStore, StoredFile
+from .memory import EphemeralMemory, FileMemory, MemoryBackend
 from .pricing import MODEL_PRICING, ModelPricing, register_pricing, resolve_pricing
 from .providers import (
     AnthropicOptions,
@@ -113,9 +113,13 @@ from .providers import (
     ProviderConfig,
     register_provider,
 )
-from .retrieval import Chunk, Citation, Hit, Index, SQLiteIndex, citations, retrieval_sources, split_text
+from .retrieval import Chunk, Citation, Hit, Index, citations, retrieval_sources, split_text
 from .tools import Tool
 from .usage import Reservation, UsageRecord, UsageSummary, UsageTracker
+
+# isort: split
+# The SQLite backends import the contract modules above (retrieval, files, memory), so they come last.
+from .backends.sqlite import SQLiteFileStore, SQLiteIndex, SQLiteMemory
 
 try:
     __version__ = version("orkexa")
