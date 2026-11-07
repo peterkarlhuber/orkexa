@@ -1,0 +1,3611 @@
+{
+  "description": "Nodestro's tenant SQL check cases (tests/test_tenant_filters.py) as the rule engine sees them (tests/fixtures/sqlcheck/make_tenant_filter_cases.py).",
+  "origin": {
+    "repository": "nodestro-runtime",
+    "commit": "2ef5b3b85181d9b31f681e6ae79e24f1f88c6416",
+    "file": "tests/test_tenant_filters.py"
+  },
+  "column": "tenant_id",
+  "placeholder": "psycopg",
+  "tenant_tables": [
+    "nodestro_bootstrap_tokens",
+    "nodestro_chunk_vectors",
+    "nodestro_chunks",
+    "nodestro_documents",
+    "nodestro_files",
+    "nodestro_jobs",
+    "nodestro_login_states",
+    "nodestro_memberships",
+    "nodestro_memory_files",
+    "nodestro_run_events",
+    "nodestro_schedule_firings",
+    "nodestro_sessions",
+    "nodestro_vector_spaces"
+  ],
+  "cases": [
+    {
+      "id": "REVIEW_SAMPLES[ORed predicate]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR collection = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[jsonb ? operator]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE data ? %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[no %s placeholder]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE collection = 'runs'",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[psycopg sql.SQL with Identifier]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM \"nodestro_documents\" WHERE id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[split concatenation]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE collection = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[table not in the old list (nodestro_jobs)]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "UPDATE nodestro_jobs SET cancel_requested = true WHERE ref = %s",
+          "findings": [
+            [
+              "leak",
+              7,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              7,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[table not in the old list (nodestro_schedule_firings)]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT run_id FROM nodestro_schedule_firings WHERE schedule_id = %s",
+          "findings": [
+            [
+              "leak",
+              19,
+              "nodestro_schedule_firings is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              19,
+              "nodestro_schedule_firings is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[table via variable]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE collection = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[tenant_id = tenant_id]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = tenant_id AND id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[tenant_id IS NOT NULL]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id IS NOT NULL AND collection = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[tenant_id only in ORDER BY]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE id = %s ORDER BY tenant_id",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "REVIEW_SAMPLES[tenant_id only in select list]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT tenant_id, data FROM nodestro_documents WHERE collection = %s",
+          "findings": [
+            [
+              "leak",
+              28,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              28,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[0]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE (tenant_id = %s OR id = %s)",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[1]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE NOT (tenant_id = %s)",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[2]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id <> %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[3]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = 'acme'",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[4]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = (SELECT %s)",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[5]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[6]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE coalesce(tenant_id = %s, true)",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[7]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents HAVING tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[8]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d, nodestro_files f WHERE tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              19,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              41,
+              "nodestro_files (as f) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              19,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              41,
+              "nodestro_files (as f) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[9]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d, nodestro_files f WHERE d.tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              41,
+              "nodestro_files (as f) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              41,
+              "nodestro_files (as f) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[10]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d JOIN nodestro_jobs j ON j.ref = d.id WHERE d.tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              45,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              45,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[11]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT j.ref FROM nodestro_documents d LEFT JOIN nodestro_jobs j ON d.tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              18,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              49,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              18,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              49,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[12]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d FULL JOIN nodestro_jobs j ON j.tenant_id = %s AND d.tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              19,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              50,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              19,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              50,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[13]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id IN (SELECT ref FROM nodestro_jobs)",
+          "findings": [
+            [
+              "leak",
+              84,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              84,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[14]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT (SELECT count(*) FROM nodestro_jobs) FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              29,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              29,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[15]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s UNION SELECT entry FROM nodestro_files",
+          "findings": [
+            [
+              "leak",
+              81,
+              "nodestro_files is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              81,
+              "nodestro_files is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[16]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "WITH r AS (SELECT id FROM nodestro_documents) SELECT id FROM r",
+          "findings": [
+            [
+              "leak",
+              26,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              26,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[17]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT x.id FROM (SELECT id FROM nodestro_documents) x",
+          "findings": [
+            [
+              "leak",
+              33,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              33,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[18]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "UPDATE nodestro_jobs SET status = 'done' WHERE ref = %s",
+          "findings": [
+            [
+              "leak",
+              7,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              7,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[19]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "UPDATE nodestro_jobs j SET status = 'done' FROM nodestro_documents d WHERE j.tenant_id = %s AND j.ref = d.id",
+          "findings": [
+            [
+              "leak",
+              48,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              48,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[20]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "DELETE FROM nodestro_chunks USING nodestro_files f WHERE nodestro_chunks.tenant_id = %s AND f.id = file_id",
+          "findings": [
+            [
+              "leak",
+              34,
+              "nodestro_files (as f) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              34,
+              "nodestro_files (as f) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[21]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "DELETE FROM nodestro_memory_files WHERE namespace = %s",
+          "findings": [
+            [
+              "leak",
+              12,
+              "nodestro_memory_files is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              12,
+              "nodestro_memory_files is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[22]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_run_events (run_id, seq, event) VALUES (%s, %s, %s)",
+          "findings": [
+            [
+              "leak",
+              12,
+              "the INSERT into nodestro_run_events lists no tenant_id column"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              12,
+              "the INSERT into nodestro_run_events lists no tenant_id column"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[23]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_run_events SELECT * FROM nodestro_run_events",
+          "findings": [
+            [
+              "leak",
+              12,
+              "the INSERT into nodestro_run_events lists no tenant_id column"
+            ],
+            [
+              "leak",
+              46,
+              "nodestro_run_events is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              12,
+              "the INSERT into nodestro_run_events lists no tenant_id column"
+            ],
+            [
+              "leak",
+              46,
+              "nodestro_run_events is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[24]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, kind, ref, status) SELECT tenant_id, kind, ref, 'queued' FROM nodestro_jobs",
+          "findings": [
+            [
+              "leak",
+              100,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              100,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[25]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "TRUNCATE nodestro_documents",
+          "findings": [
+            [
+              "unsupported",
+              0,
+              "TruncateStmt on nodestro_documents is not supported by the check"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "unsupported",
+              0,
+              "TruncateStmt on nodestro_documents is not supported by the check"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "unsupported"
+      ]
+    },
+    {
+      "id": "LEAKING[26]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "COPY nodestro_documents TO STDOUT",
+          "findings": [
+            [
+              "unsupported",
+              0,
+              "CopyStmt on nodestro_documents is not supported by the check"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "unsupported",
+              0,
+              "CopyStmt on nodestro_documents is not supported by the check"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "unsupported"
+      ]
+    },
+    {
+      "id": "LEAKING[27]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT 1; DELETE FROM nodestro_sessions",
+          "findings": [
+            [
+              "leak",
+              22,
+              "nodestro_sessions is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              22,
+              "nodestro_sessions is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "LEAKING[28]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "WITH nodestro_documents AS (SELECT 1) SELECT * FROM nodestro_documents",
+          "findings": [
+            [
+              "leak",
+              5,
+              "CTE named like the tenant table nodestro_documents"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              5,
+              "CTE named like the tenant table nodestro_documents"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[assigned after the read in a loop]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[conditional += OR]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[elif reassignment]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[q = q + OR]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[returned]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[set by a function that declares it global]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[the value assigned before a later string reads the name]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BARE_NAME_LEAKS[unconditional += OR]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "HOLE_LED[bytes SQL]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "HOLE_LED[class attribute via self]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{self.BASE} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "HOLE_LED[function result]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{base()} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "HOLE_LED[imported fragment + OR]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "HOLE_LED[imported fragment + WHERE]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE} WHERE id = %s"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "HOLE_LED[join of a list that is appended to]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known}OR true",
+        "SELECT data FROM nodestro_documents WHERE tenant_id = %s {parts (changed)}"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "HOLE_LED[parameter]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{base} AND id = %s"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "HOLE_LED[str.replace]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s{.replace(...)}"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[% formatting of an unknown value]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known}{q} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[% formatting with a dict wraps a name]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[% formatting with a tuple wraps a name]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[% formatting wraps a name]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[+= on a class attribute]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{Q} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[+= on a dict item]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{Q['a']} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[+= on a list item]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{qs[0]} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[+= on a parameter]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{q} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[+= on a parameter with a SQL default]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{q} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[+= on self.q]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{self.q} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[conditional += on a parameter]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{q} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[imported fragment + block comment]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE} /* x */"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[imported fragment + comment]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE} --"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[imported fragment + lower-case or]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE} or 1=1"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[lambda reads the outer name]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[method result += lower-case or]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{self._base()} or true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[nested function reads the outer name]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[nested function widens the outer name (nonlocal)]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "SELECT data FROM nodestro_documents WHERE tenant_id = %s{q += ...}"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[quoted table name in mixed case]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM \"Nodestro_documents\" WHERE id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents (as Nodestro_documents) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents (as Nodestro_documents) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[self.BASE + lower-case or]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{self.BASE} or true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[table name completed after a constant prefix]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[table name joined from parts]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[table name split by + of constants]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[table name split by a constant between]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE id = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[tuple items by index]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [
+        "{statement not known} OR true"
+      ],
+      "checker": [
+        "dynamic",
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[tuple-unpacked alias += lower-case or]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{q2} or true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[two class attributes]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_PROBES[walrus through a call]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[0]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT (SELECT count(*) FROM nodestro_jobs d WHERE d.tenant_id = d.tenant_id) FROM nodestro_documents d WHERE d.tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              29,
+              "nodestro_jobs (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              29,
+              "nodestro_jobs (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[1]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT (SELECT count(*) FROM nodestro_jobs j, axentra_memberships d WHERE j.tenant_id = d.tenant_id) FROM nodestro_documents d WHERE d.tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              29,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              29,
+              "nodestro_jobs (as j) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[2]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "DO $$ BEGIN DELETE FROM nodestro_documents; END $$",
+          "findings": [
+            [
+              "unsupported",
+              0,
+              "a string that names a tenant table (' BEGIN DELETE FROM nodestro_documents; END ') is not supported by the check"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "unsupported",
+              0,
+              "a string that names a tenant table (' BEGIN DELETE FROM nodestro_documents; END ') is not supported by the check"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "unsupported"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[3]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "SELECT query_to_xml('SELECT * FROM nodestro_documents', true, true, '')",
+          "findings": [
+            [
+              "unsupported",
+              0,
+              "a string that names a tenant table ('SELECT * FROM nodestro_documents') is not supported by the check"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "unsupported",
+              0,
+              "a string that names a tenant table ('SELECT * FROM nodestro_documents') is not supported by the check"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "unsupported"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[4]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, kind, ref) VALUES ('other', %s, %s)",
+          "findings": [
+            [
+              "leak",
+              12,
+              "the tenant_id written into nodestro_jobs is not a parameter or a bound tenant_id"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              12,
+              "the tenant_id written into nodestro_jobs is not a parameter or a bound tenant_id"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[5]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, kind, ref) VALUES (%s, %s, %s), ('other', %s, %s)",
+          "findings": [
+            [
+              "leak",
+              12,
+              "the tenant_id written into nodestro_jobs is not a parameter or a bound tenant_id"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              12,
+              "the tenant_id written into nodestro_jobs is not a parameter or a bound tenant_id"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[6]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, kind, ref) SELECT 'other', kind, ref FROM nodestro_jobs WHERE tenant_id = %s",
+          "findings": [
+            [
+              "leak",
+              12,
+              "the tenant_id written into nodestro_jobs is not a parameter or a bound tenant_id"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              12,
+              "the tenant_id written into nodestro_jobs is not a parameter or a bound tenant_id"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[7]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, id, status) VALUES (%s, %s, %s) ON CONFLICT (id) DO UPDATE SET status = excluded.status",
+          "findings": [
+            [
+              "leak",
+              70,
+              "the conflict target of an upsert into nodestro_jobs lacks tenant_id: it may update another tenant's row"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              70,
+              "the conflict target of an upsert into nodestro_jobs lacks tenant_id: it may update another tenant's row"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[8]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, id, status) VALUES (%s, %s, %s) ON CONFLICT ON CONSTRAINT k DO UPDATE SET status = excluded.status",
+          "findings": [
+            [
+              "leak",
+              70,
+              "the conflict target of an upsert into nodestro_jobs lacks tenant_id: it may update another tenant's row"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              70,
+              "the conflict target of an upsert into nodestro_jobs lacks tenant_id: it may update another tenant's row"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[9]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, id, status) VALUES (%s, %s, %s) ON CONFLICT (id) DO UPDATE SET tenant_id = excluded.tenant_id",
+          "findings": [
+            [
+              "leak",
+              70,
+              "the conflict target of an upsert into nodestro_jobs lacks tenant_id: it may update another tenant's row"
+            ],
+            [
+              "leak",
+              101,
+              "the upsert into nodestro_jobs sets tenant_id: it moves a row to another tenant"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              70,
+              "the conflict target of an upsert into nodestro_jobs lacks tenant_id: it may update another tenant's row"
+            ],
+            [
+              "leak",
+              101,
+              "the upsert into nodestro_jobs sets tenant_id: it moves a row to another tenant"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND3_LEAKING_SQL[10]",
+      "group": "mandatory",
+      "statements": [
+        {
+          "text": "UPDATE nodestro_jobs SET tenant_id = %s WHERE tenant_id = %s AND id = %s",
+          "findings": [
+            [
+              "leak",
+              25,
+              "the UPDATE of nodestro_jobs sets tenant_id: it moves a row to another tenant"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              25,
+              "the UPDATE of nodestro_jobs sets tenant_id: it moves a row to another tenant"
+            ]
+          ]
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[Q[item].replace]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "SELECT data FROM nodestro_documents WHERE tenant_id = %s{.replace(...)}"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[SQL in an argument of .replace on a known text]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "DELETE FROM nodestro_documents",
+          "findings": [
+            [
+              "leak",
+              12,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              12,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[base().replace]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{base()}{.replace(...)} tenant_id = %s true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[block comment before an unknown part]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known}/* tag */ {BASE} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[fragment that starts with IS]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known} IS NOT NULL OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[fragment that starts with a comment]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known}/**/OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[fragment that starts with is, lower case]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known} is not null or true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[function reads a module name that is reassigned]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[imported fragment .replace with constant arguments]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE}{.replace(...)} tenant_id = %s true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[line comment before an unknown part]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{statement not known}-- tag {BASE} OR true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[lower-case and (true)]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE} and (true)"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[lower-case or (1=1)]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{BASE} or (1=1)"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[module-level call before a reassignment]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[module-level read before a reassignment]",
+      "group": "mandatory",
+      "expected": "leak",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s OR true",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ],
+          "findings_allow_any": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ]
+          ]
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[self.BASE.replace]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "{self.BASE}{.replace(...)} tenant_id = %s true"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "ROUND4_PROBES[str.replace(BASE, ...)]",
+      "group": "mandatory",
+      "expected": "dynamic",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [
+        "SELECT data FROM nodestro_documents WHERE tenant_id = %s{.replace(...)}"
+      ],
+      "checker": [
+        "dynamic"
+      ]
+    },
+    {
+      "id": "BOUND[0]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[1]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE id = %s AND %s = tenant_id",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[2]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s::text AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[3]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = ANY(%s)",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              17,
+              "an array of tenant ids may hold several tenants"
+            ]
+          ],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "BOUND[4]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %(tenant)s AND id = %(id)s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[5]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM public.nodestro_documents WHERE nodestro_documents.tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[6]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d JOIN nodestro_jobs j ON j.tenant_id = d.tenant_id AND j.ref = d.id WHERE d.tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[7]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d LEFT JOIN nodestro_jobs j ON j.tenant_id = d.tenant_id WHERE d.tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[8]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d WHERE d.tenant_id = %s AND NOT EXISTS (SELECT 1 FROM nodestro_jobs j WHERE j.tenant_id = d.tenant_id AND j.ref = d.id)",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[9]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id IN (SELECT ref FROM nodestro_jobs WHERE tenant_id = %s)",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[10]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "WITH r AS (SELECT id FROM nodestro_documents WHERE tenant_id = %s) SELECT id FROM r",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[11]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s UNION ALL SELECT entry FROM nodestro_files WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[12]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "UPDATE nodestro_jobs SET cancel_requested = true WHERE tenant_id = %s AND ref = %s RETURNING id",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[13]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "DELETE FROM nodestro_chunks WHERE tenant_id = %s AND namespace = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[14]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_run_events (tenant_id, run_id, seq, event) VALUES (%s, %s, %s, %s)",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[15]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_files (tenant_id, namespace, id, entry, data) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (tenant_id, namespace, id) DO UPDATE SET entry = excluded.entry",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[16]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT count(*) FROM pg_class WHERE relname = 'nodestro_documents'",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[17]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "CREATE INDEX x ON nodestro_documents (tenant_id, collection)",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "BOUND[18]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT id FROM nodestro_tenants WHERE status = 'active'",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_CLEAN[% formatting of a bound statement]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_CLEAN[+= of an AND filter]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_CLEAN[a closure that reads a value that is not SQL]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_CLEAN[alias, then only the original is extended]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_CLEAN[counters and text built with +=]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_CLEAN[messages with lower-case words after an unknown part]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[0]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT d.id, (SELECT max(ref) FROM nodestro_jobs WHERE tenant_id = d.tenant_id) FROM nodestro_documents d WHERE d.tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[1]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d, LATERAL (SELECT * FROM nodestro_jobs j WHERE j.tenant_id = d.tenant_id) x WHERE d.tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[2]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_run_events (tenant_id, run_id, seq, event) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[3]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, kind, ref) VALUES (%s::text, %s, %s), (%s, %s, %s)",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[4]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, kind, ref) SELECT %s, 'k', x FROM unnest(%s::text[]) AS t(x)",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[5]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_jobs (tenant_id, kind, ref) SELECT d.tenant_id, 'k', d.id FROM nodestro_documents d WHERE d.tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[6]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "INSERT INTO nodestro_files (tenant_id, namespace, id, entry) VALUES (%s, %s, %s, %s) ON CONFLICT (tenant_id, namespace, id) DO UPDATE SET tenant_id = excluded.tenant_id, entry = excluded.entry",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND3_BOUND_SQL[7]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT count(*) FROM pg_class WHERE relname = 'nodestro_documents'",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": []
+    },
+    {
+      "id": "ROUND4_CLEAN[a module name assigned once and read in a function]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND4_CLEAN[a module name completed before it is read]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s AND id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        },
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND4_CLEAN[messages with comments, is and parentheses]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ROUND4_CLEAN[text methods that are not SQL]",
+      "group": "control",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = %s",
+          "findings": [],
+          "findings_allow_any": []
+        }
+      ],
+      "dynamic": [],
+      "checker": []
+    },
+    {
+      "id": "ANY_SAMPLES[0]",
+      "group": "any",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = ANY(%s)",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              17,
+              "an array of tenant ids may hold several tenants"
+            ]
+          ],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ANY_SAMPLES[1]",
+      "group": "any",
+      "statements": [
+        {
+          "text": "SELECT data FROM nodestro_documents WHERE tenant_id = ANY(%s::text[]) AND collection = %s",
+          "findings": [
+            [
+              "leak",
+              17,
+              "nodestro_documents is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              17,
+              "an array of tenant ids may hold several tenants"
+            ]
+          ],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ANY_SAMPLES[2]",
+      "group": "any",
+      "statements": [
+        {
+          "text": "DELETE FROM nodestro_jobs WHERE tenant_id = ANY(%(tenants)s)",
+          "findings": [
+            [
+              "leak",
+              12,
+              "nodestro_jobs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              12,
+              "an array of tenant ids may hold several tenants"
+            ]
+          ],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    },
+    {
+      "id": "ANY_SAMPLES[3]",
+      "group": "any",
+      "statements": [
+        {
+          "text": "SELECT d.data FROM nodestro_documents d WHERE d.tenant_id = ANY(%s)",
+          "findings": [
+            [
+              "leak",
+              19,
+              "nodestro_documents (as d) is not bound to one tenant by a top-level `tenant_id = <param>` conjunct"
+            ],
+            [
+              "leak",
+              19,
+              "an array of tenant ids may hold several tenants"
+            ]
+          ],
+          "findings_allow_any": []
+        }
+      ],
+      "checker": [
+        "leak"
+      ]
+    }
+  ]
+}

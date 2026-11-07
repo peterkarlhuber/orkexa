@@ -134,3 +134,68 @@ on the case's storage; `expect`, `expect_equal`, `expect_error` and `expect_code
 ::: orkexa.testing.conformance.load_expected_skips
 
 ::: orkexa.testing.conformance.KeywordEmbeddings
+
+## The tenant SQL rule engine
+
+`orkexa.testing.sqlcheck` checks that PostgreSQL statements on tables partitioned by tenant are bound to one
+tenant: every reference to such a table must be filtered by `<partition column> = <parameter>` as a top-level
+`AND` condition, writes must set the column from a parameter and never move a row to another tenant. Use it in
+your tests on the statements your code sends (a statement catalog, rendered queries, SQL rebuilt from source).
+It needs PostgreSQL's parser, pglast:
+
+```bash
+pip install "orkexa[sqlcheck]"
+```
+
+Importing the module needs no parser; without pglast the first `check_statement` call raises `ImportError`
+naming the extra.
+
+```python
+from orkexa.testing.sqlcheck import check_statement
+
+TENANT_TABLES = {"docs", "notes"}
+
+
+def test_the_statements_are_bound_to_one_tenant() -> None:
+    for sql in [
+        "SELECT body FROM docs WHERE tenant_id = %s AND id = %s",
+        "INSERT INTO notes (tenant_id, doc, text) VALUES (%s, %s, %s)",
+    ]:
+        assert check_statement(sql, tenant_tables=TENANT_TABLES) == [], sql
+
+
+findings = check_statement(
+    "SELECT body FROM docs WHERE id = %s OR tenant_id = %s", tenant_tables=TENANT_TABLES
+)
+# [Finding(kind='leak', position=17,
+#          message='docs is not bound to one tenant by a top-level `tenant_id = <param>` conjunct')]
+```
+
+| Parameter | Meaning |
+|---|---|
+| `tenant_tables` | the tables partitioned by tenant (any case; a schema-qualified name counts by its last part) |
+| `column` | the partition column, an unquoted lower-case name (default `tenant_id`) |
+| `placeholder` | `"psycopg"` (`%s`, `%(name)s`; `%%` is `%`, the default) or `"postgres"` (`$1`) |
+| `allow_any` | `column = ANY(<param>)` binds too (off by default: the array may hold several tenants) |
+
+Each `Finding` has a `kind`, a `position` (character offset in the text as given, best effort) and a `message`:
+
+| Kind | Meaning |
+|---|---|
+| `leak` | a table reference or write that may reach another tenant's rows |
+| `unparsed` | the parser rejects the text (never an exception) |
+| `unsupported` | a statement the rules cannot decide: `TRUNCATE`, `COPY`, `MERGE` and the like on a tenant table, or SQL in a string (`DO $$ ... $$`, `query_to_xml('...')`) that names one |
+
+A statement passes only when the list is empty: `unparsed` and `unsupported` are failures too. There is no
+allowlist and no configuration file; a statement that is cross-tenant by design is the caller's decision.
+Schema statements (`CREATE`, `ALTER`, `CREATE INDEX`, `GRANT`, `DROP`, ...) pass. What the engine cannot see:
+whether the parameter holds the right tenant, SQL inside functions, views, triggers and rules on the server, and
+tables reached under a name not in `tenant_tables`. The module documentation lists the rules in full.
+
+The engine imports only the standard library and pglast, and no other Orkexa module (an import-linter contract
+checks this), so a host can use it without Orkexa's other dependencies. It comes from Nodestro's tenant SQL check
+(MUP-ONA B4/B5); Orkexa's tests run Nodestro's 112 mandatory leak cases and 37 controls against it.
+
+::: orkexa.testing.sqlcheck.check_statement
+
+::: orkexa.testing.sqlcheck.Finding

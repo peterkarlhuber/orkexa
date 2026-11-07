@@ -18,6 +18,28 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Added: the tenant SQL rule engine `orkexa.testing.sqlcheck` (MUP-ONA B5, 2026-11-07)
+
+* Added: `orkexa.testing.sqlcheck.check_statement(sql, *, tenant_tables, column="tenant_id",
+  placeholder="psycopg", allow_any=False)` returns a list of `Finding(kind, position, message)` with `kind` in
+  `leak`, `unparsed`, `unsupported`: every reference to a table partitioned by tenant must be bound by
+  `<column> = <param>` as a top-level `AND` condition (or by equality with a bound reference), and writes must
+  neither omit nor move the partition column. No allowlist and no configuration file; the table set, the column
+  and the placeholder style (`%s` or `$1`) are parameters. Also exported: `KINDS`, `PLACEHOLDERS`,
+  `ANY_REFUSED`, `MISSING_PGLAST`, `to_postgres_params`. See "The tenant SQL rule engine" in
+  `docs/reference/testing.md`.
+* Taken over without a change of behavior from nodestro-runtime's `sqlcheck_rules` (2ef5b3b, runtime PR #137);
+  the first commit is the unchanged file. Only docstrings, line wrapping and the missing-pglast message changed.
+* New extra `sqlcheck = ["pglast>=7,<9"]`, also in `dev`. The engine imports pglast only on first use: `import
+  orkexa` and `import orkexa.testing.sqlcheck` work without it, and the first check raises `ImportError` naming
+  `orkexa[sqlcheck]`.
+* A fourth import-linter contract keeps the engine free of other Orkexa modules (T-PKG-0 now expects 4).
+* tests: `tests/test_sqlcheck.py` with the carried-over engine tests (T-SQLC-1: foreign column `org_id` and tables
+  `t_docs`/`t_notes`, Nodestro's 46 parity statements renamed), T-SQLCHECK (Nodestro's 112 mandatory cases and 37
+  controls of `tests/test_tenant_filters.py` as data in `tests/fixtures/sqlcheck/tenant_filter_cases.json`, with
+  its generator; the engine gives the very same findings) and T-PKG-1 for the engine (pglast blocked). CI: the
+  Windows ARM64 job installs pglast, the lowest-versions job pins `pglast==7.20`, the audit covers `sqlcheck`.
+
 ### Changed: the managed Ollama ends with its application (2026-11-07)
 
 * `ManagedOllama` ties the server's lifetime to the process that started it: on Linux and macOS a watcher process
