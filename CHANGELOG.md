@@ -29,6 +29,28 @@ listed here. The development version is `0.2.0.dev0`.
   `tests/test_sandbox_lifecycle.py` uses a temporary directory of its own (another test run on the machine made it
   fail).
 
+### Added: generic storage contracts (MUP-ONA B1, 2026-11-07)
+
+* Added: the score semantics of every `Index` backend in `Index.search` (full text: reciprocal rank
+  `1 / (60 + rank)`; vector: cosine rounded to 6 digits; hybrid: `fuse_hybrid`; ties by chunk id) and
+  ADR 0014 (`docs/architecture/decisions/0014-storage-contracts-and-conformance.md`).
+* Added: `orkexa.retrieval.tokenize`, `fold` (the query side of full-text search; `query_words` uses them, results
+  unchanged) and `fuse_rrf(rankings, k=60)` (`SQLiteIndex` uses it, results unchanged).
+* Added: `orkexa.embeddings.validate_vector(vector, identity)`: `vector.dimension`, `vector.invalid` (NaN or
+  infinity), `None` for a zero vector, unit length unless `identity.normalized`. `SQLiteIndex` calls it without a
+  change of results. The new `VectorError` (a `RetrievalError` and a `ValueError`) carries these codes.
+* Added: `RETRIEVAL_ERROR_CODES`, the one code set of every storage backend, with the new codes `vector.invalid`,
+  `partition.missing` and `schema.mismatch` (PostgreSQL backends).
+* Added: `capabilities` (`vectors`, `reindex`, `partitioned`, `concurrent_writers`) on `Index`, `FileStore` and
+  `MemoryBackend`; the SQLite classes report `partitioned` and `concurrent_writers`, `SQLiteIndex` also `vectors`
+  and `reindex` as configured. Added: the protocol `orkexa.retrieval.ReindexableIndex`.
+* Changed: the query limits `MAX_QUERY_CHARS`/`MAX_QUERY_WORDS` moved from `SQLiteIndex` into `Index`
+  (`max_query_chars=`/`max_query_words=`, `Index.check_query`) and apply to every `Index` subclass: their
+  `search` and `retrieve` refuse an overlong query with `query.too_long` before anything else. `SQLiteIndex`
+  behaves as before.
+* Changed: an invalid vector in `SQLiteIndex` raises `VectorError` (still a `ValueError`, now with a code); a query
+  vector of another length raises it too (still a `RetrievalError` with `vector.dimension`).
+
 ### Added: PDF budgets and isolated PDF extraction (MUP-ONA A1, 2026-11-06)
 
 * Added: `orkexa.retrieval.pdf_pages(data, *, max_pages=2000, max_chars=5_000_000)` stops between pages and raises

@@ -26,6 +26,7 @@ from typing import Any, Literal
 
 from .local._http import DEFAULT_OLLAMA_URL, OllamaError
 from .local.client import OllamaClient
+from .retrieval import VectorError
 
 __all__ = [
     "KNOWN_PREFIXES",
@@ -36,6 +37,7 @@ __all__ = [
     "EmbeddingModel",
     "EmbeddingUsage",
     "OllamaEmbeddings",
+    "validate_vector",
 ]
 
 QWEN3_QUERY_INSTRUCTION = "Given a search query, retrieve relevant passages that answer the query"
@@ -207,6 +209,43 @@ class CallableEmbeddings(EmbeddingModel):
 
     def identity(self) -> EmbeddingIdentity:
         return self._identity
+
+
+def validate_vector(vector: Sequence[float], identity: EmbeddingIdentity | None = None) -> list[float] | None:
+    """Check a vector before a backend stores or compares it (MUP-ONA O1); the one check every backend uses.
+
+    * a length other than ``identity.dimensions`` raises :class:`~orkexa.retrieval.VectorError`
+      (``vector.dimension``);
+    * NaN or infinity (or a value that is no number) raises it with ``vector.invalid``;
+    * a vector without direction (all zeros) returns ``None``: it has no cosine similarity, so the backend
+      discards it (never stores it as a searchable vector, never ranks with it: a zero query finds nothing);
+    * otherwise the vector as floats, scaled to unit length unless ``identity.normalized`` says the model
+      already returns unit vectors. Then the dot product of two results is their cosine similarity.
+
+    Without ``identity`` the length is not checked and the vector is always scaled.
+    :class:`~orkexa.SQLiteIndex` calls it for every vector it stores or searches with; it keeps storing the
+    original values (sqlite-vec computes the cosine itself) and leaves zero vectors out at search time, which
+    is the same result.
+    """
+    try:
+        values = [float(value) for value in vector]
+    except (TypeError, ValueError):
+        raise VectorError("vector.invalid", "A vector holds a value that is not a number") from None
+    if identity is not None and len(values) != identity.dimensions:
+        raise VectorError(
+            "vector.dimension",
+            f"The vector has {len(values)} dimensions, {identity.model} has {identity.dimensions}",
+        )
+    if not all(math.isfinite(value) for value in values):
+        raise VectorError(
+            "vector.invalid", "A vector holds a value that is not a finite number (NaN or infinity)"
+        )
+    norm = math.hypot(*values)
+    if norm == 0.0:
+        return None
+    if identity is not None and identity.normalized:
+        return values
+    return [value / norm for value in values]
 
 
 def _normalize(vector: list[float]) -> list[float]:

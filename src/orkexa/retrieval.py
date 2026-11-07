@@ -43,6 +43,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+import functools
+import inspect
 import io
 import json
 import math
@@ -53,7 +55,7 @@ import signal
 import sqlite3
 import struct
 import threading
-from typing import TYPE_CHECKING, Any, Literal, get_args
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, get_args, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -72,6 +74,7 @@ __all__ = [
     "LEXICAL_WEIGHT",
     "MAX_QUERY_CHARS",
     "MAX_QUERY_WORDS",
+    "RETRIEVAL_ERROR_CODES",
     "RETRIEVAL_MODES",
     "SEARCH_TOOL_NAME",
     "Chunk",
@@ -81,18 +84,23 @@ __all__ = [
     "HybridFusion",
     "Index",
     "PdfLimits",
+    "ReindexableIndex",
     "RetrievalError",
     "RetrievalMode",
     "SQLiteIndex",
+    "VectorError",
     "VectorStatus",
     "citations",
+    "fold",
     "fuse_hybrid",
+    "fuse_rrf",
     "lexical_evidence",
     "pdf_pages",
     "pdf_pages_isolated",
     "query_words",
     "retrieval_sources",
     "split_text",
+    "tokenize",
     "word_weight",
 ]
 
@@ -110,20 +118,41 @@ much of the query a chunk contains (:func:`fuse_hybrid`); ``rrf`` is the earlier
 HYBRID_FUSIONS: tuple[str, ...] = get_args(HybridFusion)
 
 _WORD = re.compile(r"\w+", re.UNICODE)
-_RRF_K = 60
+_RRF_K = 60  # the reciprocal rank fusion constant (fuse_rrf's default k)
 _MAX_SOURCES = 50_000
 #: The share of the full-text evidence in ``evidence`` fusion (the vector side gets the rest).
 LEXICAL_WEIGHT = 0.5
-#: The longest search query :class:`SQLiteIndex` accepts, in characters (``max_query_chars=`` changes it).
+#: The longest search query an :class:`Index` accepts, in characters (``max_query_chars=`` changes it).
 MAX_QUERY_CHARS = 1000
-#: The most distinct query words (:func:`query_words`) :class:`SQLiteIndex` accepts (``max_query_words=``).
+#: The most distinct query words (:func:`query_words`) an :class:`Index` accepts (``max_query_words=``).
 MAX_QUERY_WORDS = 64
+
+RETRIEVAL_ERROR_CODES: Mapping[str, str] = {
+    "mode_unsupported": "the index cannot rank this way",
+    "vector_unavailable": "no embedding model or no vectors",
+    "reindex_required": "the vectors belong to another embedding model",
+    "vector_incomplete": "not every chunk has a vector yet",
+    "cancelled": "a reindex was cancelled",
+    "query.too_long": "the query exceeds the character or word limit of the index",
+    "vector.invalid": "a vector holds NaN or infinity",
+    "vector.dimension": "a vector's length differs from the embedding model's or the stored vectors'",
+    "partition.missing": "an operation of a partitioned backend has no valid partition (tenant) value",
+    "schema.mismatch": "a database schema differs from what the backend needs",
+    "storage.symlink": "a SQLite database path is a symbolic link",
+    "storage.corrupt": "a SQLite database file is damaged or not a database",
+    "document.too_complex": "a PDF exceeds a PdfLimits budget",
+}
+"""Every :attr:`RetrievalError.code` of every storage backend, with its meaning (MUP-ONA O4).
+
+Products map these codes, never message texts. ``partition.missing`` and ``schema.mismatch`` are raised by
+partitioned database backends (PostgreSQL); the SQLite classes never raise them."""
 
 
 class RetrievalError(OrkexaError, RuntimeError):
     """A search could not run as requested; never answered with another mode instead.
 
-    ``code`` is one of (the only list of these codes):
+    ``code`` is one of the keys of :data:`RETRIEVAL_ERROR_CODES`, the one code set of every storage backend
+    (MUP-ONA O4; a test keeps this list and that mapping equal):
 
     * ``mode_unsupported``: the index cannot rank this way.
     * ``vector_unavailable``: no embedding model or no vectors.
@@ -132,7 +161,12 @@ class RetrievalError(OrkexaError, RuntimeError):
     * ``cancelled``: a :meth:`SQLiteIndex.reindex` was cancelled.
     * ``query.too_long``: the query exceeds the index's character or word limit
       (:data:`MAX_QUERY_CHARS`, :data:`MAX_QUERY_WORDS`); checked before any work or lock.
-    * ``vector.dimension``: a query vector's length differs from the stored vectors'.
+    * ``vector.invalid``: a vector holds NaN or infinity (raised as :class:`VectorError`).
+    * ``vector.dimension``: a vector's length differs from the embedding model's or the stored vectors'
+      (raised as :class:`VectorError`).
+    * ``partition.missing``: a partitioned backend got no valid partition (tenant) value; raised before any
+      database access (PostgreSQL backends).
+    * ``schema.mismatch``: a database schema differs from what the backend needs (PostgreSQL backends).
     * ``storage.symlink``: a SQLite database path (or its journal, WAL or shared-memory file) is a
       symbolic link; :class:`SQLiteIndex`, :class:`~orkexa.SQLiteFileStore` and :class:`~orkexa.SQLiteMemory`
       refuse it.
@@ -151,6 +185,14 @@ class RetrievalError(OrkexaError, RuntimeError):
         self.code = code
         self.reason = reason
         """Which limit was hit, for ``document.too_complex``; otherwise ``None``."""
+
+
+class VectorError(RetrievalError, ValueError):
+    """A refused vector: ``vector.invalid`` or ``vector.dimension``.
+
+    Raised by :func:`~orkexa.embeddings.validate_vector`. Also a ``ValueError``, as :class:`SQLiteIndex`
+    raised for such vectors before the codes existed.
+    """
 
 
 def check_mode(mode: str) -> RetrievalMode:
@@ -437,21 +479,93 @@ def pdf_pages_isolated(
     raise _too_complex(reason, message)
 
 
+_Method = TypeVar("_Method", bound=Callable[..., Any])
+
+
+def _checks_query(method: _Method) -> _Method:
+    """Marks a ``search``/``retrieve`` that calls :meth:`Index.check_query` itself (not wrapped again)."""
+    setattr(method, "__orkexa_checks_query__", True)  # noqa: B010 - a marker attribute on a function
+    return method
+
+
+def _with_query_check(method: Callable[..., Any]) -> Callable[..., Any]:
+    """``method`` (a subclass's ``search`` or ``retrieve``), checking its query against the limits first."""
+
+    @functools.wraps(method)
+    def checked(self: Index, *args: Any, **kwargs: Any) -> Any:
+        query = args[0] if args else kwargs.get("query")
+        if isinstance(query, str):
+            self.check_query(query)
+        return method(self, *args, **kwargs)
+
+    return _checks_query(checked)
+
+
 class Index(ABC):
     """A searchable collection of text chunks; subclass it for other search backends.
 
     Subclasses implement :meth:`add_chunks`, :meth:`search` and :meth:`delete`;
-    chunking, file ingestion and the tool come from this class.
+    chunking, file ingestion and the tool come from this class. The contract every
+    backend shares (score semantics, query limits, error codes) is described at
+    :meth:`search`; ``orkexa.testing.conformance`` checks a backend against it.
+
+    The query limits apply to every subclass: when a subclass is defined, its own
+    ``search`` and ``retrieve`` are wrapped so that they call :meth:`check_query`
+    before anything else (no embedding, lock or SQL for an overlong query).
 
     Args:
         max_chars: Chunk size for :meth:`add` and :meth:`add_file`.
         overlap: Chunk overlap, see :func:`split_text`.
+        max_query_chars: Longest accepted query (default :data:`MAX_QUERY_CHARS`); a longer one raises
+            :class:`RetrievalError` (``query.too_long``).
+        max_query_words: Most distinct query words (:func:`query_words`) accepted (default
+            :data:`MAX_QUERY_WORDS`).
     """
 
-    def __init__(self, *, max_chars: int = 1500, overlap: int = 200) -> None:
+    def __init__(
+        self,
+        *,
+        max_chars: int = 1500,
+        overlap: int = 200,
+        max_query_chars: int = MAX_QUERY_CHARS,
+        max_query_words: int = MAX_QUERY_WORDS,
+    ) -> None:
         split_text("", max_chars=max_chars, overlap=overlap)  # validate
+        if max_query_chars < 1 or max_query_words < 1:
+            raise ValueError("max_query_chars and max_query_words must be positive")
         self.max_chars = max_chars
         self.overlap = overlap
+        self.max_query_chars = max_query_chars
+        self.max_query_words = max_query_words
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        for name in ("search", "retrieve"):
+            method = cls.__dict__.get(name)
+            if inspect.isfunction(method) and not getattr(method, "__orkexa_checks_query__", False):
+                setattr(cls, name, _with_query_check(method))
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        """What this index can do beyond full-text search, as configured (MUP-ONA O1).
+
+        ``vectors``: vector and hybrid search; ``reindex``: :class:`ReindexableIndex` (vector spaces bound to
+        one embedding model); ``partitioned``: one storage holds several partitions (tenants, or SQLite
+        namespaces) and an instance sees only its own; ``concurrent_writers``: several instances or processes
+        may write the same storage at once. The base class claims none.
+        """
+        return frozenset()
+
+    def check_query(self, query: str) -> None:
+        """Raise :class:`RetrievalError` (``query.too_long``) if ``query`` exceeds this index's limits.
+
+        Counts characters, then distinct :func:`query_words`; runs before any embedding, lock or SQL.
+        """
+        _check_query(
+            query,
+            getattr(self, "max_query_chars", MAX_QUERY_CHARS),  # a subclass may skip Index.__init__
+            getattr(self, "max_query_words", MAX_QUERY_WORDS),
+        )
 
     @abstractmethod
     def add_chunks(self, chunks: Iterable[Chunk]) -> list[int]:
@@ -459,7 +573,23 @@ class Index(ABC):
 
     @abstractmethod
     def search(self, query: str, k: int = 5) -> list[Hit]:
-        """The ``k`` best chunks for ``query``, best first."""
+        """The ``k`` best chunks for ``query``, best first, ranked the index's default way.
+
+        The contract every backend shares (MUP-ONA O1); a higher score is better:
+
+        * full text (``fts``): the reciprocal rank ``1 / (60 + rank)`` of a hit (rank 1 is the best), never a
+          raw BM25 or ``ts_rank`` value;
+        * ``vector``: the cosine similarity of the query and chunk vectors, rounded to 6 digits, whatever
+          the length of the vectors; a vector without direction (all zeros) is never a hit;
+        * ``hybrid``: the fused score of :func:`fuse_hybrid` in [0, 1] (:func:`fuse_rrf` with
+          ``fusion="rrf"``).
+
+        Equal scores are ordered by chunk id, ascending. With an embedding model the default ranking is
+        ``hybrid``, without one ``fts``. Query words are :func:`query_words` (:func:`tokenize`,
+        :func:`fold`), each matched as a word prefix; FTS syntax in a query is searched as words. A query over
+        the limits raises :class:`RetrievalError` (``query.too_long``, see :meth:`check_query`); ``k`` below 1
+        raises ``ValueError``. Errors carry a code of :data:`RETRIEVAL_ERROR_CODES`.
+        """
 
     @abstractmethod
     def delete(self, source: str) -> int:
@@ -631,6 +761,13 @@ def _check_query(query: str, max_chars: int, max_words: int) -> None:
         )
 
 
+def _validate_document_vector(vector: Sequence[float], identity: EmbeddingIdentity) -> None:
+    """:func:`~orkexa.embeddings.validate_vector` for a vector about to be stored."""
+    from .embeddings import validate_vector
+
+    validate_vector(vector, identity)
+
+
 def _fts_query(query: str) -> str:
     """Natural language -> an FTS5 query matching any word or word prefix ("refund" finds "refunds").
 
@@ -639,9 +776,49 @@ def _fts_query(query: str) -> str:
     return " OR ".join(f'"{word}"*' for word in query_words(query))
 
 
+def tokenize(text: str) -> list[str]:
+    """The words of ``text`` in order, as every backend's query side sees them (MUP-ONA O1).
+
+    A word is a run of word characters (``\\w``: letters, digits and the underscore, in any script), so
+    ``alpha_beta`` is one word and FTS syntax such as ``NEAR(a b)``, ``text:`` or ``"`` never reaches a
+    full-text engine as an operator. Matched as a prefix (:func:`query_words`), a word with an underscore
+    finds its parts in sequence (``alpha beta``), not each part alone.
+    """
+    return _WORD.findall(text)
+
+
+def fold(word: str) -> str:
+    """The form in which a query word is matched: lower case (MUP-ONA O1).
+
+    Diacritics are kept: a full-text tokenizer that removes them (SQLite's ``unicode61 remove_diacritics 2``)
+    does so for the query and the documents alike.
+    """
+    return word.lower()
+
+
 def query_words(query: str) -> list[str]:
-    """The distinct lower-case words of ``query`` that full-text search matches (each as a prefix)."""
-    return list(dict.fromkeys(word.lower() for word in _WORD.findall(query)))
+    """The distinct folded words of ``query`` (:func:`tokenize`, :func:`fold`) that full-text search matches.
+
+    Each word is matched as a prefix (``refund`` finds ``refunds``); the query limit :data:`MAX_QUERY_WORDS`
+    counts these words.
+    """
+    return list(dict.fromkeys(fold(word) for word in tokenize(query)))
+
+
+def fuse_rrf(rankings: Iterable[Sequence[int]], *, k: int = _RRF_K) -> list[tuple[int, float]]:
+    """Reciprocal rank fusion: each chunk scores ``sum(1 / (k + rank))`` over the rankings that hold it.
+
+    ``rankings`` are chunk ids, best first (rank 1 is the first); the result is ``(chunk id, score)``, best
+    first, ties to the lower chunk id. With one ranking it gives the full-text score of the contract
+    (:meth:`Index.search`); ``SQLiteIndex(fusion="rrf")`` fuses its full-text and vector rankings with it.
+    """
+    if k < 0:
+        raise ValueError("k must not be negative")
+    scores: dict[int, float] = {}
+    for ranking in rankings:
+        for rank, chunk_id in enumerate(ranking):
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (k + rank + 1)
+    return sorted(scores.items(), key=lambda item: (-item[1], item[0]))
 
 
 def word_weight(matching: int, total: int) -> float:
@@ -722,6 +899,46 @@ class VectorStatus(BaseModel):
         return self.active is not None and self.embedded >= self.chunks
 
 
+@runtime_checkable
+class ReindexableIndex(Protocol):
+    """An index whose vectors belong to one embedding model and can move to another (MUP-ONA O1).
+
+    Implemented by :class:`Index` subclasses that report the capability ``reindex`` (:class:`SQLiteIndex`, the
+    PostgreSQL indexes). The vectors of a namespace live in a *space* bound to an
+    :class:`~orkexa.embeddings.EmbeddingIdentity`; :meth:`vector_status` shows its states:
+
+    * ``active``: the space searches use; writes embed into it and refuse another model
+      (``reindex_required``); searches with another model raise ``reindex_required`` too, never fall back.
+    * ``building``: a :meth:`reindex` in progress or interrupted; resumable, and searches keep using
+      ``active`` until every chunk has a vector in the new space. Then the switch happens in one
+      transaction and the old space is deleted.
+
+    Both re-read the model's identity (:meth:`~orkexa.embeddings.EmbeddingModel.refresh_identity`) before they
+    write vectors, so a model replaced on its server is never filed under its old identity; a chunk deleted
+    while its batch was embedded gets no vector, and chunks added meanwhile make :meth:`reindex` raise
+    ``vector_incomplete``.
+    """
+
+    def vector_status(self) -> VectorStatus:
+        """The active and building spaces of this namespace and how many chunks have vectors in each."""
+        ...
+
+    def reindex(
+        self,
+        embeddings: EmbeddingModel | None = None,
+        *,
+        batch_size: int = 32,
+        progress: Callable[[int, int], None] | None = None,
+        cancel: threading.Event | None = None,
+    ) -> VectorStatus:
+        """Embed every chunk with ``embeddings`` (default: the index's model) and switch to that space."""
+        ...
+
+    def discard_reindex(self) -> None:
+        """Drop an unfinished reindex (the active space stays)."""
+        ...
+
+
 class SQLiteIndex(Index):
     """A search index in a SQLite database: FTS5 full-text search, optionally plus vectors.
 
@@ -776,11 +993,12 @@ class SQLiteIndex(Index):
         max_query_chars: int = MAX_QUERY_CHARS,
         max_query_words: int = MAX_QUERY_WORDS,
     ) -> None:
-        super().__init__(max_chars=max_chars, overlap=overlap)
-        if max_query_chars < 1 or max_query_words < 1:
-            raise ValueError("max_query_chars and max_query_words must be positive")
-        self.max_query_chars = max_query_chars
-        self.max_query_words = max_query_words
+        super().__init__(
+            max_chars=max_chars,
+            overlap=overlap,
+            max_query_chars=max_query_chars,
+            max_query_words=max_query_words,
+        )
         if not namespace:
             raise ValueError("namespace must not be empty")
         if fusion not in HYBRID_FUSIONS:
@@ -870,6 +1088,17 @@ class SQLiteIndex(Index):
         with self._lock, storage_errors():
             self._connection.execute("INSERT INTO index_fts (index_fts) VALUES ('optimize')")
 
+    @property
+    def capabilities(self) -> frozenset[str]:
+        """``partitioned`` (by ``namespace``) and ``concurrent_writers`` always; ``vectors`` and ``reindex``
+        with ``embeddings=``, only ``vectors`` with an ``embedder=`` callable (:attr:`Index.capabilities`)."""
+        found = {"partitioned", "concurrent_writers"}
+        if self.embeddings is not None:
+            found |= {"vectors", "reindex"}
+        elif self.embedder is not None:
+            found.add("vectors")
+        return frozenset(found)
+
     def __enter__(self) -> SQLiteIndex:
         return self
 
@@ -910,8 +1139,11 @@ class SQLiteIndex(Index):
 
     @staticmethod
     def _vector(values: Sequence[float]) -> bytes:
-        if not all(math.isfinite(value) for value in values):
-            raise ValueError("A vector holds a value that is not a finite number (NaN or infinity)")
+        from .embeddings import validate_vector
+
+        # NaN or infinity raise VectorError (vector.invalid). A zero vector is stored as before: it has no
+        # cosine distance (NULL), so searches leave it out, as validate_vector's None (discard) asks.
+        validate_vector(values)
         return struct.pack(f"{len(values)}f", *values)
 
     def _has_vectors(self) -> bool:
@@ -1212,8 +1444,8 @@ class SQLiteIndex(Index):
                     (chunk_id, chunk.text, chunk.title or ""),
                 )
                 if vectors is not None and space is not None:
-                    if identity is not None and len(vectors[position]) != identity.dimensions:
-                        raise ValueError("The embedding model returned a vector of another size")
+                    if identity is not None:
+                        _validate_document_vector(vectors[position], identity)
                     # REPLACE: a vector left behind for this id by a deleted chunk is stale.
                     self._connection.execute(
                         "INSERT OR REPLACE INTO index_vectors (space, chunk_id, embedding) VALUES (?, ?, ?)",
@@ -1254,9 +1486,11 @@ class SQLiteIndex(Index):
             self._connection.execute("DELETE FROM index_chunks WHERE id = ?", (chunk_id,))
         return len(rows)
 
+    @_checks_query
     def search(self, query: str, k: int = 5) -> list[Hit]:
         return self.retrieve(query, k)
 
+    @_checks_query
     def retrieve(
         self,
         query: str,
@@ -1281,7 +1515,7 @@ class SQLiteIndex(Index):
         """
         if k < 1:
             raise ValueError("k must be positive")
-        _check_query(query, self.max_query_chars, self.max_query_words)
+        self.check_query(query)
         mode = check_mode(mode) if mode else self.mode
         allowed = None if sources is None else list(dict.fromkeys(sources))
         if allowed is not None and not allowed:
@@ -1312,12 +1546,8 @@ class SQLiteIndex(Index):
                 lexical = self._lexical_evidence(query, list(ranks))
                 fused = fuse_hybrid(ranked["vector"], lexical, lexical_weight=self.lexical_weight)
                 return [self._hit(chunk_id, score, ranks[chunk_id]) for chunk_id, score in fused[:k]]
-            scores: dict[int, float] = {}
-            for ranking in ranked.values():
-                for rank, (chunk_id, _) in enumerate(ranking):
-                    scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (_RRF_K + rank + 1)
-            best = sorted(scores, key=lambda chunk_id: (-scores[chunk_id], chunk_id))[:k]
-            return [self._hit(chunk_id, scores[chunk_id], ranks[chunk_id]) for chunk_id in best]
+            fused = fuse_rrf([[chunk_id for chunk_id, _ in ranking] for ranking in ranked.values()])
+            return [self._hit(chunk_id, score, ranks[chunk_id]) for chunk_id, score in fused[:k]]
 
     def _lexical_evidence(self, query: str, chunk_ids: list[int]) -> dict[int, float]:
         """:func:`lexical_evidence` of ``chunk_ids``; word weights count the chunks of this namespace.
@@ -1425,7 +1655,7 @@ class SQLiteIndex(Index):
     @staticmethod
     def _check_dimensions(vector: Sequence[float], dimensions: int) -> None:
         if len(vector) != dimensions:
-            raise RetrievalError(
+            raise VectorError(
                 "vector.dimension",
                 f"The query vector has {len(vector)} dimensions, the stored vectors {dimensions}",
             )
