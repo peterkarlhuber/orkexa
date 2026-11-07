@@ -18,6 +18,17 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Changed: the managed Ollama ends with its application (2026-11-07)
+
+* `ManagedOllama` ties the server's lifetime to the process that started it: on Linux and macOS a watcher process
+  (`orkexa/local/_lifeline.py`, the same interpreter, a session of its own) stops the server's process group when
+  the application ends without stopping it (crash, OOM kill, `SIGKILL`); on Windows the server runs in a job object
+  with kill-on-close, so it and its runners end with the application. The reclaim of a server named in
+  `ollama.state.json` at the next start stays as the second layer (POSIX).
+* tests: opt-in live smoke tests for OpenAI, Gemini and vLLM (`tests/test_provider_live.py`, `pytest -m live`);
+  `tests/test_sandbox_lifecycle.py` uses a temporary directory of its own (another test run on the machine made it
+  fail).
+
 ### Added: generic storage contracts (MUP-ONA B1, 2026-11-07)
 
 * Added: the score semantics of every `Index` backend in `Index.search` (full text: reciprocal rank

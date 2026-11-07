@@ -50,6 +50,8 @@ tests.test_history_models::test_dated_model_versions_keep_reasoning_in_the_tool_
 tests.test_legacy_fixtures::test_the_vector_index_opens_with_its_vectors  # sqlite-vec cannot be loaded here
 tests.test_local::test_live_agent_answer_and_embeddings  # set ORKEXA_TEST_OLLAMA_URL to a real Ollama with qwen3.5:4b
 tests.test_local_convert::test_live_mdenseon_build_matches_reference_and_ranks_across_languages  # needs a real Ollama and the mDenseOn files
+tests.test_managed_server_lifetime::test_a_job_ends_the_server_with_its_owner[close]  # Windows: the job object
+tests.test_managed_server_lifetime::test_a_job_ends_the_server_with_its_owner[killed]  # Windows: the job object
 tests.test_ollama_live::test_a_text_answer_after_an_empty_turn  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[False]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[True]  # needs ORKEXA_OLLAMA_LIVE_URL
@@ -57,6 +59,9 @@ tests.test_ollama_live::test_tools_then_structured_answer[False]  # needs ORKEXA
 tests.test_ollama_live::test_tools_then_structured_answer[True]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_pdf_limits::test_a_flate_bomb_hits_the_memory_limit_and_the_parent_is_unaffected  # the memory limit (RLIMIT_AS) is enforced on Linux only
 tests.test_pdf_limits::test_the_child_runs_with_lowered_resource_limits  # RLIMIT_AS is enforced on Linux only
+tests.test_provider_live::test_text_tool_and_structured_output[gemini]  # live API test (pytest -m live); needs the provider's key or URL and a model
+tests.test_provider_live::test_text_tool_and_structured_output[openai]  # live API test (pytest -m live); needs the provider's key or URL and a model
+tests.test_provider_live::test_text_tool_and_structured_output[vllm]  # live API test (pytest -m live); needs the provider's key or URL and a model
 tests.test_rank_fixture::test_sqlite_with_sqlite_vec_reproduces_the_recorded_results  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_a_weak_full_text_hit_no_longer_outranks_the_vector_hit  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_changing_the_embedding_model_needs_a_reindex  # sqlite-vec cannot be loaded here

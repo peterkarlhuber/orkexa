@@ -81,7 +81,12 @@ def _alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     stat = Path(f"/proc/{pid}/stat")
-    return not stat.exists() or stat.read_text().split()[2] != "Z"
+    if stat.exists():
+        return stat.read_text().split()[2] != "Z"
+    # No /proc (macOS): a killed child that its parent has not reaped yet is a zombie, not alive.
+    ps = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+    state = ps.stdout.strip()
+    return bool(state) and not state.startswith("Z")
 
 
 def _gone(pid: int, seconds: float = 5.0) -> bool:
