@@ -2,8 +2,8 @@
 
 ## The storage contracts
 
-Every backend of `Index`, `FileStore` and `MemoryBackend` (the SQLite and local classes here, Nodestro's
-PostgreSQL classes, your own) shares the contract below
+Every backend of `Index`, `FileStore` and `MemoryBackend` (the SQLite and local classes here, the
+[PostgreSQL classes](backends-postgres.md), your own) shares the contract below
 ([ADR 0014](../architecture/decisions/0014-storage-contracts-and-conformance.md)); the public conformance suite
 checks a backend against it ([Testing helpers and conformance](testing.md)).
 
@@ -32,10 +32,10 @@ is discarded.
 
 | Capability | Meaning | Reported by |
 |---|---|---|
-| `vectors` | vector and hybrid search | `SQLiteIndex` with `embeddings=` or `embedder=` |
-| `reindex` | `ReindexableIndex`: vector spaces bound to one embedding model, `reindex()` | `SQLiteIndex` with `embeddings=` |
-| `partitioned` | one storage holds several partitions (tenants, or SQLite namespaces); an instance sees only its own | the three SQLite classes |
-| `concurrent_writers` | several instances or processes may write the same storage at once | the three SQLite classes |
+| `vectors` | vector and hybrid search | `SQLiteIndex` with `embeddings=` or `embedder=`; `PostgresIndex` with `embeddings=` |
+| `reindex` | `ReindexableIndex`: vector spaces bound to one embedding model, `reindex()` | `SQLiteIndex` and `PostgresIndex` with `embeddings=` |
+| `partitioned` | one storage holds several partitions (tenants, or SQLite namespaces); an instance sees only its own | the three SQLite and the three PostgreSQL classes (by tenant) |
+| `concurrent_writers` | several instances or processes may write the same storage at once | the three SQLite and the three PostgreSQL classes |
 
 **Error codes** (`RetrievalError.code`, the same for every backend; map codes, never message texts):
 

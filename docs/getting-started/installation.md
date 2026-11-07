@@ -25,10 +25,11 @@ pip install "orkexa[vector]"      # vector/hybrid search (sqlite-vec)
 pip install "orkexa[local]"       # unpack the pinned Ollama runtime for orkexa-local (zstandard)
 pip install "orkexa[convert]"     # build models from pinned upstream weights (gguf)
 pip install "orkexa[sqlcheck]"    # tenant SQL rule engine for your tests (pglast)
+pip install "orkexa[postgres]"    # PostgreSQL backends for index, files and memory (psycopg 3)
 ```
 
-`orkexa[all]` contains the provider SDKs only; add `pdf`, `vector`, `local`, `convert` or
-`sqlcheck` when you need them, e.g. `pip install "orkexa[openai,vector,local]"` for local agents with
+`orkexa[all]` contains the provider SDKs only; add `pdf`, `vector`, `local`, `convert`,
+`sqlcheck` or `postgres` when you need them, e.g. `pip install "orkexa[openai,vector,local]"` for local agents with
 semantic search. Every installation also gets the `orkexa-local` command (`python -m
 orkexa.local`), which manages local Ollama models; see
 [Local models, embeddings and retrieval modes](../guides/local-models.md).
@@ -38,6 +39,9 @@ raises `MissingDependencyError` naming the extra, e.g. `pip install 'orkexa[open
 Without pglast, `orkexa.testing.sqlcheck` still imports; its first check raises
 `ImportError` naming `orkexa[sqlcheck]` (see
 [the tenant SQL rule engine](../reference/testing.md#the-tenant-sql-rule-engine)).
+Without psycopg, `orkexa.backends.postgres` still imports and opens no connection; creating a
+`PsycopgSource` (or calling `migrate`) raises `ImportError` naming `orkexa[postgres]` (see
+[PostgreSQL backends](../reference/backends-postgres.md)).
 
 ## API keys
 
