@@ -55,6 +55,8 @@ tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history
 tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[True]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_tools_then_structured_answer[False]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_tools_then_structured_answer[True]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_pdf_limits::test_a_flate_bomb_hits_the_memory_limit_and_the_parent_is_unaffected  # the memory limit (RLIMIT_AS) is enforced on Linux only
+tests.test_pdf_limits::test_the_child_runs_with_lowered_resource_limits  # RLIMIT_AS is enforced on Linux only
 tests.test_rank_fixture::test_sqlite_with_sqlite_vec_reproduces_the_recorded_results  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_a_weak_full_text_hit_no_longer_outranks_the_vector_hit  # sqlite-vec cannot be loaded here
 tests.test_retrieval_modes::test_changing_the_embedding_model_needs_a_reindex  # sqlite-vec cannot be loaded here

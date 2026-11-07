@@ -275,6 +275,9 @@ tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history
 tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[True]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_tools_then_structured_answer[False]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_tools_then_structured_answer[True]  # needs ORKEXA_OLLAMA_LIVE_URL
+tests.test_pdf_limits::test_a_flate_bomb_hits_the_memory_limit_and_the_parent_is_unaffected  # the memory limit (RLIMIT_AS) is enforced on Linux only
+tests.test_pdf_limits::test_the_child_inherits_no_file_descriptors  # descriptor listing of Linux and macOS
+tests.test_pdf_limits::test_the_child_runs_with_lowered_resource_limits  # RLIMIT_AS is enforced on Linux only
 tests.test_private_storage::test_existing_directories_keep_their_mode  # POSIX permission bits
 tests.test_private_storage::test_existing_sqlite_databases_keep_their_mode[SQLiteFileStore]  # POSIX permission bits
 tests.test_private_storage::test_existing_sqlite_databases_keep_their_mode[SQLiteIndex]  # POSIX permission bits
