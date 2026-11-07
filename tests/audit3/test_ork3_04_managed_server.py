@@ -75,14 +75,25 @@ def _start(server: ManagedOllama) -> str:
         raise AssertionError(f"{exc}\n--- {server.log_file} ---\n{log}") from exc
 
 
+#: Linux; macOS has no /proc.
+_HAS_PROC = Path("/proc/self/stat").exists()
+
+
 def _alive(pid: int) -> bool:
+    """Whether ``pid`` runs; a killed process that its parent has not reaped yet (a zombie) does not."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    stat = Path(f"/proc/{pid}/stat")
-    if stat.exists():
-        return stat.read_text().split()[2] != "Z"
+    if _HAS_PROC:
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+        except FileNotFoundError:
+            # Reaped after os.kill: an orphaned runner is reaped by init whenever init gets to it, so its
+            # /proc entry can vanish at any moment, also between a check that it exists and the read.
+            return False
+        # The state follows the command name, which is in parentheses and may contain spaces.
+        return stat.rpartition(")")[2].split()[0] != "Z"
     # No /proc (macOS): a killed child that its parent has not reaped yet is a zombie, not alive.
     ps = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
     state = ps.stdout.strip()
@@ -96,6 +107,30 @@ def _gone(pid: int, seconds: float = 5.0) -> bool:
             return True
         time.sleep(0.05)
     return False
+
+
+@pytest.mark.skipif(not _HAS_PROC, reason="reads /proc")
+def test_alive_counts_a_process_reaped_during_the_check_as_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The interleaving from CI: os.kill(pid, 0) still finds the killed runner, then init reaps it before
+    # /proc/<pid>/stat is read.
+    child = subprocess.Popen(["sleep", "60"])
+    stat = Path(f"/proc/{child.pid}/stat")
+    read_text = Path.read_text
+
+    def reaped_first(path: Path, *args: object, **kwargs: object) -> str:
+        if path == stat and child.poll() is None:
+            child.kill()
+            child.wait()
+        return read_text(path, *args, **kwargs)  # type: ignore[arg-type]
+
+    try:
+        assert _alive(child.pid)
+        monkeypatch.setattr(Path, "read_text", reaped_first)
+        assert not _alive(child.pid)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
 
 
 @posix_only

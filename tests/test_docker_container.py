@@ -251,6 +251,24 @@ def _running(fake: FakeDocker, owner: str) -> list[str]:
     return listed.stdout.split()
 
 
+def _wait_for_tool_container(fake: FakeDocker, owner: str, seconds: float = 15.0) -> str | None:
+    """The name of the container of the tool code once ``docker ps`` lists it, or ``None`` after ``seconds``.
+
+    The self-test container has the same owner label and is listed while the self-test runs, before the
+    tool's ``docker run``; waiting for any listed container could stop on it and find it gone a moment
+    later."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        runs = fake.runs()
+        if runs:
+            name = next(a for a in runs[-1] if a.startswith("orkexa-sandbox-"))
+            ids = {c["Id"] for c in fake.containers() if c["Name"] == name}
+            if ids & set(_running(fake, owner)):
+                return name
+        time.sleep(0.05)
+    return None
+
+
 @needs_posix
 def test_cancel_kills_the_container(fake_docker: FakeDocker) -> None:
     sandbox = DockerSandbox(docker=str(fake_docker.path), owner="cancel-test", timeout=30)
@@ -265,15 +283,12 @@ def test_cancel_kills_the_container(fake_docker: FakeDocker) -> None:
     worker = threading.Thread(target=call)
     started = time.monotonic()
     worker.start()
-    deadline = time.monotonic() + 15
-    while not _running(fake_docker, "cancel-test") and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert _running(fake_docker, "cancel-test")
+    name = _wait_for_tool_container(fake_docker, "cancel-test")
+    assert name is not None
     sandbox.cancel()
     worker.join(20)
     assert time.monotonic() - started < 20
     assert caught and isinstance(caught[0].__cause__, SandboxCancelled)
-    name = next(a for a in fake_docker.runs()[-1] if a.startswith("orkexa-sandbox-"))
     assert ["kill", name] in fake_docker.calls() and ["rm", "-f", name] in fake_docker.calls()
     assert _running(fake_docker, "cancel-test") == []
 
