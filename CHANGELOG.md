@@ -28,6 +28,11 @@ listed here. The development version is `0.2.0.dev0`.
 * The managed-server tests' `_alive` checked that `/proc/<pid>/stat` exists and then read it; init can reap the
   killed, orphaned runner between the two, which raised `FileNotFoundError` (Python 3.14). A vanished entry now
   counts as gone. Test: `test_alive_counts_a_process_reaped_during_the_check_as_gone`.
+* `orkexa-local serve` could ignore a SIGTERM: its handler raised `KeyboardInterrupt`, and when the signal arrived
+  while a finalizer ran (an HTTP response closed during the status check), Python dropped the exception
+  ("Exception ignored in ...") and the server kept running (seen as a timeout of
+  `test_cli_serve_stops_the_server_on_sigterm` on macOS). The handler now only sets a flag that the serve loop checks.
+  Test: `test_cli_serve_stops_on_a_sigterm_delivered_inside_a_finalizer`.
 
 ### Fixed: a search no longer fails when another instance deletes a ranked chunk (2026-11-07)
 
