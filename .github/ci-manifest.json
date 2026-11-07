@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "comment": "Mandatory checks (S2) per CI-FAST. A PR is ok only if every listed check ran on the PR head SHA and succeeded. Changing this list needs a reason in the PR. Source: PR #66 head 6f131f7.",
+  "pull_request": {
+    "ci.yml": [
+      "build and install (fresh virtual environments)",
+      "core without extras",
+      "dependency audit",
+      "docs",
+      "pg-a (Python 3.11)",
+      "pg-a (Python 3.14)",
+      "pg-b (Python 3.11)",
+      "pg-b (Python 3.14)",
+      "test (Python 3.11)",
+      "test (Python 3.12)",
+      "test (Python 3.13)",
+      "test (Python 3.14)",
+      "test (lowest supported dependency versions)"
+    ],
+    "platforms.yml": [
+      "DockerSandbox (colima macOS x86-64)",
+      "DockerSandbox (podman rootless is refused)",
+      "DockerSandbox (podman)",
+      "DockerSandbox (rootful arm64)",
+      "DockerSandbox (rootful)",
+      "DockerSandbox (rootless without cpu delegation is refused)",
+      "DockerSandbox (rootless)",
+      "offline suite (macos-15-intel)",
+      "offline suite (macos-latest)",
+      "offline suite (windows-11-arm)",
+      "offline suite (windows-latest)"
+    ]
+  },
+  "nightly": {
+    "nightly.yml": [
+      "report"
+    ]
+  }
+}

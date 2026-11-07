@@ -14,7 +14,43 @@ permissions:
   contents: read
 
 jobs:
+  nightly-gate:
+    # CI-FAST release lock: no build and no publication unless the latest completed nightly (nightly.yml on master)
+    # of this repository passed and is less than 36 hours old.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: The latest nightly of this repository passed within 36 hours
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status=0
+          for repo in "$GITHUB_REPOSITORY"; do
+            if ! gh api "repos/$repo/actions/workflows/nightly.yml/runs?branch=master&status=completed&per_page=1" > nightly.json; then
+              echo "::error::$repo: cannot read the runs of nightly.yml"; status=1; continue
+            fi
+            python3 -I - "$repo" nightly.json <<'PY' || status=1
+          import datetime, json, sys
+          repo, path = sys.argv[1], sys.argv[2]
+          runs = json.load(open(path)).get("workflow_runs") or []
+          if not runs:
+              sys.exit(f"::error::{repo}: no completed nightly.yml run on master")
+          run = runs[0]
+          started = datetime.datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
+          age = datetime.datetime.now(datetime.timezone.utc) - started
+          print(f"{repo}: nightly {run['html_url']} {run['conclusion']}, started {run['created_at']} ({age} ago)")
+          if run["conclusion"] != "success":
+              sys.exit(f"::error::{repo}: the latest nightly did not pass ({run['conclusion']}): {run['html_url']}")
+          if age >= datetime.timedelta(hours=36):
+              sys.exit(f"::error::{repo}: the latest nightly is older than 36 hours: {run['html_url']}")
+          PY
+          done
+          exit "$status"
+
   build:
+    needs: nightly-gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
