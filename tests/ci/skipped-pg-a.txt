@@ -1,0 +1,24 @@
+# Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
+# Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
+# Job ci.yml/postgres pg-a as superuser (Python 3.11 and 3.14), generated from local runs against postgres:17
+# (pg-a: no pgvector) and pgvector/pgvector:pg17 (pg-b) with Python 3.11 and 3.13.
+
+tests.backends.postgres.test_concurrency::test_a_reindex_finishes_while_writers_keep_adding[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_concurrency::test_the_switch_embeds_what_the_last_round_left[16-database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_concurrency::test_the_switch_embeds_what_the_last_round_left[256-database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_concurrency::test_three_tenants_with_eight_threads_each[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_a_model_updated_during_a_reindex_discards_the_new_space[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_a_model_without_refresh_identity_still_writes_and_reindexes[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_a_search_names_at_most_50000_sources[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_both_paths_score_the_cosine[database-False]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_both_paths_score_the_cosine[database-True]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_chunks_deleted_while_a_batch_is_embedded_get_no_vector[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_pgvector_and_python_rank_fx_rank_0_alike[norm]  # the test database has no pgvector: T-RANK-1 compares pgvector's ranking with Python's
+tests.backends.postgres.test_vectors::test_pgvector_and_python_rank_fx_rank_0_alike[raw]  # the test database has no pgvector: T-RANK-1 compares pgvector's ranking with Python's
+tests.backends.postgres.test_vectors::test_query_words_are_contract_words_with_folded_diacritics[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_refresh_detects_pgvector_again  # the test database has no pgvector: T-PG-4 installs pgvector while the index is open
+tests.backends.postgres.test_vectors::test_scores_follow_the_contract_in_every_mode[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_stored_non_finite_vectors_are_left_out_and_kept[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_the_default_mode_follows_the_embedding_model[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_vectors_left_out_are_counted_until_a_reindex_replaces_them[database]  # the test database has no pgvector: the database ranks vectors only with pgvector
+tests.backends.postgres.test_vectors::test_zero_vectors_are_stored_but_never_ranked[database]  # the test database has no pgvector: the database ranks vectors only with pgvector

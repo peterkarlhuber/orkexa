@@ -45,7 +45,9 @@ jobs:
       - name: System
         run: python -c "import platform, sys; print(sys.platform, platform.machine(), platform.platform())"
       - run: pytest -v -s tests/test_sandbox_lifecycle.py
-      - run: pytest -q -rs --junitxml=junit-offline.xml
+      # MUP-ONA B5: no PostgreSQL server here (the "postgres" tests run in ci.yml pg-a and pg-b). Windows ARM64
+      # installs no psycopg (no psycopg-binary wheel): the tests that render SQL with it skip there.
+      - run: pytest -m "not postgres" -q -rs --junitxml=junit-offline.xml
         env:
           ORKEXA_CONFORMANCE_JOB: offline
       # MUP-ONA A0: the skipped tests of this platform must match its expectation file.
