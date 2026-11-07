@@ -138,6 +138,7 @@ _JOB_OWNER = textwrap.dedent(
     job = _lifeline.kill_on_close_job(int(child._handle))
     print(child.pid, job is not None, flush=True)
     if sys.argv[1] == "close":
+        sys.stdin.readline()  # the test checks that the child runs before the job is closed
         _lifeline.close_job(job)
         print(child.wait(30), flush=True)
     time.sleep(120)
@@ -148,7 +149,9 @@ _JOB_OWNER = textwrap.dedent(
 @windows_only
 @pytest.mark.parametrize("ending", ["killed", "close"])
 def test_a_job_ends_the_server_with_its_owner(ending: str) -> None:
-    owner = subprocess.Popen([sys.executable, "-c", _JOB_OWNER, ending], stdout=subprocess.PIPE, text=True)
+    owner = subprocess.Popen(
+        [sys.executable, "-c", _JOB_OWNER, ending], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+    )
     try:
         assert owner.stdout is not None
         pid_text, bound = owner.stdout.readline().split()
@@ -159,6 +162,9 @@ def test_a_job_ends_the_server_with_its_owner(ending: str) -> None:
             owner.kill()  # TerminateProcess: no cleanup code of the owner runs
             owner.wait(30)
         else:
+            assert owner.stdin is not None
+            owner.stdin.write("close\n")
+            owner.stdin.flush()
             assert owner.stdout.readline().strip() != ""  # close_job ended it; wait() returned
         assert _exited(child, 20)
     finally:
