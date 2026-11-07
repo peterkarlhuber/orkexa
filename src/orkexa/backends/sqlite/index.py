@@ -91,6 +91,10 @@ class SQLiteIndex(Index):
             hybrid search run one or two full-text queries per word.
 
     A database path that is a symbolic link raises ``storage.symlink``; a damaged file ``storage.corrupt``.
+
+    The private attributes ``_connection`` (the ``sqlite3.Connection``) and ``_lock`` (the ``threading.RLock``
+    every operation holds while it uses the connection) are preserved for compatibility: Nodestro reads chunks
+    through them. They are not public API.
     """
 
     def __init__(

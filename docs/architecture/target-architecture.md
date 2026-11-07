@@ -259,6 +259,7 @@ src/orkexa/
   pricing/               price model, snapshots, resolver, cost, built-in Anthropic prices
   tools.py, content.py, errors.py, usage.py
   memory.py, files.py, retrieval.py, embeddings.py, evaluation.py
+  backends/sqlite/       SQLiteIndex, SQLiteFileStore, SQLiteMemory (re-exported by retrieval, files, memory)
   dynamic/               dynamic tools and agents, sandboxes, registries
   dynamic/docker/        Docker host checks, container shape, self-test
   flow/                  flow kernel, reference driver, conformance cases

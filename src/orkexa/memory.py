@@ -38,7 +38,7 @@ import os
 from pathlib import Path
 import shutil
 import threading
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from urllib.parse import unquote
 import uuid
 
@@ -47,6 +47,9 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from ._storage import make_private_dirs
 from .core.types import ToolDefinition
 from .errors import MemoryToolError
+
+if TYPE_CHECKING:
+    from .backends.sqlite.memory import SQLiteMemory as SQLiteMemory
 
 __all__ = [
     "MEMORY_ROOT",
@@ -627,3 +630,20 @@ class FileMemory(MemoryBackend):
         source, target = self._location(old), self._location(new)
         self._mkdirs(target.parent)
         source.rename(target)
+
+
+# MUP-ONA B2: SQLiteMemory lives in orkexa.backends.sqlite.memory and is re-exported here, so every
+# import path returns the same class. The backend imports this module, so the re-export is resolved on first
+# access (PEP 562) instead of by a module-level import, which would be circular. Type checkers see the import
+# under TYPE_CHECKING above; this block is hidden from them so that an unknown name stays an error.
+if not TYPE_CHECKING:
+
+    def __getattr__(name: str) -> object:
+        if name == "SQLiteMemory":
+            from .backends.sqlite.memory import SQLiteMemory
+
+            return SQLiteMemory
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    def __dir__() -> list[str]:
+        return sorted({*globals(), "SQLiteMemory"})

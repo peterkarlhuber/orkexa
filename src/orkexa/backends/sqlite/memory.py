@@ -32,6 +32,10 @@ class SQLiteMemory(MemoryBackend):
 
     A database path that is a symbolic link raises :class:`~orkexa.retrieval.RetrievalError`
     (``storage.symlink``); a damaged file raises it with ``storage.corrupt``.
+
+    The private attributes ``_connection`` (the ``sqlite3.Connection``) and ``_lock`` (the ``threading.RLock``
+    of :class:`MemoryBackend`) and the storage methods ``_read`` and ``_files`` are preserved for
+    compatibility: Nodestro subclasses this class and uses them. They are not public API.
     """
 
     def __init__(

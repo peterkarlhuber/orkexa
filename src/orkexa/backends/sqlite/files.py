@@ -32,6 +32,10 @@ class SQLiteFileStore(FileStore):
 
     A database path that is a symbolic link raises :class:`~orkexa.retrieval.RetrievalError`
     (``storage.symlink``); a damaged file raises it with ``storage.corrupt``.
+
+    The private attributes ``_connection`` (the ``sqlite3.Connection``) and ``_lock`` (the ``threading.RLock``
+    of :class:`FileStore`) and the storage method ``_save`` are preserved for compatibility: Nodestro updates
+    catalog entries through them. They are not public API.
     """
 
     def __init__(

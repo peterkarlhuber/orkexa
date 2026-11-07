@@ -182,6 +182,8 @@ source_modules = [
     "orkexa.agent.**",
     "orkexa.async_agent",
     "orkexa.async_agent.**",
+    "orkexa.backends",
+    "orkexa.backends.**",
     "orkexa.claude",
     "orkexa.claude.**",
     "orkexa.content",
@@ -241,6 +243,8 @@ source_modules = [
     "orkexa.agent.**",
     "orkexa.async_agent",
     "orkexa.async_agent.**",
+    "orkexa.backends",
+    "orkexa.backends.**",
     "orkexa.claude",
     "orkexa.claude.**",
     "orkexa.content",
@@ -277,6 +281,21 @@ source_modules = [
     "orkexa.usage.**",
 ]
 forbidden_modules = ["*.testing", "*.testing.**"]  # = orkexa.testing (a literal name must exist)
+
+# MUP-ONA B2: the contract modules never import a storage backend at module level; backends import them. Their only
+# edges into orkexa.backends are the re-exports of the SQLite classes (an import under TYPE_CHECKING plus a PEP 562
+# __getattr__ that loads the class on first access), ignored below; tests/backends/sqlite/test_import_order.py
+# (T-API-2) checks that these edges stay lazy and that every import order works.
+[[tool.importlinter.contracts]]
+name = "Contract modules do not import orkexa.backends at runtime"
+type = "forbidden"
+source_modules = ["orkexa.retrieval", "orkexa.files", "orkexa.memory", "orkexa.embeddings"]
+forbidden_modules = ["orkexa.backends"]
+ignore_imports = [
+    "orkexa.retrieval -> orkexa.backends.sqlite.index",
+    "orkexa.files -> orkexa.backends.sqlite.files",
+    "orkexa.memory -> orkexa.backends.sqlite.memory",
+]
 
 [tool.mypy]
 python_version = "3.11"

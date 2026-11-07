@@ -195,6 +195,7 @@ PUBLIC = {
         "QWEN3_QUERY_INSTRUCTION",
         "validate_vector",
     ],
+    "orkexa.backends.sqlite": ["SQLiteFileStore", "SQLiteIndex", "SQLiteMemory"],
     "orkexa.testing.conformance": [
         "ALL_FILE_STORE_CASES",
         "ALL_INDEX_CASES",
@@ -273,6 +274,14 @@ REEXPORTS = {
     ],
     "orkexa.files": ["FileStore", "LocalFileStore", "SQLiteFileStore", "StoredFile"],
     "orkexa.memory": ["EphemeralMemory", "FileMemory", "MemoryBackend", "SQLiteMemory"],
+    "orkexa.backends.sqlite": ["SQLiteFileStore", "SQLiteIndex", "SQLiteMemory"],
+}
+
+SQLITE_CLASSES = {
+    # MUP-ONA B2: class -> (contract module that defined it before B2, leaf module that defines it now).
+    "SQLiteIndex": ("orkexa.retrieval", "orkexa.backends.sqlite.index"),
+    "SQLiteFileStore": ("orkexa.files", "orkexa.backends.sqlite.files"),
+    "SQLiteMemory": ("orkexa.memory", "orkexa.backends.sqlite.memory"),
 }
 
 
@@ -317,6 +326,22 @@ def test_every_package_name_from_a_storage_module_is_that_object() -> None:
     assert retrieval._pdf_pages is retrieval.pdf_pages  # the kept private alias
 
 
+# MUP-ONA T-API-1
+@pytest.mark.parametrize("name", sorted(SQLITE_CLASSES))
+def test_every_import_path_of_a_sqlite_backend_is_the_same_class(name: str) -> None:
+    import orkexa
+    import orkexa.backends.sqlite
+
+    contract, leaf = SQLITE_CLASSES[name]
+    cls = getattr(orkexa, name)
+    assert cls is getattr(importlib.import_module(contract), name)
+    assert cls is getattr(orkexa.backends.sqlite, name)
+    assert cls is getattr(importlib.import_module(leaf), name)
+    assert cls.__module__ == leaf  # the only visible change of B2
+    assert cls.__qualname__ == name
+    assert name in dir(importlib.import_module(contract))
+
+
 def _contracts() -> list[dict[str, object]]:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     contracts: list[dict[str, object]] = config["tool"]["importlinter"]["contracts"]
@@ -337,8 +362,11 @@ def test_the_import_contracts_cover_every_core_module() -> None:
     assert names == {
         "Core modules do not import orkexa.backends.postgres",
         "Core modules do not import orkexa.testing",
+        "Contract modules do not import orkexa.backends at runtime",  # MUP-ONA B2, see test_import_order.py
     }
     for contract in _contracts():
+        if not str(contract["name"]).startswith("Core modules"):
+            continue  # the B2 contract names only the contract modules
         sources = set(contract["source_modules"])  # type: ignore[call-overload]
         assert sources >= expected, sorted(expected - sources)
 
@@ -360,4 +388,4 @@ def test_the_import_contracts_hold() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "2 kept, 0 broken" in result.stdout
+    assert "3 kept, 0 broken" in result.stdout

@@ -55,6 +55,21 @@ is discarded.
 | `storage.corrupt` | a SQLite database file is damaged or not a database |
 | `document.too_complex` | a PDF exceeds a `PdfLimits` budget (`reason` says which) |
 
+## The SQLite backends
+
+`SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` live in `orkexa.backends.sqlite` (canonical path since MUP-ONA
+B2). The earlier import paths stay valid and return the very same classes:
+
+| Class | Canonical path | Also importable from |
+|---|---|---|
+| `SQLiteIndex` | `orkexa.backends.sqlite` (module `orkexa.backends.sqlite.index`) | `orkexa`, `orkexa.retrieval` |
+| `SQLiteFileStore` | `orkexa.backends.sqlite` (module `orkexa.backends.sqlite.files`) | `orkexa`, `orkexa.files` |
+| `SQLiteMemory` | `orkexa.backends.sqlite` (module `orkexa.backends.sqlite.memory`) | `orkexa`, `orkexa.memory` |
+
+The contract modules (`orkexa.retrieval`, `orkexa.files`, `orkexa.memory`) never import a backend when they load;
+they resolve these three names on first access. Only `__module__` of the classes changed with the move; behavior,
+tables, pragmas and file permissions did not.
+
 ## Memory
 
 ::: orkexa.MemoryBackend
@@ -63,7 +78,7 @@ is discarded.
 
 ::: orkexa.FileMemory
 
-::: orkexa.SQLiteMemory
+::: orkexa.backends.sqlite.SQLiteMemory
 
 ## Files
 
@@ -71,13 +86,13 @@ is discarded.
 
 ::: orkexa.LocalFileStore
 
-::: orkexa.SQLiteFileStore
+::: orkexa.backends.sqlite.SQLiteFileStore
 
 ## Retrieval
 
 ::: orkexa.Index
 
-::: orkexa.SQLiteIndex
+::: orkexa.backends.sqlite.SQLiteIndex
 
 ::: orkexa.retrieval.ReindexableIndex
 

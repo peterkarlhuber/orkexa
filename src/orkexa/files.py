@@ -52,6 +52,7 @@ from .errors import ToolResultError
 from .tools import Tool
 
 if TYPE_CHECKING:
+    from .backends.sqlite.files import SQLiteFileStore as SQLiteFileStore
     from .memory import MemoryBackend
 
 __all__ = ["FILES_TOOL_NAME", "FileStore", "LocalFileStore", "SQLiteFileStore", "StoredFile"]
@@ -444,3 +445,20 @@ class LocalFileStore(FileStore):
         catalog.pop(file_id, None)
         self._write_catalog(catalog)
         (self.root / "blobs" / file_id).unlink(missing_ok=True)
+
+
+# MUP-ONA B2: SQLiteFileStore lives in orkexa.backends.sqlite.files and is re-exported here, so every
+# import path returns the same class. The backend imports this module, so the re-export is resolved on first
+# access (PEP 562) instead of by a module-level import, which would be circular. Type checkers see the import
+# under TYPE_CHECKING above; this block is hidden from them so that an unknown name stays an error.
+if not TYPE_CHECKING:
+
+    def __getattr__(name: str) -> object:
+        if name == "SQLiteFileStore":
+            from .backends.sqlite.files import SQLiteFileStore
+
+            return SQLiteFileStore
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    def __dir__() -> list[str]:
+        return sorted({*globals(), "SQLiteFileStore"})
