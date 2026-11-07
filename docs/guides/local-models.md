@@ -85,6 +85,12 @@ with ManagedOllama("~/.orkexa/local", models_dir="/Volumes/SSD/models") as serve
   secrets of the parent process). `offline=True` removes proxy variables. It stops only the process it
   started. An Ollama that already runs (for example on port 11434) is only detected with
   `detect_ollama()`, never stopped or reconfigured.
+* The server does not outlive the application. On Linux and macOS a small watcher process (the same Python
+  interpreter, in a session of its own) stops the server and its model runners as soon as the application ends
+  without stopping it (a crash, an OOM kill, `SIGKILL` after a stop timeout). On Windows the server runs in a
+  job object that Windows closes with the application, which ends the server and its runners. If the watcher
+  was killed too (or the application is frozen, for example with PyInstaller, and has no interpreter to run
+  it), the next start stops the server left behind (Linux and macOS: it is named in `ollama.state.json`).
 * On a host that several users share, the server's files stay private to the user that runs it: the
   server's home (its key pair), `logs/` and `runtime/` are created with mode `0700`, the log and
   `ollama.state.json` with `0600`. `logs/ollama.log` is rotated at a start once it is larger than 10 MB

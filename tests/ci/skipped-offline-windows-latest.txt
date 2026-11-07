@@ -234,6 +234,12 @@ tests.test_managed_server_hardening::test_runtime_folders_are_private_to_the_use
 tests.test_managed_server_hardening::test_server_files_are_private_to_the_user  # POSIX modes; the fake server is a script
 tests.test_managed_server_hardening::test_small_log_is_appended_to  # POSIX modes; the fake server is a script
 tests.test_managed_server_hardening::test_unusable_home_is_an_ollama_error  # POSIX modes; the fake server is a script
+tests.test_managed_server_lifetime::test_a_frozen_application_starts_no_watcher  # POSIX: the watcher process
+tests.test_managed_server_lifetime::test_a_killed_application_does_not_leave_its_server_running  # POSIX: the watcher process
+tests.test_managed_server_lifetime::test_a_regular_stop_ends_the_watcher_without_a_second_stop  # POSIX: the watcher process
+tests.test_managed_server_lifetime::test_a_restart_replaces_the_watcher  # POSIX: the watcher process
+tests.test_managed_server_lifetime::test_the_watcher_never_stops_a_process_that_is_not_the_server  # POSIX: the watcher process
+tests.test_managed_server_lifetime::test_the_watcher_waits_for_the_end_of_its_pipe  # POSIX: the watcher process
 tests.test_ollama_live::test_a_text_answer_after_an_empty_turn  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[False]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[True]  # needs ORKEXA_OLLAMA_LIVE_URL

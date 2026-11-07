@@ -7,6 +7,11 @@ only *detected* (:func:`detect_ollama`), never stopped or reconfigured.
 
 The child gets a minimal environment: ``OLLAMA_HOST`` (loopback), ``OLLAMA_MODELS``,
 ``OLLAMA_NO_CLOUD=1`` (no Ollama cloud models), no history file, no browser origins.
+
+The server does not outlive this process: a watcher process (POSIX) or a job object (Windows) stops it when
+this process ends without stopping it (:mod:`orkexa.local._lifeline`). A server that survived anyway (the
+watcher was killed too, or the machine went down) is reclaimed at the next start from the state file
+(POSIX).
 """
 
 from __future__ import annotations
@@ -25,7 +30,11 @@ import time
 from typing import Any
 
 from .._storage import PRIVATE_FILE_MODE, make_private_dirs, write_private_text
+from . import _lifeline
 from ._http import OllamaError
+from ._lifeline import alive as _alive
+from ._lifeline import is_managed_server as _is_managed_server
+from ._lifeline import stop_group as _stop_group
 from .client import OllamaClient
 from .install import OLLAMA_VERSION, installed_runtime
 
@@ -72,65 +81,6 @@ def detect_ollama(url: str = f"http://127.0.0.1:{DEFAULT_PORT}") -> str | None:
         return OllamaClient(url, timeout=2).version(timeout=1.5)
     except OllamaError:
         return None
-
-
-def _alive(pid: int) -> bool:
-    """Whether a process ``pid`` exists (POSIX; on Windows ``False``: nothing is reclaimed there)."""
-    if pid <= 0 or platform.system() == "Windows":
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def _runs_serve(pid: int, binary: str) -> bool:
-    """Whether the command line of ``pid`` ends with ``<binary> serve`` (maybe after an interpreter)."""
-    proc = Path(f"/proc/{pid}/cmdline")
-    if proc.exists():
-        try:
-            args = proc.read_bytes().rstrip(b"\0").decode("utf-8", "replace").split("\0")
-        except OSError:
-            return False
-        return args[-2:] == [binary, "serve"]
-    try:  # macOS and other POSIX systems without /proc
-        out = subprocess.run(
-            # -ww: the whole command line; without it BSD ps may cut it to the screen width.
-            ["ps", "-ww", "-p", str(pid), "-o", "command="],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    text = out.stdout.strip()
-    return text == f"{binary} serve" or text.endswith(f" {binary} serve")
-
-
-def _is_managed_server(pid: int, binary: str) -> bool:
-    """Whether ``pid`` is ``<binary> serve`` leading its own process group, as ManagedOllama starts it."""
-    if not _alive(pid):
-        return False
-    try:
-        if os.getpgid(pid) != pid:
-            return False
-    except OSError:
-        return False
-    return _runs_serve(pid, binary)
-
-
-def _stop_group(pid: int, timeout: float = 10.0) -> None:
-    """SIGTERM, then SIGKILL, to the process group of an orphaned server (not our child: polled)."""
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(pid, signal.SIGTERM)
-        deadline = time.monotonic() + timeout
-        while _alive(pid) and time.monotonic() < deadline:
-            time.sleep(0.1)
-        os.killpg(pid, signal.SIGKILL)
 
 
 @dataclass(frozen=True)
@@ -185,6 +135,9 @@ class ManagedOllama:
         self.offline = offline
         self.environment = dict(environment or {})
         self._process: subprocess.Popen[bytes] | None = None
+        #: What ends the server with this process: the watcher (POSIX) or the job handle (Windows).
+        self._lifeline: subprocess.Popen[bytes] | None = None
+        self._job: int | None = None
         self._base_url: str | None = None
         self._lock = threading.Lock()
 
@@ -293,6 +246,7 @@ class ManagedOllama:
                 ) from None
             finally:
                 os.close(log_fd)
+            self._bind_lifetime(binary)
             url = f"http://{self._authority}:{port}"
             client = OllamaClient(url, timeout=3)
             deadline = time.monotonic() + timeout
@@ -318,6 +272,24 @@ class ManagedOllama:
             raise OllamaError(
                 "start_failed", f"Ollama did not answer within {timeout:.0f} s; see {self.log_file}"
             )
+
+    def _bind_lifetime(self, binary: Path) -> None:
+        """Make sure the server just started ends with this process (see the module docstring)."""
+        self._release_lifetime()  # of a server that exited by itself before (a failed start)
+        process = self._process
+        if process is None:
+            return
+        if platform.system() == "Windows":
+            self._job = _lifeline.kill_on_close_job(int(process._handle))  # type: ignore[attr-defined]
+        else:
+            self._lifeline = _lifeline.start_watcher(process.pid, str(binary))
+
+    def _release_lifetime(self) -> None:
+        """After the server stopped: end the watcher, close the job (which ends what is left of it)."""
+        watcher, self._lifeline = self._lifeline, None
+        _lifeline.release_watcher(watcher)
+        job, self._job = self._job, None
+        _lifeline.close_job(job)
 
     def _open_log(self) -> int:
         """The log file, opened for appending (``0600`` when new); rotated first if it grew too large."""
@@ -385,6 +357,7 @@ class ManagedOllama:
             # stopping it, while the group id cannot belong to anything else yet.
             with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(process.pid, signal.SIGKILL)
+        self._release_lifetime()
         self._process = None
         self._base_url = None
         self._state_file.unlink(missing_ok=True)

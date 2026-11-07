@@ -22,14 +22,18 @@ from .test_ork3_04_managed_server import _alive, _fake_ollama, _gone, _start
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
 
 
-def _crashed_app(home: Path, binary: Path) -> dict[str, int]:
-    """Start a managed server in a child process, then SIGKILL that process (a crash)."""
+def _crashed_app(home: Path, binary: Path, *, watcher_too: bool = True) -> dict[str, int]:
+    """Start a managed server in a child process, then SIGKILL that process (a crash).
+
+    With ``watcher_too`` the server's watcher (``orkexa.local._lifeline``) is killed first, as if the
+    whole session or machine went down: the server is then left for the reclaim at the next start."""
     code = textwrap.dedent(
         f"""
         import time
         from orkexa.local import ManagedOllama
         m = ManagedOllama({str(home)!r}, binary={str(binary)!r})
         print(m.start(timeout=60), flush=True)
+        print(m._lifeline.pid if m._lifeline is not None else 0, flush=True)
         time.sleep(120)
         """
     )
@@ -45,12 +49,18 @@ def _crashed_app(home: Path, binary: Path) -> dict[str, int]:
             f"the app did not start its server: {app.stderr.read()}\n"
             f"--- {log} ---\n{log.read_text(errors='replace') if log.exists() else '(no log)'}"
         )
+    watcher = int(app.stdout.readline())
+    assert watcher > 0 and _alive(watcher), "the server has no watcher"
+    if watcher_too:
+        os.kill(watcher, signal.SIGKILL)
+        assert _gone(watcher)
     app.kill()
     app.wait()
     state = json.loads((home / "ollama.state.json").read_text())
     runner = int((home / "ollama-home" / "runner.pid").read_text())
-    assert _alive(state["pid"]) and _alive(runner)
-    return {"server": state["pid"], "runner": runner}
+    if watcher_too:
+        assert _alive(state["pid"]) and _alive(runner)
+    return {"server": state["pid"], "runner": runner, "watcher": watcher}
 
 
 def test_next_start_stops_the_orphaned_server_and_its_runners(tmp_path: Path) -> None:
