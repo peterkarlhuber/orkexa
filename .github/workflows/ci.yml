@@ -37,7 +37,12 @@ jobs:
       # MUP-ONA B0: the import contracts in pyproject.toml ([tool.importlinter]).
       - run: lint-imports
       # Offline only: no API keys are configured, and live tests run only with -m live.
+      # MUP-ONA B1: the conformance reports (tests/conformance) are saved per target and compared with the
+      # skips this job expects (tests/conformance/expected_skips.json).
       - run: pytest --cov=orkexa --cov-report=term-missing --cov-report=xml -rs --junitxml=junit-test.xml
+        env:
+          ORKEXA_CONFORMANCE_JOB: test
+          ORKEXA_CONFORMANCE_REPORTS: conformance-reports
       # MUP-ONA A0: the skipped tests must match the expectation file (a new skip fails the job).
       - run: python scripts/check_skips.py junit-test.xml tests/ci/skipped-test.txt
       - if: matrix.python-version == '3.12'
@@ -45,6 +50,11 @@ jobs:
         with:
           name: coverage
           path: coverage.xml
+      - if: always() && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conformance-reports
+          path: conformance-reports
 
   lowest-versions:
     name: test (lowest supported dependency versions)
@@ -61,6 +71,8 @@ jobs:
       # The lower bounds of pyproject.toml (pydantic 2.9 is the minimum of google-genai 2.0).
       - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "boto3==1.43.80" "botocore==1.43.80" "pydantic==2.9.0" "typing-extensions==4.14.0"
       - run: pytest -rs --junitxml=junit-lowest-versions.xml
+        env:
+          ORKEXA_CONFORMANCE_JOB: lowest-versions
       - run: python scripts/check_skips.py junit-lowest-versions.xml tests/ci/skipped-lowest-versions.txt
 
   packaging:

@@ -4,7 +4,8 @@
 
 Every backend of `Index`, `FileStore` and `MemoryBackend` (the SQLite and local classes here, Nodestro's
 PostgreSQL classes, your own) shares the contract below
-([ADR 0014](../architecture/decisions/0014-storage-contracts-and-conformance.md)).
+([ADR 0014](../architecture/decisions/0014-storage-contracts-and-conformance.md)); the public conformance suite
+checks a backend against it ([Testing helpers and conformance](testing.md)).
 
 **Scores** (higher is better; equal scores are ordered by chunk id, ascending):
 

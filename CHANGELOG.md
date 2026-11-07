@@ -50,6 +50,15 @@ listed here. The development version is `0.2.0.dev0`.
   behaves as before.
 * Changed: an invalid vector in `SQLiteIndex` raises `VectorError` (still a `ValueError`, now with a code); a query
   vector of another length raises it too (still a `RetrievalError` with `vector.dimension`).
+* Added: the public conformance suite `orkexa.testing.conformance` (no pytest needed): `run_cases(factory, cases,
+  expect=...)` runs the cases of `Index` (`INDEX_CASES`, `VECTOR_CASES`, `REINDEX_CASES`), `FileStore`
+  (`FILE_STORE_CASES`), `MemoryBackend` (`MEMORY_CASES`) and partitions (`PARTITION_*_CASES`) against a backend
+  and returns a `Report`; a backend that reports fewer capabilities than expected, or takes `tenant_id` without
+  reporting `partitioned`, fails the run. `load_expected_skips` compares the skipped cases with an expectation per
+  CI job (`tests/conformance/expected_skips.json` here). Every SQLite and local class passes, also on copies of
+  the FX-SQ-0 legacy files. See "Testing helpers and conformance" in the API reference.
+* Added: `orkexa.testing.fakes.ScriptedClient`, a scripted, recording stand-in for provider SDK clients;
+  `tests/test_capabilities_and_batches.py` uses it instead of hand-written doubles.
 
 ### Added: PDF budgets and isolated PDF extraction (MUP-ONA A1, 2026-11-06)
 
