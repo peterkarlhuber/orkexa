@@ -39,6 +39,7 @@ from .core.conversion import HistoryConversionWarning
 from .core.reasoning import ReasoningStream, ReasoningText
 from .core.types import (
     Effort,
+    LimitHandled,
     Message,
     ModelRequest,
     ModelResponse,
@@ -163,6 +164,7 @@ __all__ = [
     "Index",
     "InvalidRequestError",
     "InvalidRequestReason",
+    "LimitHandled",
     "LocalFileStore",
     "MaxToolCallsError",
     "MaxToolRoundsError",

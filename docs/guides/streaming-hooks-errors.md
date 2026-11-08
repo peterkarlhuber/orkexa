@@ -163,14 +163,29 @@ requests (`Evaluator.evaluate_many(batch=True)`) cannot be suspended: there,
 | Situation | Exception |
 | --- | --- |
 | refusal (`stop_reason="refusal"`, Gemini safety block, OpenAI refusal) | `RefusalError` (or text with `on_refusal="return"`) |
-| output token limit reached | `IncompleteResponseError` (usage is recorded) |
+| output token limit reached | `IncompleteResponseError` (usage is recorded; `stop_reason`, `max_tokens`, `output_tokens`, `reasoning`, `answered` say why) |
 | structured output invalid | `StructuredOutputError` |
-| tool rounds exhausted | `MaxToolRoundsError` |
+| tool rounds exhausted | `MaxToolRoundsError` (with `on_max_tool_rounds="answer"` only if the model still calls tools in the last round) |
 | more tool calls in one response than `max_tool_calls_per_round` (none ran) | `MaxToolCallsError` (a `MaxToolRoundsError`) |
 | second `ask()`, `reset()` or `load_history()` while a turn runs | `ConcurrentTurnError` |
 | a tool call waits (`ToolCallSuspended`) or the usage tracker pauses a request (`RequestSuspended`) | `TurnSuspended` (with a `checkpoint`) |
 | provider API errors (generic agents) | `AuthenticationError`, `RateLimitError`, `InvalidRequestError`, `ProviderConnectionError`, `ProviderServerError` (all `ProviderError`) |
 | no API key found (every agent and provider) | `MissingCredentialsError` (an `AuthenticationError`) |
+
+### Answering at a limit instead of failing
+
+Two agent options turn a limit into one more, bounded request (both default to `"raise"`):
+
+* `on_max_tool_rounds="answer"`: when the last allowed round starts after tool results, the agent adds a short
+  user message asking for the final answer from the results so far and sends the request without tools
+  (`tool_choice="none"`, or no tools at all where the server ignores `tool_choice`, such as Ollama). Providers
+  without either way (Amazon Bedrock Converse) keep raising `MaxToolRoundsError`.
+* `on_reasoning_overflow="answer"`: when a response stops at `max_tokens` after reasoning and the adapter can
+  switch reasoning off (`Provider.without_reasoning`, Ollama today), the same round is sent once more without
+  reasoning. A second overflow raises `IncompleteResponseError`.
+
+Each handled limit emits a `LimitHandled(limit, round)` event (`"tool_rounds"` or `"reasoning"`), so callers can
+show that the answer was produced under a limit. Both requests are billed and recorded like any other.
 
 `ProviderError` has `provider`, `status_code`, `request_id` and `retryable`; its message
 is redacted (API keys never appear) and names the SDK exception type. `InvalidRequestError` also has `reason` (`messages`, `context_length`, `model_not_found`,

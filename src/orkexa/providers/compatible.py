@@ -25,7 +25,8 @@ Security and capabilities:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator, Mapping
-from typing import Any, ClassVar
+from dataclasses import replace
+from typing import Any, ClassVar, Literal
 
 from pydantic import SecretStr
 
@@ -216,7 +217,15 @@ class OllamaProvider(CompatibleProvider):
     # Ollama's OpenAI-compatible API reads an assistant message's ``reasoning`` as its thinking
     # (openai/openai.go: ``Message.Reasoning`` -> ``api.Message.Thinking``); the chat templates of
     # thinking models (Qwen 3.x, ...) show it again in the turns of the current tool loop.
-    message_rules: ClassVar[ChatMessageRules] = ChatMessageRules(reasoning_field="reasoning")
+    # Only the latest turn's: the templates (Qwen 3.5) show every thought of the tool loop again,
+    # and thinking models write thousands of tokens per step, so replaying all of them filled the
+    # context window within a few rounds; Ollama then silently drops the oldest messages, the
+    # task included, and the model keeps calling tools (measured with qwen3.5, Ollama 0.40.14).
+    message_rules: ClassVar[ChatMessageRules] = ChatMessageRules(
+        reasoning_field="reasoning", reasoning_replay="latest"
+    )
+    # Ollama ignores ``tool_choice`` (``"none"`` still returns tool calls; measured with 0.40.14).
+    tool_free_answer: ClassVar[Literal["tool_choice_none", "omit_tools"] | None] = "omit_tools"
     start_hint: ClassVar[str] = (
         "start Ollama (`ollama serve`, or `orkexa-local serve` for the managed runtime) or correct base_url"
     )
@@ -225,6 +234,12 @@ class OllamaProvider(CompatibleProvider):
         "system_messages": "supported",
         "structured_output": "supported",
     }
+
+    def without_reasoning(self, request: ModelRequest) -> ModelRequest | None:
+        """``reasoning_effort: "none"``: Ollama answers without its thinking phase (``think: false``)."""
+        options = self._options(request)
+        merged = {**options.request_options, "reasoning_effort": "none"}
+        return replace(request, effort=None, options=replace(options, request_options=merged))
 
 
 class VLLMProvider(CompatibleProvider):
