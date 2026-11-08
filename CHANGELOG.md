@@ -5,6 +5,14 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: blocked-module tests per Tabrion edge (TABRION QA-18, 2026-11-08)
+
+* `tests/packaging/test_optional_edges.py` (AC-3): one fresh `python -I` per optional edge of the K-33 list, with
+  its modules blocked (`sys.modules[name] = None`): the core imports without `tabrion` (until MIG-ORK-3), and the
+  core and `orkexa.backends.postgres` import without psycopg and `tabrion.postgres` (the backend names
+  `orkexa[postgres]` only on use). A meta test keeps the edges equal to K-33 and to `pyproject.toml`; a mutation
+  probe per edge adds a top-level import to a copy of the package and expects red. Tests only.
+
 ### Release rules (MUP-ONA B0, 2026-11-06)
 
 * Tags are named `orkexa-vX.Y.Z` (annotated, on the release's merge commit) and are set only after the owner
