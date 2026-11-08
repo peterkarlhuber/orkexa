@@ -18,6 +18,20 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Fixed: local thinking models running out of tokens or tool rounds (2026-11-08)
+
+* Ollama: reasoning is sent back only on the latest assistant message (`ChatMessageRules.reasoning_replay`,
+  `"all"` by default, `"latest"` for Ollama). Since the o400 fix (3f63b03) every earlier thinking text was replayed
+  and rendered into the prompt, so a multi-step tool conversation grew by thousands of tokens per round; when it
+  passed the context window, Ollama silently dropped the middle of the conversation (the task included) and small
+  qwen3.5 models started calling the same tool again. Other OpenAI-compatible servers keep replaying everything.
+* New agent options `on_max_tool_rounds` and `on_reasoning_overflow` (`"raise"` by default, unchanged behavior)
+  with `"answer"`: one tool-free final request at the last tool round, and one request without reasoning after a
+  response stopped at `max_tokens` while reasoning. New event `LimitHandled`; new provider hooks
+  `Provider.tool_free_answer` (Ollama ignores `tool_choice="none"`, so tools are omitted there; Bedrock has neither)
+  and `Provider.without_reasoning` (Ollama: `reasoning_effort="none"`).
+* `IncompleteResponseError` carries `stop_reason`, `max_tokens`, `output_tokens`, `reasoning` and `answered`.
+
 ### Fixed: two test races seen on master CI (2026-11-07)
 
 * `test_cancel_kills_the_container` waited for any container with the owner label, so it could stop on the
