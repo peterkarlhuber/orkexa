@@ -103,18 +103,29 @@ def test_text_is_kept_as_it_was() -> None:
     assert sent[3]["content"] == "It is 3."
 
 
-@pytest.mark.parametrize("name", ["ollama", "vllm"])
-def test_ollama_and_vllm_get_their_reasoning_back_generic_endpoints_do_not(name: str) -> None:
-    """Ollama and vLLM read ``reasoning`` of an assistant message as the model's thinking
-    (ORK-042: checked in the vLLM 0.33.0 source); generic endpoints declare no such
-    field and get none."""
+def test_vllm_gets_all_its_reasoning_back_generic_endpoints_get_none() -> None:
+    """vLLM reads ``reasoning`` of an assistant message as the model's thinking (ORK-042:
+    checked in the vLLM 0.33.0 source); generic endpoints declare no such field and get none."""
     last = Message(role="assistant", content=[ReasoningPart(text="It is 3.")])
-    sent = encode(name, history(last))
+    sent = encode("vllm", history(last))
     assert sent[1]["reasoning"] == "I add." and sent[1]["content"] is None
     assert sent[3] == {"role": "assistant", "content": "", "reasoning": "It is 3."}
     assert all("reasoning" not in m for m in encode("compatible", history(last)))
-    assert provider(name).message_rules == ChatMessageRules(reasoning_field="reasoning")
+    assert provider("vllm").message_rules == ChatMessageRules(reasoning_field="reasoning")
     assert provider("compatible").message_rules == ChatMessageRules()
+
+
+def test_ollama_gets_only_the_latest_reasoning_back() -> None:
+    """Ollama's Qwen 3.5 template shows every thought of the tool loop again; replaying all of
+    them made the prompt grow by a whole reasoning text per round until Ollama silently cut the
+    task off (RT-067). Only the latest assistant turn's reasoning goes back."""
+    last = Message(role="assistant", content=[ReasoningPart(text="It is 3.")])
+    sent = encode("ollama", history(last))
+    assert "reasoning" not in sent[1] and sent[1]["content"] is None and sent[1]["tool_calls"]
+    assert sent[3] == {"role": "assistant", "content": "", "reasoning": "It is 3."}
+    assert provider("ollama").message_rules == ChatMessageRules(
+        reasoning_field="reasoning", reasoning_replay="latest"
+    )
 
 
 def test_redacted_or_textless_reasoning_is_not_replayed() -> None:
@@ -430,9 +441,10 @@ def test_the_downtime_analyst_flow_reaches_its_structured_answer() -> None:
     assert "tools" not in last and last["response_format"]["type"] == "json_schema"
     assert last["messages"][-2] == {"role": "assistant", "content": "", "reasoning": "share is 4.65 %"}
     assert last["messages"][-1] == {"role": "user", "content": FORMAT_PROMPT}
-    # Every tool round's reasoning went back with its tool calls (Qwen's interleaved thinking).
+    # Only the latest tool round's reasoning went back with its tool calls (bounded growth).
     assert [m.get("reasoning") for m in calls[5]["messages"] if m.get("tool_calls")] == [
-        f"step {n}" for n in range(1, 6)
+        *([None] * 4),
+        "step 5",
     ]
     assert [m["tool_call_id"] for m in calls[5]["messages"] if m["role"] == "tool"] == [
         f"call_{n}" for n in range(1, 6)

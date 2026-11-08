@@ -54,6 +54,7 @@ PUBLIC = {
         "Index",
         "InvalidRequestError",
         "InvalidRequestReason",
+        "LimitHandled",
         "LocalFileStore",
         "MODEL_PRICING",
         "MaxToolCallsError",

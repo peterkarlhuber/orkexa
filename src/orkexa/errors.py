@@ -145,7 +145,31 @@ class MemoryToolError(ToolResultError):
 
 
 class IncompleteResponseError(OrkexaError, RuntimeError):
-    """The model stopped early (output token limit or context window exceeded)."""
+    """The model stopped early (output token limit or context window exceeded).
+
+    Attributes (``None`` when the error was raised without them):
+        stop_reason: ``"max_tokens"`` or ``"context_window_exceeded"``.
+        max_tokens: The output limit of the request.
+        output_tokens: The output tokens the provider reported (reasoning included).
+        reasoning: Whether the response had reasoning (text or a reasoning phase).
+        answered: Whether the response had answer text or a tool call before it stopped.
+    """
+
+    def __init__(
+        self,
+        *args: object,
+        stop_reason: str | None = None,
+        max_tokens: int | None = None,
+        output_tokens: int | None = None,
+        reasoning: bool | None = None,
+        answered: bool | None = None,
+    ) -> None:
+        super().__init__(*args)
+        self.stop_reason = stop_reason
+        self.max_tokens = max_tokens
+        self.output_tokens = output_tokens
+        self.reasoning = reasoning
+        self.answered = answered
 
 
 class MaxToolRoundsError(OrkexaError, RuntimeError):

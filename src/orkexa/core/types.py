@@ -488,6 +488,21 @@ class TurnFailed:
     type: ClassVar[str] = "turn_failed"
 
 
+@dataclass(frozen=True)
+class LimitHandled:
+    """A limit of the turn was reached and the agent continued as configured instead of failing.
+
+    ``limit`` is ``"reasoning"`` (the model spent the output limit on reasoning; the request was
+    sent again without reasoning, ``Agent(on_reasoning_overflow="answer")``) or ``"tool_rounds"``
+    (the last tool round was used up; the model was asked for its answer without another tool
+    call, ``Agent(on_max_tool_rounds="answer")``). ``round`` is the tool round it happened in.
+    """
+
+    limit: Literal["reasoning", "tool_rounds"]
+    round: int
+    type: ClassVar[str] = "limit_handled"
+
+
 StreamEvent = (
     TextDelta
     | ReasoningDelta
@@ -498,6 +513,7 @@ StreamEvent = (
     | UsageReported
     | TurnCompleted
     | TurnFailed
+    | LimitHandled
 )
 
 

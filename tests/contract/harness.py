@@ -752,8 +752,11 @@ class ChatHarness(Harness):
                 )
 
     def native_replayed(self, call: dict[str, Any]) -> bool:
-        # Ollama reads earlier reasoning from an assistant message's ``reasoning`` field.
-        return any(m.get("reasoning") == "plan" for m in call["messages"] if m["role"] == "assistant")
+        # Ollama reads earlier reasoning from an assistant message's ``reasoning`` field, but gets
+        # only the latest assistant turn's back (``reasoning_replay="latest"``): here that is the
+        # final answer "two", which had none, so nothing of the tool turn's "plan" is resent.
+        assistants = [m for m in call["messages"] if m["role"] == "assistant"]
+        return all("reasoning" not in m for m in assistants[:-1])
 
     def truncated(self, text: str) -> Any:
         return self._completion({"content": text}, "length")
