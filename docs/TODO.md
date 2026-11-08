@@ -12,7 +12,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 4 |
-| P3 Low | 10 |
+| P3 Low | 11 |
 | P4 Optional | 7 |
 
 **Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
@@ -159,6 +159,19 @@ None known.
 - **Next step:** Mark it as synthetic or drop it on commit; agree with Nodestro how chat views show it.
 
 ## Tests and quality assurance
+
+### ORK-039 · CI step for the Tabrion public API check (TABRION QA-21)
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** TABRION QA-21 (AC-7), `scripts/check_tabrion_api.py`,
+  `docs/api-consumers.md`, `tests/test_tabrion_api_check.py`
+- **What:** The AC-7 check is in place: `scripts/check_tabrion_api.py` (AST, standard library only, the same file as
+  in tabrion-studio, axentra and nodestro-runtime) refuses private Tabrion names, checks used names against the
+  installed Tabrion's `__all__` (and, with `--surface`, Tabrion's `docs/api/surface.json`), and exports them to
+  `docs/api-consumers.md` (none yet: the core imports no Tabrion name until MIG-ORK-3). The offline test job fails
+  when the export is stale or a private name is used (`tests/test_tabrion_api_check.py`), but no lint step names it.
+- **Next step:** Add `python scripts/check_tabrion_api.py --check-export docs/api-consumers.md` to the lint job (a
+  `.github` change, not made in the QA-21 pull request); Tabrion collects the consumer lists into its own
+  `docs/api-consumers.md` (Tabrion's side of QA-21).
 
 ### ORK-030 · Live tests of the larger local models
 

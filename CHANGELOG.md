@@ -5,6 +5,14 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: the Tabrion public API check (TABRION QA-21, 2026-11-08)
+
+* `python scripts/check_tabrion_api.py` reads `src`, `tests`, `scripts` and `examples` with `ast` and fails on a
+  private Tabrion name (`tabrion._x`, a `_` attribute on a Tabrion name, `getattr`/`import_module` with a private
+  constant, a star import); with Tabrion installed every used name must be in its module's `__all__`, and
+  `--surface` compares with Tabrion's frozen API snapshot. `--export` writes the used names to
+  `docs/api-consumers.md` (none yet); `tests/test_tabrion_api_check.py` fails when it is stale. Tooling only.
+
 ### Release rules (MUP-ONA B0, 2026-11-06)
 
 * Tags are named `orkexa-vX.Y.Z` (annotated, on the release's merge commit) and are set only after the owner
