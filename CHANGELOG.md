@@ -13,6 +13,15 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa[postgres]` only on use). A meta test keeps the edges equal to K-33 and to `pyproject.toml`; a mutation
   probe per edge adds a top-level import to a copy of the package and expects red. Tests only.
 
+### Added: the Tabrion public API check (TABRION QA-21, 2026-11-08)
+
+* `python scripts/check_tabrion_api.py` reads `src`, `tests`, `scripts` and `examples` with `ast` and fails on a
+  private Tabrion name (`tabrion._x`, a `_` attribute on a Tabrion name, `getattr`/`import_module` with a private
+  constant, a star import). Every used name must be in its module's `__all__` in the installed Tabrion (a used name
+  without an installed Tabrion fails), and `--surface` compares with Tabrion's frozen API snapshot and refuses
+  experimental (`X`) names. `--export` writes the used names to `docs/api-consumers.md` (none yet);
+  `tests/test_tabrion_api_check.py` fails when it is stale or missing. Tooling only.
+
 ### Release rules (MUP-ONA B0, 2026-11-06)
 
 * Tags are named `orkexa-vX.Y.Z` (annotated, on the release's merge commit) and are set only after the owner
@@ -44,7 +53,7 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.testing`, which ships in the core wheel; the PostgreSQL backend may import `tabrion` (K-33:
   `orkexa[postgres]` -> `tabrion[postgres]`). `[tool.importlinter]`
   now sets `include_external_packages = true`, which import-linter requires for forbidden packages outside Orkexa.
-* `tests/architecture/test_forbidden_probe.py` copies the package, adds one forbidden import per case (14 cases,
+* `tests/architecture/test_forbidden_probe.py` copies the package, adds one forbidden import per case (15 cases,
   every contract at least once) and requires `lint-imports` to name the broken contract. It also checks that the
   backend's edge to `tabrion` stays green, and scans for `axentra*`, `nodestro*`, `levuvo*` and `*_studio` imports
   by prefix. `tests/test_public_api.py` now expects six contracts.
