@@ -26,6 +26,16 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Added: dependency policy K-33 (Tabrion QA-17, AC-2, 2026-11-11)
+
+* `dependency-policy.json` is this repository's copy of the dependency policy K-33 from nodestro-studio (only its
+  outgoing edges: `tabrion[postgres]` in the extra `postgres`, `tabrion[testing,postgres]` in `dev`, and the core edge to
+  `tabrion` as `pending:E-ORK-CORE` until MIG-ORK-3), and `scripts/check_dependency_policy.py` is the unchanged checker from there;
+  `scripts/DEPENDENCY_POLICY_SOURCE.md` records their origin and SHA-256. `python scripts/check_dependency_policy.py`
+  checks `pyproject.toml` (core, every extra and dependency group) against the copy.
+  `tests/architecture/test_dependency_policy.py` checks the checksums, runs the checker and probes forbidden
+  requirements (Axentra, the pending core edge, the wrong extra, a studio, tabrion by a direct URL). Ruff skips the vendored script (it is linted in nodestro-studio).
+
 ### Added: import contracts for the Tabrion edge list K-33 and their mutation probe (Tabrion QA-16, 2026-11-11)
 
 * Two new import-linter contracts. Orkexa never imports Axentra, Nodestro or a Studio package (`axentra*`,
