@@ -34,7 +34,7 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.testing`, which ships in the core wheel; the PostgreSQL backend may import `tabrion` (K-33:
   `orkexa[postgres]` -> `tabrion[postgres]`). `[tool.importlinter]`
   now sets `include_external_packages = true`, which import-linter requires for forbidden packages outside Orkexa.
-* `tests/architecture/test_forbidden_probe.py` copies the package, adds one forbidden import per case (14 cases,
+* `tests/architecture/test_forbidden_probe.py` copies the package, adds one forbidden import per case (15 cases,
   every contract at least once) and requires `lint-imports` to name the broken contract. It also checks that the
   backend's edge to `tabrion` stays green, and scans for `axentra*`, `nodestro*`, `levuvo*` and `*_studio` imports
   by prefix. `tests/test_public_api.py` now expects six contracts.
