@@ -436,6 +436,10 @@ def test_the_import_contracts_cover_every_core_module() -> None:
             }
             assert not {name for name in sources if name.startswith(("orkexa.backends.postgres", "orkexa.*"))}
             assert "orkexa.backends.**" not in sources
+        if str(contract["name"]).endswith("(E-ORK-CORE, K-33)"):
+            # QA-16 review C-1: orkexa.testing ships in the core wheel, so it may not import tabrion either.
+            wanted = wanted | {"orkexa.testing", "orkexa.testing.**"}
+            assert {"orkexa.testing", "orkexa.testing.**"} <= sources
         assert sources >= wanted, sorted(wanted - sources)
 
 

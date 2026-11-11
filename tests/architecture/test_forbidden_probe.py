@@ -97,6 +97,7 @@ def test_unmodified_copy_is_kept(tmp_path: Path) -> None:
         ("_storage.py", "import tabrion", CORE_NO_TABRION),
         ("backends/sqlite/index.py", "import tabrion.sqlite", CORE_NO_TABRION),
         ("__init__.py", "import tabrion.errors", CORE_NO_TABRION),
+        ("testing/conformance/_core.py", "import tabrion.testing", CORE_NO_TABRION),
         ("core/types.py", "import orkexa.backends.postgres.connection", CORE_NO_POSTGRES),
         ("usage.py", "import orkexa.testing.fakes", CORE_NO_TESTING),
         ("embeddings.py", "import orkexa.backends.sqlite", CONTRACT_NO_BACKENDS),
@@ -154,9 +155,12 @@ def test_platform_contract_names_every_known_package() -> None:
 
 
 def test_core_tabrion_contract_covers_the_same_modules_as_the_postgres_contract() -> None:
-    """The core is every module but the PostgreSQL backend and orkexa.testing (tests/test_public_api.py)."""
+    """The tabrion core is the postgres contract's core plus orkexa.testing (plan 05 4.2, review C-1)."""
     by_name = {c["name"]: c for c in _contracts()}
-    assert by_name[CORE_NO_TABRION]["source_modules"] == by_name[CORE_NO_POSTGRES]["source_modules"]
+    testing = ["orkexa.testing", "orkexa.testing.**"]
+    postgres_core = by_name[CORE_NO_POSTGRES]["source_modules"]
+    assert isinstance(postgres_core, list)
+    assert by_name[CORE_NO_TABRION]["source_modules"] == [*postgres_core, *testing]
     assert by_name[CORE_NO_TABRION]["forbidden_modules"] == ["tabrion"]
 
 

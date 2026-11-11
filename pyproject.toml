@@ -457,6 +457,10 @@ source_modules = [
     "orkexa.tools.**",
     "orkexa.usage",
     "orkexa.usage.**",
+    # Plan 05 section 4.2: the core is everything but orkexa.backends.postgres, so orkexa.testing
+    # (shipped in the core wheel) may not import tabrion either (QA-16 review C-1).
+    "orkexa.testing",
+    "orkexa.testing.**",
 ]
 forbidden_modules = ["tabrion"]
 

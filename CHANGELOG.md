@@ -30,8 +30,9 @@ listed here. The development version is `0.2.0.dev0`.
 
 * Two new import-linter contracts. Orkexa never imports Axentra, Nodestro or a Studio package (`axentra*`,
   `nodestro*`, `tabrion_studio`). The core never imports `tabrion` until Tabrion MIG-ORK-3 is merged (owner decision
-  E-ORK-CORE). The core is the same module list as in "Core modules do not import orkexa.backends.postgres", so the
-  PostgreSQL backend may import `tabrion` (K-33: `orkexa[postgres]` -> `tabrion[postgres]`). `[tool.importlinter]`
+  E-ORK-CORE). The core is the module list of "Core modules do not import orkexa.backends.postgres" plus
+  `orkexa.testing`, which ships in the core wheel; the PostgreSQL backend may import `tabrion` (K-33:
+  `orkexa[postgres]` -> `tabrion[postgres]`). `[tool.importlinter]`
   now sets `include_external_packages = true`, which import-linter requires for forbidden packages outside Orkexa.
 * `tests/architecture/test_forbidden_probe.py` copies the package, adds one forbidden import per case (14 cases,
   every contract at least once) and requires `lint-imports` to name the broken contract. It also checks that the
