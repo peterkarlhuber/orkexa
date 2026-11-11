@@ -8,3 +8,7 @@ tests/fixtures/sqlcheck/*.sha256 -text
 tests/fixtures/postgres/*.json -text
 tests/fixtures/postgres/*.sha256 -text
 tests/fixtures/postgres/nodestro_migrations/* -text
+
+# The shared Tabrion API check is pinned by its SHA-256 (tests/test_tabrion_api_check.py, TABRION QA-21):
+# keep LF on every platform so the hash is the same in each checkout.
+scripts/check_tabrion_api.py text eol=lf

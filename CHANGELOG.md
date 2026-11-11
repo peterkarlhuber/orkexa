@@ -9,9 +9,10 @@ listed here. The development version is `0.2.0.dev0`.
 
 * `python scripts/check_tabrion_api.py` reads `src`, `tests`, `scripts` and `examples` with `ast` and fails on a
   private Tabrion name (`tabrion._x`, a `_` attribute on a Tabrion name, `getattr`/`import_module` with a private
-  constant, a star import); with Tabrion installed every used name must be in its module's `__all__`, and
-  `--surface` compares with Tabrion's frozen API snapshot. `--export` writes the used names to
-  `docs/api-consumers.md` (none yet); `tests/test_tabrion_api_check.py` fails when it is stale. Tooling only.
+  constant, a star import). Every used name must be in its module's `__all__` in the installed Tabrion (a used name
+  without an installed Tabrion fails), and `--surface` compares with Tabrion's frozen API snapshot and refuses
+  experimental (`X`) names. `--export` writes the used names to `docs/api-consumers.md` (none yet);
+  `tests/test_tabrion_api_check.py` fails when it is stale or missing. Tooling only.
 
 ### Release rules (MUP-ONA B0, 2026-11-06)
 
