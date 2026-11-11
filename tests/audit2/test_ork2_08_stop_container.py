@@ -59,18 +59,38 @@ def test_a_killed_container_still_listed_is_removed_again(tmp_path: Path) -> Non
     assert _log(tmp_path) == ["kill", "rm", "ps", "rm", "ps"]
 
 
+class _Clock:
+    """A fake clock for ``_container.time``: it only moves when ``sleep`` is called, so how many polls fit
+    into the settle time does not depend on how fast the runner starts the fake docker script. Everything
+    else is the real ``time`` module."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(time, name)
+
+
 def test_without_a_kill_the_name_is_watched_for_the_settle_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The client may have been killed with its create request in flight: the container can appear later.
-    monkeypatch.setattr(_container, "_SETTLE_S", 0.6)
-    monkeypatch.setattr(_container, "_SETTLE_POLL_S", 0.1)
+    clock = _Clock()
+    monkeypatch.setattr(_container, "time", clock)
+    monkeypatch.setattr(_container, "_SETTLE_S", 3.0)  # exact in binary, so the poll count is exact too
+    monkeypatch.setattr(_container, "_SETTLE_POLL_S", 0.5)
     docker = _docker(tmp_path, kill_rc=1, ps=["", "late42"])
-    started = time.monotonic()
     stop_container(docker, "orkexa-x")
-    assert time.monotonic() - started >= 0.6
-    log = _log(tmp_path)
-    assert log[:2] == ["kill", "rm"] and log.count("rm") == 2  # the late container was removed
-    # Empty, then the late container, then at least one more check: watching goes on after the late
-    # removal. Only a lower bound on polls, since a slow runner (macOS) fits fewer into the settle time.
-    assert log.count("ps") >= 3
+    # Watched for the whole settle time, one poll interval before each check.
+    assert clock.now == 3.0 and clock.sleeps == [0.5] * 6
+    # Empty, then the late container (removed), then the watch goes on after the late removal until the
+    # settle time is over: six checks in all.
+    assert _log(tmp_path) == ["kill", "rm", "ps", "ps", "rm", "ps", "ps", "ps", "ps"]

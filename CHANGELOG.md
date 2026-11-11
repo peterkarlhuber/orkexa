@@ -40,6 +40,13 @@ listed here. The development version is `0.2.0.dev0`.
   and `Provider.without_reasoning` (Ollama: `reasoning_effort="none"`).
 * `IncompleteResponseError` carries `stop_reason`, `max_tokens`, `output_tokens`, `reasoning` and `answered`.
 
+### Fixed: the ORK2-08 settle-time test no longer depends on runner speed (2026-11-11)
+
+* `test_without_a_kill_the_name_is_watched_for_the_settle_time` counted how many `docker ps` checks fit into 0.6 s
+  of real time; on a slow runner (macOS on Intel) only two did (`assert 2 >= 3`). The test now gives
+  `stop_container` a fake clock that moves only when it sleeps, so the whole call sequence is exact: six checks over
+  the 3 s settle time, the late container removed, and the watch going on after that removal. Test change only.
+
 ### Fixed: two test races seen on master CI (2026-11-07)
 
 * `test_cancel_kills_the_container` waited for any container with the owner label, so it could stop on the
