@@ -19,7 +19,7 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 import json
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from ..core.capabilities import ModelCapabilities
 from ..core.conversion import document_text, search_result_text, validate_output
@@ -68,9 +68,15 @@ class ChatMessageRules:
             thoughts (Ollama: ``reasoning``, which it passes to the chat template as the
             message's thinking). ``None``: the endpoint has no such field and reasoning is not
             sent back (the protocol default).
+        reasoning_replay: Which earlier reasoning goes back in ``reasoning_field``: ``"all"``
+            (every assistant turn's) or ``"latest"`` (only the latest assistant turn's). A chat
+            template that shows every thought of the current tool loop again makes the prompt
+            grow by a whole reasoning text per tool round with ``"all"``; ``"latest"`` keeps the
+            model's own chain for its next step and bounds that growth to one reasoning text.
     """
 
     reasoning_field: str | None = None
+    reasoning_replay: Literal["all", "latest"] = "all"
 
 
 _ROLES = frozenset({"system", "developer", "user", "assistant", "tool"})
@@ -331,6 +337,12 @@ class ChatCompletionsProvider(Provider):
                     encoded.append({"role": "user", "content": self.content(others)})
             else:
                 encoded.append(self._assistant(message))
+        field = self.message_rules.reasoning_field
+        if field and self.message_rules.reasoning_replay == "latest":
+            last = max((i for i, item in enumerate(encoded) if item["role"] == "assistant"), default=-1)
+            for index, item in enumerate(encoded):
+                if index != last and item["role"] == "assistant":
+                    item.pop(field, None)
         return encoded
 
     def _assistant(self, message: Message) -> dict[str, Any]:

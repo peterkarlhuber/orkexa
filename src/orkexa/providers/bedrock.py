@@ -44,7 +44,7 @@ import json
 import re
 import threading
 import time
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, Literal, TypeVar
 from urllib.parse import urlsplit
 
 from ..core.capabilities import ModelCapabilities, ModelLimits, Support
@@ -465,6 +465,9 @@ _NATIVE_MEDIA = frozenset({"image", "document", "video", "audio"})
 
 class BedrockProvider(Provider):
     """Provider ``"bedrock"``: Amazon Bedrock Converse through ``boto3``."""
+
+    # Converse has no tool_choice "none" and needs the tool config while the history holds tool calls.
+    tool_free_answer: ClassVar[Literal["tool_choice_none", "omit_tools"] | None] = None
 
     name: ClassVar[str] = _PROVIDER
     options_type: ClassVar[type | None] = BedrockOptions

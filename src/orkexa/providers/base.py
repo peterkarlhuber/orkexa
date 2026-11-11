@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 import os
 import re
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from pydantic import SecretStr
 
@@ -180,11 +180,30 @@ class Provider(ABC):
     tools without the constraint and, once the model answers without a tool call, asks once more
     without tools for the structured answer.
     """
+    tool_free_answer: ClassVar[Literal["tool_choice_none", "omit_tools"] | None] = "tool_choice_none"
+    """How a request asks for an answer without another tool call while tools were used before.
+
+    ``"tool_choice_none"``: the tools stay declared and ``tool_choice`` is ``"none"`` (APIs that
+    honor it). ``"omit_tools"``: no tools are offered (Ollama ignores ``tool_choice``).
+    ``None``: neither works (Bedrock Converse has no ``"none"`` and needs the tool config while
+    the history holds tool calls). Used by ``Agent(on_max_tool_rounds="answer")``; with
+    ``None`` the round limit raises :class:`~orkexa.MaxToolRoundsError` as before.
+    """
 
     def __init__(self, config: ProviderConfig | None = None, asynchronous: bool = False) -> None:
         self.config = config or ProviderConfig()
         self.asynchronous = asynchronous
         self._client: Any = self.config.client
+
+    def without_reasoning(self, request: ModelRequest) -> ModelRequest | None:
+        """``request`` with the model's reasoning switched off, or ``None`` if this API cannot do that.
+
+        Used once per turn when a reasoning model spent the whole output limit on reasoning
+        (``Agent(on_reasoning_overflow="answer")``). Only adapters whose API has a documented
+        switch for it return a request; the default is ``None`` (the response stays an
+        :class:`~orkexa.IncompleteResponseError`).
+        """
+        return None
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(asynchronous={self.asynchronous}, config={self.config!r})"

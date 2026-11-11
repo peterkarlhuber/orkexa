@@ -77,10 +77,12 @@ from .types import (
     DocumentPart,
     Effort,
     ImagePart,
+    LimitHandled,
     Message,
     ModelRequest,
     ModelResponse,
     ReasoningDelta,
+    ReasoningPart,
     ResponseCompleted,
     StreamEvent,
     TextDelta,
@@ -187,6 +189,34 @@ FORMAT_PROMPT = (
 """The request for the structured answer after a tool phase without it (``structured_output_with_tools``)."""
 
 
+FINAL_ROUND_PROMPT = (
+    "You have used every tool call available for this task. Do not call any more tools: give your "
+    "final answer now, based on the tool results above. "
+    "Write its text in the language of the conversation above."
+)
+"""The request for the answer when the last tool round is used up (``on_max_tool_rounds="answer"``)."""
+
+
+def _asks_for_final(history: Sequence[Message]) -> bool:
+    """Whether the conversation ends with the request for the answer after the last tool round."""
+    return bool(history) and history[-1].role == "user" and history[-1].content == FINAL_ROUND_PROMPT
+
+
+def _ends_with_tool_results(history: Sequence[Message]) -> bool:
+    last = history[-1] if history else None
+    return (
+        last is not None
+        and last.role == "user"
+        and not isinstance(last.content, str)
+        and any(isinstance(part, ToolResultPart) for part in last.content)
+    )
+
+
+def _reasoned(response: ModelResponse) -> bool:
+    """Whether a response holds reasoning (its text or a redacted phase)."""
+    return any(isinstance(part, ReasoningPart) for part in response.message.parts())
+
+
 def _asks_for_format(history: Sequence[Message]) -> bool:
     """Whether the conversation ends with the request for the structured answer (also after a resume)."""
     return bool(history) and history[-1].role == "user" and history[-1].content == FORMAT_PROMPT
@@ -235,6 +265,8 @@ class AgentCore(Generic[OutputT]):
         tool_timeout: float | None = None,
         stream: bool | None = None,
         on_refusal: RefusalMode = "raise",
+        on_max_tool_rounds: Literal["raise", "answer"] = "raise",
+        on_reasoning_overflow: Literal["raise", "answer"] = "raise",
         on_text: Callable[[str], Any] | None = None,
         on_thinking: Callable[[str], Any] | None = None,
         on_event: Callable[[StreamEvent], Any] | None = None,
@@ -271,6 +303,10 @@ class AgentCore(Generic[OutputT]):
             raise ValueError("tool_timeout must be positive")
         if on_refusal not in ("raise", "return"):
             raise ValueError("on_refusal must be 'raise' or 'return'")
+        if on_max_tool_rounds not in ("raise", "answer"):
+            raise ValueError("on_max_tool_rounds must be 'raise' or 'answer'")
+        if on_reasoning_overflow not in ("raise", "answer"):
+            raise ValueError("on_reasoning_overflow must be 'raise' or 'answer'")
         if history_policy not in ("strict", "convert"):
             raise ValueError("history_policy must be 'strict' or 'convert'")
         if max_tool_calls_per_round is not None and max_tool_calls_per_round < 1:
@@ -326,6 +362,10 @@ class AgentCore(Generic[OutputT]):
         self.tool_timeout = tool_timeout
         self.stream = stream
         self.on_refusal: RefusalMode = on_refusal
+        self.on_max_tool_rounds: Literal["raise", "answer"] = on_max_tool_rounds
+        self.on_reasoning_overflow: Literal["raise", "answer"] = on_reasoning_overflow
+        #: The model spent the output limit on reasoning in this turn: its requests go without it.
+        self._turn_no_reasoning = False
         self.on_text = on_text
         self.on_thinking = on_thinking
         self.on_event = on_event
@@ -622,6 +662,12 @@ class AgentCore(Generic[OutputT]):
             else:
                 tools.append(self.memory.tool_definition())
         output_format = cast("type[BaseModel] | None", self.output_format)
+        tool_choice = self._native_tool_choice() if tools or native_tools else None
+        if _asks_for_final(history):
+            if self.adapter.tool_free_answer == "omit_tools":
+                tools, native_tools, tool_choice = [], [], None
+            elif tools or native_tools:
+                tool_choice = ToolChoice("none")
         if self._separate_format(tools or native_tools):
             if _asks_for_format(history):
                 # The last request: the structured answer, no more tool calls.
@@ -634,7 +680,7 @@ class AgentCore(Generic[OutputT]):
             system=self.system_prompt,
             tools=tools,
             native_tools=native_tools,
-            tool_choice=self._native_tool_choice() if tools or native_tools else None,
+            tool_choice=tool_choice if tools or native_tools else None,
             output_format=output_format,
             max_tokens=self._max_tokens,
             stream=self._use_stream(),
@@ -643,9 +689,22 @@ class AgentCore(Generic[OutputT]):
             history_policy=self.history_policy,
             capabilities=caps,
         )
+        if self._turn_no_reasoning:
+            request = self.adapter.without_reasoning(request) or request
         if check:
             self._check_request(request, caps)
         return request
+
+    def _reasoning_overflowed(self, response: ModelResponse, request: ModelRequest) -> bool:
+        """Whether the request is sent again without reasoning (``on_reasoning_overflow="answer"``):
+        the model reached the output limit and reasoned, and the adapter can switch reasoning off."""
+        return (
+            self.on_reasoning_overflow == "answer"
+            and not self._turn_no_reasoning
+            and response.stop_reason == "max_tokens"
+            and _reasoned(response)
+            and self.adapter.without_reasoning(request) is not None
+        )
 
     def _separate_format(self, tools: object) -> bool:
         """Whether tools and the structured answer go in separate requests (see the provider flag)."""
@@ -808,6 +867,7 @@ class AgentCore(Generic[OutputT]):
         self._last_turn_records = []
         self._turn_effort = effort
         self._turn_max_tokens = max_tokens
+        self._turn_no_reasoning = False
         self._turn_id = uuid.uuid4().hex
         history.append(Message(role="user", content=to_parts(content, self.adapter.parse_block)))
         if system is not None:
@@ -839,6 +899,16 @@ class AgentCore(Generic[OutputT]):
         """Request/tool rounds from round ``start`` until the turn is done."""
         round_number = start
         while round_number <= self.max_tool_rounds:
+            if (
+                round_number == self.max_tool_rounds
+                and self.on_max_tool_rounds == "answer"
+                and self.adapter.tool_free_answer is not None
+                and _ends_with_tool_results(history)
+            ):
+                # The last request of the turn: the answer from the results so far, no more tools
+                # (the same number of requests as before; only the last one cannot call a tool).
+                history.append(Message(role="user", content=FINAL_ROUND_PROMPT))
+                yield Emit(LimitHandled("tool_rounds", round_number))
             request = self._build_request(history)
             # One pinned price basis per request: the pre-check and the bill use the
             # same snapshot even if prices are updated while the request runs.
@@ -859,6 +929,11 @@ class AgentCore(Generic[OutputT]):
                 self.usage_tracker.release(reservation)
             if record is not None:
                 yield Emit(UsageReported(record))
+            if self._reasoning_overflowed(response, request):
+                # Billed and recorded; the same round again without reasoning, once per turn.
+                self._turn_no_reasoning = True
+                yield Emit(LimitHandled("reasoning", round_number))
+                continue
             step = self._process_response(
                 response, history, round_number, unformatted=request.output_format is None
             )
@@ -1012,6 +1087,7 @@ class AgentCore(Generic[OutputT]):
         self._last_turn_records = []
         self._turn_effort = checkpoint.effort
         self._turn_max_tokens = checkpoint.max_tokens
+        self._turn_no_reasoning = False
         self._turn_id = checkpoint.turn_id
         return checkpoint, history
 
@@ -1089,10 +1165,16 @@ class AgentCore(Generic[OutputT]):
         """Extend ``history`` and decide what the loop does next."""
         native = response.native_stop_reason or response.stop_reason
         if response.stop_reason in _INCOMPLETE:
+            usage = response.usage
             raise IncompleteResponseError(
                 f"{self.name}: incomplete response "
                 f"(stop_reason={native!r}, max_tokens={self._max_tokens}). "
-                "The conversation history was not updated."
+                "The conversation history was not updated.",
+                stop_reason=response.stop_reason,
+                max_tokens=self._max_tokens,
+                output_tokens=getattr(usage, "output_tokens", None),
+                reasoning=_reasoned(response),
+                answered=bool(response.text.strip() or response.tool_calls),
             )
         # The requested model id (not a dated version the API reports): reasoning is
         # only replayed to the model the conversation continues with.
