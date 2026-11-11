@@ -4,6 +4,7 @@
 # switched off for macOS and Windows ARM64) and the tests' skip conditions,
 # NOT yet verified on a real runner (the lead fixes it after the first CI run).
 
+::tests.architecture.test_forbidden_probe  # collection skipped: could not import 'importlinter' (QA-16 probe; import-linter is not installed on Windows ARM64)
 ::tests.audit3.test_ork3_09_build_model  # collection skipped: could not import 'gguf' (not installed on Windows ARM64)
 ::tests.test_local_convert  # collection skipped: could not import 'gguf' (not installed on Windows ARM64)
 tests.anthropic.test_dynamic_sandbox::test_docker_sandbox_end_to_end  # needs Docker and the image from docker/sandbox.Dockerfile

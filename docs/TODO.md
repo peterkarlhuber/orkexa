@@ -290,6 +290,7 @@ backends in MP-B6 (nodestro-runtime).
 | (done 2026-11-07) | nodestro-desktop | DSK-022 (the managed Ollama survives a killed backend) | With the next pin the server ends with its application (watcher on POSIX, job object on Windows); the desktop adds its kill test |
 | ORK-036 | nodestro-runtime | chat views of stored conversations | Agree how chat views show the synthetic request |
 | (done 2026-11-06) | nodestro-runtime | #57 workaround, `require_session` guard, RT-022, Bedrock caching option | With the next pin: `ToolRegistry.refresh()`/`AgentRegistry.refresh()`, `BedrockOptions(require_session=True)`, Python 3.14, `BedrockOptions(prompt_caching=True)` are available |
+| (done 2026-11-11, Tabrion QA-16) | tabrion | MIG-ORK-2, MIG-ORK-3 (edge list K-33) | `orkexa.backends.postgres` may import `tabrion`; MIG-ORK-3 removes the contract "Core modules do not import tabrion until MIG-ORK-3" and its probes in `tests/architecture/test_forbidden_probe.py` |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
 
 ## Maintaining this file

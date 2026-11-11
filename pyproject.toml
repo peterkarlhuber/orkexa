@@ -168,6 +168,8 @@ known-first-party = ["orkexa"]
 # postgres, B5), so a new module cannot slip past the contracts. CI runs `lint-imports` (job "test").
 [tool.importlinter]
 root_packages = ["orkexa"]
+# QA-16: the K-33 contracts below forbid packages outside Orkexa (import-linter needs the external packages in the graph).
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Core modules do not import orkexa.backends.postgres"
@@ -373,6 +375,90 @@ forbidden_modules = [
     "orkexa.testing.fakes",
     "orkexa.testing.fakes.**",
 ]
+
+# QA-16 (AC-1, edge list K-33 of the Tabrion plan): Orkexa never imports Axentra, Nodestro or a Studio. Tabrion is an
+# allowed edge for orkexa.backends.postgres (orkexa[postgres] -> tabrion[postgres], MIG-ORK-2); the core below may
+# import tabrion only once MIG-ORK-3 is merged (owner decision E-ORK-CORE), which removes the second contract.
+# tests/architecture/test_forbidden_probe.py turns each contract red with a forbidden import in a copy of the package.
+[[tool.importlinter.contracts]]
+name = "Orkexa depends on no Axentra, Nodestro or Studio package (K-33)"
+type = "forbidden"
+source_modules = ["orkexa"]
+forbidden_modules = [
+    "axentra",
+    "axentra_studio",
+    "nodestro",
+    "nodestro_runtime",
+    "nodestro_api",
+    "nodestro_studio",
+    "nodestro_examples",
+    "nodestro_integrations",
+    "nodestro_sdk",
+    "nodestro_client",
+    "tabrion_studio",
+]
+
+[[tool.importlinter.contracts]]
+name = "Core modules do not import tabrion until MIG-ORK-3 (E-ORK-CORE, K-33)"
+type = "forbidden"
+as_packages = false
+source_modules = [
+    "orkexa",
+    "orkexa._aio",
+    "orkexa._aio.**",
+    "orkexa._cancel",
+    "orkexa._cancel.**",
+    "orkexa._pdf_launch",
+    "orkexa._pdf_launch.**",
+    "orkexa._pdf_probe",
+    "orkexa._pdf_probe.**",
+    "orkexa._pdf_worker",
+    "orkexa._pdf_worker.**",
+    "orkexa._storage",
+    "orkexa._storage.**",
+    "orkexa.agent",
+    "orkexa.agent.**",
+    "orkexa.async_agent",
+    "orkexa.async_agent.**",
+    "orkexa.backends",
+    "orkexa.backends.sqlite",
+    "orkexa.backends.sqlite.**",
+    "orkexa.claude",
+    "orkexa.claude.**",
+    "orkexa.content",
+    "orkexa.content.**",
+    "orkexa.core",
+    "orkexa.core.**",
+    "orkexa.dynamic",
+    "orkexa.dynamic.**",
+    "orkexa.embeddings",
+    "orkexa.embeddings.**",
+    "orkexa.errors",
+    "orkexa.errors.**",
+    "orkexa.evaluation",
+    "orkexa.evaluation.**",
+    "orkexa.files",
+    "orkexa.files.**",
+    "orkexa.flow",
+    "orkexa.flow.**",
+    "orkexa.local",
+    "orkexa.local.**",
+    "orkexa.memory",
+    "orkexa.memory.**",
+    "orkexa.orchestration",
+    "orkexa.orchestration.**",
+    "orkexa.pricing",
+    "orkexa.pricing.**",
+    "orkexa.providers",
+    "orkexa.providers.**",
+    "orkexa.retrieval",
+    "orkexa.retrieval.**",
+    "orkexa.tools",
+    "orkexa.tools.**",
+    "orkexa.usage",
+    "orkexa.usage.**",
+]
+forbidden_modules = ["tabrion"]
 
 [tool.mypy]
 python_version = "3.11"
