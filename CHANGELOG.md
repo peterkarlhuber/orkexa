@@ -35,6 +35,19 @@ listed here. The development version is `0.2.0.dev0`.
   `orkexa.backends.postgres` or `orkexa.testing` (T-PKG-0). See "Versioning and releases" in
   `docs/development/releasing.md`.
 
+### Added: import contracts for the Tabrion edge list K-33 and their mutation probe (Tabrion QA-16, 2026-11-11)
+
+* Two new import-linter contracts. Orkexa never imports Axentra, Nodestro or a Studio package (`axentra*`,
+  `nodestro*`, `tabrion_studio`). The core never imports `tabrion` until Tabrion MIG-ORK-3 is merged (owner decision
+  E-ORK-CORE). The core is the module list of "Core modules do not import orkexa.backends.postgres" plus
+  `orkexa.testing`, which ships in the core wheel; the PostgreSQL backend may import `tabrion` (K-33:
+  `orkexa[postgres]` -> `tabrion[postgres]`). `[tool.importlinter]`
+  now sets `include_external_packages = true`, which import-linter requires for forbidden packages outside Orkexa.
+* `tests/architecture/test_forbidden_probe.py` copies the package, adds one forbidden import per case (15 cases,
+  every contract at least once) and requires `lint-imports` to name the broken contract. It also checks that the
+  backend's edge to `tabrion` stays green, and scans for `axentra*`, `nodestro*`, `levuvo*` and `*_studio` imports
+  by prefix. `tests/test_public_api.py` now expects six contracts.
+
 ### Fixed: local thinking models running out of tokens or tool rounds (2026-11-08)
 
 * Ollama: reasoning is sent back only on the latest assistant message (`ChatMessageRules.reasoning_replay`,

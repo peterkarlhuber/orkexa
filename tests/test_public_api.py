@@ -399,6 +399,9 @@ def test_the_import_contracts_cover_every_core_module() -> None:
         "Core modules do not import orkexa.testing",
         "Contract modules do not import orkexa.backends at runtime",  # MUP-ONA B2, see test_import_order.py
         "orkexa.testing.sqlcheck imports no other orkexa module",  # MUP-ONA B5, see tests/test_sqlcheck.py
+        # QA-16 (K-33), see tests/architecture/test_forbidden_probe.py
+        "Orkexa depends on no Axentra, Nodestro or Studio package (K-33)",
+        "Core modules do not import tabrion until MIG-ORK-3 (E-ORK-CORE, K-33)",
     }
     for contract in _contracts():
         if str(contract["name"]).startswith("orkexa.testing.sqlcheck"):
@@ -419,8 +422,10 @@ def test_the_import_contracts_cover_every_core_module() -> None:
             continue  # the B2 contract names only the contract modules
         sources = set(contract["source_modules"])  # type: ignore[call-overload]
         wanted = expected
-        if str(contract["name"]).endswith("orkexa.backends.postgres"):
-            # MUP-ONA B5: the backend itself is not core; every other backend is listed one by one.
+        if str(contract["name"]).endswith(("orkexa.backends.postgres", "(E-ORK-CORE, K-33)")):
+            # MUP-ONA B5: the backend itself is not core; every other backend is listed one by one. QA-16:
+            # the PostgreSQL backend may import tabrion (K-33, orkexa[postgres] -> tabrion[postgres]); the
+            # core may not.
             backends = {
                 path.name for path in (package / "backends").iterdir() if (path / "__init__.py").is_file()
             }
@@ -431,6 +436,10 @@ def test_the_import_contracts_cover_every_core_module() -> None:
             }
             assert not {name for name in sources if name.startswith(("orkexa.backends.postgres", "orkexa.*"))}
             assert "orkexa.backends.**" not in sources
+        if str(contract["name"]).endswith("(E-ORK-CORE, K-33)"):
+            # QA-16 review C-1: orkexa.testing ships in the core wheel, so it may not import tabrion either.
+            wanted = wanted | {"orkexa.testing", "orkexa.testing.**"}
+            assert {"orkexa.testing", "orkexa.testing.**"} <= sources
         assert sources >= wanted, sorted(wanted - sources)
 
 
@@ -451,4 +460,4 @@ def test_the_import_contracts_hold() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "4 kept, 0 broken" in result.stdout
+    assert "6 kept, 0 broken" in result.stdout
