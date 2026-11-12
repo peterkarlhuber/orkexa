@@ -5,6 +5,13 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Fixed: `--surface` accepts enum members and dataclass fields (TABRION QA-21, 2026-11-12)
+
+* `scripts/check_tabrion_api.py --surface` no longer reports enum members and dataclass fields as missing.
+  Tabrion's `docs/api/surface.json` lists them in the parent entry (`members`, `fields`), so a name such as
+  `tabrion.TLSMode.AUTO` is now checked against its parent's entry and passes when the parent is stable (`S`).
+  Tooling only.
+
 ### Added: blocked-module tests per Tabrion edge (TABRION QA-18, 2026-11-08)
 
 * `tests/packaging/test_optional_edges.py` (AC-3): one fresh `python -I` per optional edge of the K-33 list, with
