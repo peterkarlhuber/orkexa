@@ -58,7 +58,7 @@ docs = [
     # 1.0.7+ is needed by pymdown-extensions 12.
     "mkdocstrings[python]>=1.0.7",
     # 11.0.1 fixes PYSEC-2026-3609/3654.
-    "pymdown-extensions>=11.0.1,<13",
+    "pymdown-extensions>=11.0.1,<14",
 ]
 dev = [
     "anthropic>=2.0,<3",
