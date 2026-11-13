@@ -12,7 +12,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 4 |
-| P3 Low | 11 |
+| P3 Low | 12 |
 | P4 Optional | 7 |
 
 **Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
@@ -245,6 +245,19 @@ None known.
 None known.
 
 ## Technical debt
+
+### ORK-041 · CI installs take any fresh upload from PyPI (upload cutoff)
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** `.github/workflows/platforms.yml` (offline suite, Windows
+  ARM64), CI-FAST (`platform/uploaded-prior-to` in nodestro-studio)
+- **What:** pglast 8.8 appeared on PyPI on 2026-11-13 (14:26Z) as an sdist without wheels. The Windows ARM64
+  offline suite then built it from source and failed (`WinError 2`), on master and on every pull request. The
+  install there now passes `--prefer-binary`, which takes the newest release with a wheel; the other jobs build an
+  sdist-only release from source (Linux and macOS have a compiler) or are unaffected. Any job still resolves the
+  newest upload of every range, so a broken or incomplete release reaches CI within minutes.
+- **Next step:** Adopt the upload cutoff that nodestro-studio, nodestro-server and nodestro-desktop use (pip
+  `--uploaded-prior-to` from a reviewed date file, moved forward on purpose) for the `.[dev]` installs of `ci.yml`,
+  `platforms.yml` and `nightly.yml`.
 
 ### ORK-038 · Dependency updates are merged by hand; branch protection decided
 

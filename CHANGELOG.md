@@ -5,6 +5,12 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Fixed: the Windows ARM64 CI install prefers wheels (2026-11-13)
+
+* pglast 8.8 was published as an sdist only; the Windows ARM64 offline suite (`platforms.yml`) built it from source
+  and failed. Its install now passes `--prefer-binary` and takes pglast 8.7, the newest release with a `win_arm64`
+  wheel. CI only; the durable guard (an upload cutoff) is ORK-041.
+
 ### Fixed: `--surface` accepts enum members and dataclass fields (TABRION QA-21, 2026-11-12)
 
 * `scripts/check_tabrion_api.py --surface` no longer reports enum members and dataclass fields as missing.
