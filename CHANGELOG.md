@@ -13,8 +13,15 @@ listed here. The development version is `0.2.0.dev0`.
 * `tests/architecture/test_tabrion_requirements.py` checks RC-1 and RC-8: exactly one pin in the canonical form
   `tabrion[...] @ git+https://github.com/peterkarlhuber/tabrion.git@<40-hex SHA>`, the SHA of a final Tabrion version,
   no direct URL and no pre-release specifier for Tabrion in `pyproject.toml`, ranges of one minor line only
-  (`>=0.N[.M],<0.(N+1)`, an unparseable specifier is named) that contain the pinned version, and the pin file present once the manifest names Tabrion; negative probes turn each rule red. Tooling
-  only; see "Versioning and releases" in `docs/development/releasing.md`.
+  (`>=0.N[.M],<0.(N+1)`, an unparseable specifier is named) that contain the pinned version, and the pin file
+  present once the manifest names Tabrion; negative probes turn each rule red. Tooling only; see "Versioning and
+  releases" in `docs/development/releasing.md`.
+
+### Fixed: the offline-suite CI install prefers wheels (2026-11-13)
+
+* pglast 8.8 was published as an sdist only; the Windows offline suites (x64 and ARM64, `platforms.yml`) built it
+  from source and failed. The offline install now passes `--prefer-binary` and takes pglast 8.7, the newest release
+  with a wheel for the platform. CI only; the durable guard (an upload cutoff) is ORK-041.
 
 ### Fixed: `--surface` accepts enum members and dataclass fields (TABRION QA-21, 2026-11-12)
 
