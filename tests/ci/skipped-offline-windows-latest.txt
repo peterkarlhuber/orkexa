@@ -284,3 +284,4 @@ tests.test_provider_live::test_text_tool_and_structured_output[gemini]  # live A
 tests.test_provider_live::test_text_tool_and_structured_output[openai]  # live API test (pytest -m live); needs the provider's key or URL and a model
 tests.test_provider_live::test_text_tool_and_structured_output[vllm]  # live API test (pytest -m live); needs the provider's key or URL and a model
 tests.test_sandbox_policy::test_subprocess_run_directory_stays_owner_only  # POSIX permission bits
+tests.test_tabrion_api_check::test_a_directory_named_tabrion_is_not_an_installed_tabrion  # a real Tabrion is installed (-r requirements/tabrion.txt, TABRION VER-1); a namespace directory cannot shadow it

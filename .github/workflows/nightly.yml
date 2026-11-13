@@ -49,7 +49,7 @@ jobs:
           cache: pip
       - name: Install the package
         run: |
-          pip install -e ".[dev]"
+          pip install -r requirements/tabrion.txt -e ".[dev]"
       - name: Collect the test IDs (test-ids.txt)
         run: python -m pytest --collect-only -q -p no:cacheprovider > "$GITHUB_WORKSPACE/test-ids.txt" || true
       # A suite that collects nothing (an import error, a moved test directory) fails here instead of looking green.

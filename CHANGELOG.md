@@ -5,6 +5,19 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: CI installs Tabrion from `requirements/tabrion.txt` (TABRION VER-1, 2026-11-13)
+
+* Every workflow install of `.[dev]` (`ci.yml`, `platforms.yml`, `nightly.yml`, `ollama-live.yml`) adds
+  `-r requirements/tabrion.txt`, so the Tabrion range of the `dev` extra (MIG-ORK-1) resolves without a package
+  index. The Windows ARM64 install, which lists the dev tools by name, installs the pin too.
+* New jobs `tabrion install (pip 25.0)` and `tabrion install (pip latest)` (required in `.github/ci-manifest.json`):
+  the editable `.[dev]` install and a plain standalone install of the package, each with the minimum and the
+  current pip, `pip check`, and a check that the installed Tabrion is the pinned commit of a final version.
+* The test job runs `python scripts/check_tabrion_api.py --check-export docs/api-consumers.md` (TABRION QA-21,
+  AC-7; closes ORK-039).
+* With Tabrion installed, `test_a_directory_named_tabrion_is_not_an_installed_tabrion` skips by design; it is
+  added to the skip expectations of the test, lowest-versions and offline jobs.
+
 ### Added: `requirements/tabrion.txt` and its guard test (TABRION VER-1, 2026-11-13)
 
 * `requirements/tabrion.txt` pins Tabrion v0.1.0 (`d5821faa8742dea012abda3b663549c038d76543`) by one direct URL for a
