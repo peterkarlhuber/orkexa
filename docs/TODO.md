@@ -250,10 +250,10 @@ None known.
 
 - **Priority:** P3 Low · **Status:** Open · **Refs:** `.github/workflows/platforms.yml` (offline suite, Windows
   ARM64), CI-FAST (`platform/uploaded-prior-to` in nodestro-studio)
-- **What:** pglast 8.8 appeared on PyPI on 2026-11-13 (14:26Z) as an sdist without wheels. The Windows ARM64
-  offline suite then built it from source and failed (`WinError 2`), on master and on every pull request. The
-  install there now passes `--prefer-binary`, which takes the newest release with a wheel; the other jobs build an
-  sdist-only release from source (Linux and macOS have a compiler) or are unaffected. Any job still resolves the
+- **What:** pglast 8.8 appeared on PyPI on 2026-11-13 (14:26Z) as an sdist without wheels. The Windows offline
+  suites (x64 and ARM64) then built it from source and failed, on master and on every pull request. The offline
+  install now passes `--prefer-binary`, which takes the newest release with a wheel; the Linux and macOS jobs build
+  an sdist-only release with the runner's compiler. Any job still resolves the
   newest upload of every range, so a broken or incomplete release reaches CI within minutes.
 - **Next step:** Adopt the upload cutoff that nodestro-studio, nodestro-server and nodestro-desktop use (pip
   `--uploaded-prior-to` from a reviewed date file, moved forward on purpose) for the `.[dev]` installs of `ci.yml`,
