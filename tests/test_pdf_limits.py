@@ -86,13 +86,47 @@ def _too_complex(call: Callable[[], object]) -> RetrievalError:
     return error.value
 
 
+def _fastest(call: Callable[[], object], runs: int, below: float = 0.0) -> float:
+    """The fastest of up to ``runs`` wall-clock runs of ``call`` in seconds; stops at a run under ``below``.
+
+    A busy or shared machine only ever adds time to a run (the process waits for a CPU), so the fastest run is
+    the best estimate of what the code itself costs. A refusal that does too much work is slow in every run.
+    """
+    best = float("inf")
+    for _ in range(runs):
+        started = time.perf_counter()
+        call()
+        best = min(best, time.perf_counter() - started)
+        if best < below:
+            break
+    return best
+
+
 # MUP-ONA T-PDF-1
 @pytest.mark.parametrize("extract", [pdf_pages, pdf_pages_isolated], ids=["pdf_pages", "isolated"])
 def test_a_pdf_with_100k_pages_is_refused_quickly(pages_100k: bytes, extract: Callable[..., Any]) -> None:
-    started = time.monotonic()
-    error = _too_complex(lambda: extract(pages_100k))
-    assert error.reason == "pages"
-    assert time.monotonic() - started < 5
+    """The refusal costs about as much as opening the file, not as much as reading its 100,000 pages.
+
+    pypdf has to read the cross-reference table and the page tree root (with its 100,000 /Kids) before /Count
+    can be checked, so the refusal takes time in proportion to the file (0.5 seconds for these 12 MB on a fast
+    machine), not a fixed time. A fixed limit in seconds failed on slow shared CI machines (macOS Intel) even
+    though nothing was wrong. The refusal is therefore compared with two costs measured on the same machine:
+    opening the file with pypdf, and one extraction of a small PDF (for ``pdf_pages_isolated`` the start of
+    its worker process). Measured on one machine, in multiples of opening the file: the refusal 1.4 (1.8 with
+    the worker process); without the /Count check, the refusal after reading the whole page tree 24.
+    """
+    from pypdf import PdfReader
+
+    small = _fixture("normal_10p.pdf")
+    opened = _fastest(lambda: PdfReader(io.BytesIO(pages_100k)), runs=2)
+    started = _fastest(lambda: extract(small), runs=2)
+    allowed = 5 * opened + started
+
+    def refuse() -> None:
+        assert _too_complex(lambda: extract(pages_100k)).reason == "pages"
+
+    refused = _fastest(refuse, runs=3, below=allowed)
+    assert refused < allowed, f"refused in {refused:.2f} s; opening {opened:.2f} s, starting {started:.2f} s"
 
 
 # MUP-ONA T-PDF-1
