@@ -79,6 +79,9 @@ dev = [
     "psycopg[binary]>=3.2,<4",
     # MUP-ONA B0: import contracts ([tool.importlinter] below; CI runs lint-imports).
     "import-linter>=2.1",
+    # TABRION MIG-ORK-1: tests/backends/postgres/support.py uses tabrion.testing. A range of final versions only
+    # (RC-1, RC-8); without a package index install with -r requirements/tabrion.txt (TABRION VER-1).
+    "tabrion[testing,postgres]>=0.1,<0.2",
 ]
 
 [project.scripts]

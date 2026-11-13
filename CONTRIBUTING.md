@@ -10,11 +10,14 @@ Python 3.11 or newer. From a clone:
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+python -m pip install --upgrade "pip>=25.0"
+pip install -r requirements/tabrion.txt -e ".[dev]"
 ```
 
-`.[dev]` installs all provider SDKs, the test and lint tools, `pypdf` and
-`sqlite-vec`. Add `.[docs]` to build the documentation.
+`.[dev]` installs all provider SDKs, the test and lint tools, `pypdf`,
+`sqlite-vec` and Tabrion's test fixtures (`tabrion[testing,postgres]`, used by the
+PostgreSQL tests). Tabrion is not on a package index: `requirements/tabrion.txt`
+pins the one Tabrion that the range of `.[dev]` accepts, and needs pip 25.0 or newer. Add `.[docs]` to build the documentation.
 
 ## Checks
 

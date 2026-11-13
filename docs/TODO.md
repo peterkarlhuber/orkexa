@@ -294,6 +294,7 @@ backends in MP-B6 (nodestro-runtime).
 | (done 2026-11-11, Tabrion QA-17) | nodestro-studio | ST-061 (dependency policy K-33) | `dependency-policy.json` is a copy of orkexa's edges; MIG-ORK-3 needs E-ORK-CORE to turn `orkexa -> tabrion` active in nodestro-studio first, then a new copy here |
 | (done 2026-11-11, Tabrion QA-16) | tabrion | MIG-ORK-2, MIG-ORK-3 (edge list K-33) | `orkexa.backends.postgres` may import `tabrion`; MIG-ORK-3 removes the contract "Core modules do not import tabrion until MIG-ORK-3" and its probes in `tests/architecture/test_forbidden_probe.py` |
 | (done 2026-11-13, TABRION VER-1) | nodestro-studio | TABRION VER-1 (`scripts/check_versions.py`, RC-7 drift nightly) | The checker reads `requirements/tabrion.txt` (one canonical pin on a final Tabrion SHA) and compares it with the runtime's Tabrion SHA; an older final version of the same minor line is a notice, not an error |
+| (done 2026-11-13, TABRION MIG-ORK-1) | tabrion | `tabrion.testing` 0.1 (`configure`, `tabrion_postgres_url`, `require_extension`) | `tests/backends/postgres/support.py` uses them through the `dev` range `tabrion[testing,postgres]>=0.1,<0.2`; a new Tabrion minor needs the range raised after CI is green against it (RC-4), MIG-ORK-2 adds `tabrion[postgres]` to the extra `postgres` |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
 
 ## Maintaining this file

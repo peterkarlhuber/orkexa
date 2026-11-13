@@ -8,6 +8,9 @@ import pytest
 
 from . import support
 
+# TABRION MIG-ORK-1: the server of every "postgres" test comes from tabrion.testing (support.py).
+from .support import orkexa_postgres_gate, tabrion_postgres_url  # noqa: F401  # fixtures
+
 
 @pytest.fixture
 def db() -> Iterator[support.Database]:

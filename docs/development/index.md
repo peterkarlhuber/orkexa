@@ -5,7 +5,7 @@ The full contributor guide is
 in the repository. The commands at a glance:
 
 ```bash
-pip install -e ".[dev]"                               # setup (all SDKs, test and lint tools)
+pip install -r requirements/tabrion.txt -e ".[dev]"   # setup (all SDKs, test and lint tools; pip >= 25.0)
 ruff check . && ruff format --check .                 # lint and format
 mypy --strict src && mypy --strict examples           # type check
 pytest                                                # offline tests, deterministic

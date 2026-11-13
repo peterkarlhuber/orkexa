@@ -5,6 +5,21 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: the PostgreSQL test support uses `tabrion.testing` (TABRION MIG-ORK-1, 2026-11-13)
+
+* The `dev` extra names `tabrion[testing,postgres]>=0.1,<0.2` (a range of final versions, RC-1/RC-8; install with
+  `pip install -r requirements/tabrion.txt -e ".[dev]"`, pip 25.0 or newer). The core and every other extra name no
+  Tabrion; the import contract "Core modules do not import tabrion until MIG-ORK-3" is unchanged.
+* `tests/backends/postgres/support.py` delegates the generic parts to Tabrion's public test API:
+  `tabrion.testing.configure` (Orkexa's variable names, schema prefix `orkexa_test_`), the session fixture
+  `tabrion_postgres_url` for the server of every `postgres` test (an autouse gate; the URL's `repr` masks the
+  password) and `tabrion.testing.require_extension` for pgvector in `public`. `ORKEXA_TEST_POSTGRES`,
+  `ORKEXA_REQUIRE_POSTGRES=1`, `ORKEXA_REQUIRE_PGVECTOR=1` and `ORKEXA_TEST_RUNTIME_ROLE=1` keep their meaning and
+  messages: Orkexa decides skip or failure itself (Tabrion's require variables count any value but `0` and expect
+  extension names). The test schemas, the runtime role, the DDL log and the catalog snapshot stay Orkexa's own. The
+  collected tests and the skipped sets are unchanged. `docs/api-consumers.md` lists the three Tabrion names. Tests
+  only.
+
 ### Changed: CI installs Tabrion from `requirements/tabrion.txt` (TABRION VER-1, 2026-11-13)
 
 * Every workflow install of `.[dev]` (`ci.yml`, `platforms.yml`, `nightly.yml`, `ollama-live.yml`) adds

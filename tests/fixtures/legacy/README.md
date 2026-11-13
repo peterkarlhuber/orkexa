@@ -19,7 +19,7 @@ Every database has a `<name>.sha256` file in `sha256sum` format. The test
 ## Generating
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements/tabrion.txt -e ".[dev]"
 rm tests/fixtures/legacy/FX-SQ-0/*.db   # the generator never overwrites
 python tests/fixtures/legacy/make_legacy_sqlite.py
 ```
