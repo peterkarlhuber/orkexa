@@ -11,7 +11,7 @@
 |---|---|
 | P0 Critical | 0 |
 | P1 High | 0 |
-| P2 Medium | 4 |
+| P2 Medium | 5 |
 | P3 Low | 11 |
 | P4 Optional | 7 |
 
@@ -159,6 +159,16 @@ None known.
 - **Next step:** Mark it as synthetic or drop it on commit; agree with Nodestro how chat views show it.
 
 ## Tests and quality assurance
+
+### ORK-040 · CI installs `requirements/tabrion.txt` with pip 25.0 and the current pip (TABRION VER-1)
+
+- **Priority:** P2 Medium · **Status:** In progress · **Refs:** TABRION VER-1, MIG-ORK-1, `requirements/tabrion.txt`,
+  `tests/architecture/test_tabrion_requirements.py`
+- **What:** `requirements/tabrion.txt` (one pin on Tabrion v0.1.0) and its guard test are in place (VER-1, library
+  part). The workflows still run `pip install -e ".[dev]"`, which cannot resolve a Tabrion range without a package
+  index, so MIG-ORK-1 (the `dev` range `tabrion[testing,postgres]>=0.1,<0.2`) waits for the CI part.
+- **Next step:** A separate `.github` pull request: every install of `.[dev]` adds `-r requirements/tabrion.txt`, and
+  a new job installs with pip 25.0 (the minimum) and the current pip.
 
 ### ORK-039 · CI step for the Tabrion public API check (TABRION QA-21)
 
@@ -312,6 +322,7 @@ backends in MP-B6 (nodestro-runtime).
 | (done 2026-11-06) | nodestro-runtime | #57 workaround, `require_session` guard, RT-022, Bedrock caching option | With the next pin: `ToolRegistry.refresh()`/`AgentRegistry.refresh()`, `BedrockOptions(require_session=True)`, Python 3.14, `BedrockOptions(prompt_caching=True)` are available |
 | (done 2026-11-11, Tabrion QA-17) | nodestro-studio | ST-061 (dependency policy K-33) | `dependency-policy.json` is a copy of orkexa's edges; MIG-ORK-3 needs E-ORK-CORE to turn `orkexa -> tabrion` active in nodestro-studio first, then a new copy here |
 | (done 2026-11-11, Tabrion QA-16) | tabrion | MIG-ORK-2, MIG-ORK-3 (edge list K-33) | `orkexa.backends.postgres` may import `tabrion`; MIG-ORK-3 removes the contract "Core modules do not import tabrion until MIG-ORK-3" and its probes in `tests/architecture/test_forbidden_probe.py` |
+| ORK-040 | nodestro-studio | TABRION VER-1 (`scripts/check_versions.py`, RC-7 drift nightly) | The checker reads `requirements/tabrion.txt` (one canonical pin on a final Tabrion SHA) and compares it with the runtime's Tabrion SHA; an older final version of the same minor line is a notice, not an error |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
 
 ## Maintaining this file

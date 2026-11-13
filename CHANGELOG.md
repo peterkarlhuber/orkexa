@@ -5,6 +5,17 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: `requirements/tabrion.txt` and its guard test (TABRION VER-1, 2026-11-13)
+
+* `requirements/tabrion.txt` pins Tabrion v0.1.0 (`d5821faa8742dea012abda3b663549c038d76543`) by one direct URL for a
+  standalone install without a package index: `python -m pip install -r requirements/tabrion.txt -e ".[dev]"` (pip
+  25.0 or newer; `-r`, not `-c`). `pyproject.toml` keeps naming Tabrion by a final range only (it names none yet).
+* `tests/architecture/test_tabrion_requirements.py` checks RC-1 and RC-8: exactly one pin in the canonical form
+  `tabrion[...] @ git+https://github.com/peterkarlhuber/tabrion.git@<40-hex SHA>`, the SHA of a final Tabrion version,
+  no direct URL and no pre-release specifier for Tabrion in `pyproject.toml`, bounded ranges that contain the pinned
+  version, and the pin file present once the manifest names Tabrion; negative probes turn each rule red. Tooling
+  only; see "Versioning and releases" in `docs/development/releasing.md`.
+
 ### Fixed: `--surface` accepts enum members and dataclass fields (TABRION QA-21, 2026-11-12)
 
 * `scripts/check_tabrion_api.py --surface` no longer reports enum members and dataclass fields as missing.
