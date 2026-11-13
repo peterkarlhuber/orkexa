@@ -25,6 +25,26 @@ published, and it cannot upload anything until the one-time setup below is done.
   one needs a minor release and a CHANGELOG entry. The import contracts
   (`[tool.importlinter]` in `pyproject.toml`, checked with `lint-imports` in CI) keep
   the core modules free of `orkexa.backends.postgres` and `orkexa.testing`.
+* **Tabrion (TABRION VER-1, V-B0).** Orkexa is a library: `pyproject.toml` names
+  Tabrion only by a range of final versions such as `tabrion[testing,postgres]>=0.1,<0.2`,
+  never by a direct URL (RC-1) and never with a pre-release specifier (RC-8). Tabrion is
+  not on a package index, so `requirements/tabrion.txt` pins the one Tabrion a standalone
+  install uses: exactly one line
+  `tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@<40-hex SHA>` on the commit
+  of a final Tabrion version (now v0.1.0, `d5821faa8742dea012abda3b663549c038d76543`).
+  Install it with `-r`, never `-c` (pip 25.0 refuses a direct URL in a constraints file),
+  with pip 25.0 or newer:
+
+    ```bash
+    python -m pip install -r requirements/tabrion.txt -e ".[dev]"
+    python -m pip install -r requirements/tabrion.txt "orkexa @ git+https://github.com/peterkarlhuber/orkexa.git@<sha>"
+    ```
+
+    `tests/architecture/test_tabrion_requirements.py` checks the file and the manifest
+    (one pin, canonical URL, full SHA of a final version listed in the test; every range
+    of the manifest is `>=0.N[.M],<0.(N+1)`, one minor line, and contains it). Moving the pin to a newer final Tabrion adds its SHA
+    to that list in the same change. Nodestro's own Tabrion pin decides for Nodestro
+    installs; this file may stay on an older final version of the same minor line.
 * **Tags.** Release tags are named `orkexa-vX.Y.Z` (annotated, on the merge commit of
   the release). Until the owner approves a tag, the merge commit's SHA stands for the
   version. A tag is prepared locally and pushed only after that approval, for example:
