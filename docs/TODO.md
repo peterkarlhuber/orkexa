@@ -160,17 +160,17 @@ None known.
 
 ## Tests and quality assurance
 
-### ORK-042 · Dependency confusion: the poisoned-index leg joins the mandatory checks (TABRION DC-OR-1)
+### ORK-042 · Dependency confusion: the studio origin commit of the poisoned-index check (TABRION DC-OR-1)
 
 - **Priority:** P3 Low · **Status:** Open · **Refs:** TABRION DC-OR-1, `scripts/check_tabrion_source.py`
   (checksummed copy from nodestro-studio, `tests/architecture/test_tabrion_source_check.py`),
   `tests/architecture/test_tabrion_requirements.py::test_the_installed_tabrion_is_the_pin`, CI job
-  `tabrion install (pip latest, poisoned index)`
-- **What:** every suite run checks that the installed Tabrion is the pin's commit, and the new CI leg installs under a
-  poisoned index that must get no request for `tabrion`. Open: the leg is not yet in `.github/ci-manifest.json`
-  (CI-FAST owns that file), and the copy names an unmerged nodestro-studio commit as its origin until the studio's
-  DC-NS-2 branch is merged.
-- **Next step:** after the studio merge, update the origin commit and add the leg to the manifest; close this entry.
+  `tabrion install (pip latest, poisoned index)` (in `.github/ci-manifest.json`, reported by ci-ok)
+- **What:** the poisoned-index leg proves that the pinned install never asks an index for `tabrion` (zero
+  requests); the installed-pin test only detects an accidental index install (`direct_url.json` can be forged by a
+  wheel). Open: the copy names an unmerged nodestro-studio commit as its origin until the studio's DC-NS-2 branch is
+  merged.
+- **Next step:** after the studio merge, update the origin commit; close this entry.
 
 ### ORK-030 · Live tests of the larger local models
 

@@ -115,11 +115,13 @@ jobs:
   # ".[dev]" and, in a second virtual environment, the plain package the way a standalone user does, then checks that
   # the dependencies are consistent and that exactly the pinned Tabrion is installed
   # (tests/architecture/test_tabrion_requirements.py::test_the_installed_tabrion_is_the_pin, which every suite run
-  # checks too). DC-OR-1 (dependency confusion), leg "poisoned index": both installs run under
-  # scripts/check_tabrion_source.py (a checksummed copy from nodestro-studio), which replaces the index with a
-  # poisoned one serving tabrion 0.1.99 (a wheel and an sdist that run code) and redirecting every other name to
-  # PyPI; it fails when pip asks that index for tabrion at all, when poisoned code ran, or when the installed tabrion
-  # is not the pin. Its positive control first shows that a plain "pip install tabrion" would take the poisoned one.
+  # checks too; it detects an accidental index install, it is no proof of origin). DC-OR-1 (dependency confusion),
+  # leg "poisoned index", reported by ci-ok: both installs run under scripts/check_tabrion_source.py (a checksummed
+  # copy from nodestro-studio), which replaces the index with a poisoned one serving tabrion 0.1.0 (a wheel with a
+  # forged direct_url.json and an sdist, both run code) and redirecting every other name to PyPI. It fails when pip
+  # asks that index for tabrion at all (the proof), when the install never used the index or an index option would
+  # bypass it, when poisoned code ran, or when tabrion's direct_url.json is not the pin's. Its positive control first
+  # shows that a plain "pip install tabrion" would take the poisoned one.
   tabrion-install:
     name: tabrion install (pip ${{ matrix.pip }}${{ matrix.index == 'poisoned' && ', poisoned index' || '' }})
     runs-on: ubuntu-latest

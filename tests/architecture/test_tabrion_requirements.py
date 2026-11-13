@@ -13,13 +13,14 @@ and the SHA is the commit of a final Tabrion version listed in :data:`FINAL_TABR
 its SHA there in the same change, which the reviewer checks against Tabrion's history. The pinned version
 satisfies every Tabrion range of the manifest. The probes below turn each rule red.
 
-TABRION DC-OR-1 (dependency confusion): the installed Tabrion must be that pin, not merely a version inside
-the range. Its ``direct_url.json`` must name ``https://github.com/peterkarlhuber/tabrion.git`` at the pinned
-commit; a Tabrion from a package index (no ``direct_url.json``), a local checkout or another commit fails.
-Every CI job that runs the suite installs with ``-r requirements/tabrion.txt``, so every one of them checks
-this (before, only the ``tabrion-install`` job did, inline). That job's ``poisoned index`` leg also runs the
-install with ``scripts/check_tabrion_source.py``: a poisoned index must get no request for ``tabrion`` at
-all.
+TABRION DC-OR-1 (dependency confusion): the installed Tabrion's ``direct_url.json`` must name
+``https://github.com/peterkarlhuber/tabrion.git`` at the pinned commit and the version must be that commit's
+final; a Tabrion from a package index (no ``direct_url.json``), a local checkout or another commit fails, in
+every CI job that runs the suite (before, only the ``tabrion-install`` job checked it, inline). This detects
+an accidental index install; it is no proof of origin, because a wheel can ship a forged
+``direct_url.json``. The protection is the direct-URL pin (``-r requirements/tabrion.txt``), and the proof
+that it never asks an index for Tabrion is the ``poisoned index`` leg of ``tabrion-install``
+(``scripts/check_tabrion_source.py``: zero requests for ``tabrion``).
 """
 
 from __future__ import annotations
