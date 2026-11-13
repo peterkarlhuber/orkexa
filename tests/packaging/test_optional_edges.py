@@ -2,8 +2,9 @@
 
 Orkexa's edges of the Tabrion plan (document 13, section 2.2; document 07, AC-3):
 
-* ``tabrion``: the core imports without Tabrion until MIG-ORK-3 (E-ORK-CORE); today Orkexa has no Tabrion
-  dependency at all, and this test keeps it so until that step changes the edge on purpose;
+* ``tabrion``: the core imports without Tabrion until MIG-ORK-3 (E-ORK-CORE); today only the ``dev``
+  extra names Tabrion (MIG-ORK-1, the test support), and this test keeps the core so until that step changes
+  the edge on purpose;
 * ``postgres``: ``orkexa[postgres]`` brings psycopg (and ``tabrion[postgres]`` after MIG-ORK-2); the core and
   ``orkexa.backends.postgres`` import without it, and the backend names the extra only on use.
 

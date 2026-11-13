@@ -178,7 +178,7 @@ system built with it complies depends on that system. See
 ## Development
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements/tabrion.txt -e ".[dev]"   # pip 25.0 or newer
 ruff check . && ruff format --check .
 mypy --strict src && mypy --strict examples
 pytest --cov=orkexa            # offline: no API keys, no network

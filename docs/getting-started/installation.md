@@ -9,7 +9,7 @@ SDK is an extra.
     ```bash
     pip install "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"
     # or, from a clone, for development:
-    pip install -e ".[dev]"
+    pip install -r requirements/tabrion.txt -e ".[dev]"   # pip 25.0 or newer
     ```
 
     The commands below show the extras as they will be installed from PyPI.

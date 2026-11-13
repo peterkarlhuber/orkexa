@@ -14,12 +14,21 @@ role :data:`RUNTIME_ROLE` (``LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSR
 ``ORKEXA_TEST_RUNTIME_ROLE=1`` runs every store, search and ``verify_schema`` as a product's runtime does: as
 :data:`RUNTIME_ROLE` with ``SELECT``, ``INSERT``, ``UPDATE`` and ``DELETE`` on the tables of the test schema
 only; ``migrate`` still runs as the owner.
+
+TABRION MIG-ORK-1: the generic parts delegate to ``tabrion.testing`` (public names only, QA-21):
+:func:`tabrion.testing.configure` names Orkexa's variables, the session fixture ``tabrion_postgres_url``
+resolves the server for every ``postgres`` test (:func:`orkexa_postgres_gate`, autouse where it is imported)
+and :func:`tabrion.testing.require_extension` creates pgvector in ``public``. The variables and their meaning
+stay as they were: only ``ORKEXA_REQUIRE_POSTGRES=1`` and ``ORKEXA_REQUIRE_PGVECTOR=1`` turn a skip into a
+failure (Tabrion's own require variables count any value but ``0`` and expect extension names), so Orkexa
+decides skip or failure itself and keeps its messages. The schema per test, the fixed runtime role, the DDL
+log and the catalog snapshot are Orkexa's own.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 import os
 import threading
@@ -29,6 +38,23 @@ import uuid
 import pytest
 
 from orkexa.backends.postgres import PostgresLayout, PsycopgSource, migrate
+
+try:
+    from tabrion.testing import configure, require_extension
+    from tabrion.testing import tabrion_postgres_url as tabrion_postgres_url  # a fixture: conftests import it
+except ImportError:  # no dev extra: the core suite without extras (tests/packaging)
+    configure = require_extension = None  # type: ignore[assignment]
+
+    @pytest.fixture(scope="session")
+    def tabrion_postgres_url() -> str:  # type: ignore[misc]
+        """Without Tabrion no ``postgres`` test runs: skip, or fail under ``ORKEXA_REQUIRE_POSTGRES=1``."""
+        message = (
+            'the PostgreSQL tests need the dev extra: pip install -r requirements/tabrion.txt -e ".[dev]"'
+        )
+        if REQUIRED:
+            pytest.fail(message, pytrace=False)
+        pytest.skip(message)
+
 
 DSN = os.environ.get("ORKEXA_TEST_POSTGRES", "")
 REQUIRED = os.environ.get("ORKEXA_REQUIRE_POSTGRES") == "1"
@@ -41,16 +67,48 @@ LAYOUT = PostgresLayout("t_")
 
 _setup_lock = threading.Lock()
 _setup_done: list[bool] = []
+#: The test database as ``tabrion_postgres_url`` resolved it (a ``str`` whose ``repr`` masks the password).
+_resolved: list[str] = []
+
+# Orkexa's variable names for tabrion.testing. The require variables are listed for completeness only: the
+# decisions below read ORKEXA_REQUIRE_POSTGRES and ORKEXA_REQUIRE_PGVECTOR as "1" or not, as before.
+if configure is not None:
+    configure(
+        env_prefix="ORKEXA",
+        postgres_env=["ORKEXA_TEST_POSTGRES"],
+        require_env=["ORKEXA_REQUIRE_POSTGRES"],
+        runtime_role_env=["ORKEXA_TEST_RUNTIME_ROLE"],
+        require_extensions_env=["ORKEXA_REQUIRE_PGVECTOR"],
+        schema_prefix="orkexa_test_",
+    )
+
+
+def _no_server() -> None:
+    if REQUIRED:
+        pytest.fail("ORKEXA_REQUIRE_POSTGRES=1 but ORKEXA_TEST_POSTGRES names no database")
+    pytest.skip("ORKEXA_TEST_POSTGRES is not set")
+
+
+@pytest.fixture(autouse=True)
+def orkexa_postgres_gate(request: pytest.FixtureRequest) -> None:
+    """Every ``postgres`` test with ``ORKEXA_TEST_POSTGRES`` set: resolve the server through
+    ``tabrion_postgres_url`` (which skips, or fails under the require variable, without psycopg) before the
+    test runs. Without the variable it does nothing: a test that needs the server calls
+    :func:`require_postgres` (directly or through :func:`database`), which skips or fails as before, and a
+    ``postgres`` test that needs none (a pure check of a helper) still runs."""
+    if request.node.get_closest_marker("postgres") is None or not DSN:
+        return  # without a server, require_postgres() skips or fails when a test needs it, as before
+    url = request.getfixturevalue("tabrion_postgres_url")
+    if not _resolved:
+        _resolved.append(url)
 
 
 def require_postgres() -> str:
     """The test database, or skip (fail when PostgreSQL is required)."""
     if not DSN:
-        if REQUIRED:
-            pytest.fail("ORKEXA_REQUIRE_POSTGRES=1 but ORKEXA_TEST_POSTGRES names no database")
-        pytest.skip("ORKEXA_TEST_POSTGRES is not set")
+        _no_server()
     setup_server()
-    return DSN
+    return require_dsn()
 
 
 def admin() -> Any:
@@ -63,7 +121,7 @@ def admin() -> Any:
 def require_dsn() -> str:
     if not DSN:
         raise RuntimeError("ORKEXA_TEST_POSTGRES is not set")
-    return DSN
+    return _resolved[0] if _resolved else DSN
 
 
 def setup_server() -> None:
@@ -81,11 +139,9 @@ def setup_server() -> None:
                     "CREATE ROLE orkexa_test_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS"
                     " PASSWORD 'orkexa-test-runtime-pw'"
                 )
-            available = connection.execute(
-                "SELECT 1 FROM pg_available_extensions WHERE name = 'vector'"
-            ).fetchone()
-            if available is not None:
-                connection.execute("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public")
+            # pgvector in public where the server has it (pg-b); pg-a has none, no reason to skip here.
+            with suppress(pytest.skip.Exception, pytest.fail.Exception):
+                require_extension(connection, "vector")
         _setup_done.append(True)
 
 
@@ -99,9 +155,18 @@ def has_pgvector() -> bool:
 
 
 def require_pgvector(reason: str) -> None:
-    """Skip a test that needs pgvector without it, or fail it under ``ORKEXA_REQUIRE_PGVECTOR=1``."""
-    if has_pgvector():
-        return
+    """Skip a test that needs pgvector without it, or fail it under ``ORKEXA_REQUIRE_PGVECTOR=1``.
+
+    ``tabrion.testing.require_extension`` makes pgvector usable or skips; Orkexa turns its verdict into the
+    old skip or failure (``ORKEXA_REQUIRE_PGVECTOR`` is ``1``, not a list of extension names).
+    """
+    require_postgres()
+    with admin() as connection:
+        try:
+            require_extension(connection, "vector")
+            return
+        except (pytest.skip.Exception, pytest.fail.Exception):
+            pass
     if PGVECTOR_REQUIRED:
         pytest.fail(f"ORKEXA_REQUIRE_PGVECTOR=1 but the test database has no pgvector: {reason}")
     pytest.skip(f"the test database has no pgvector: {reason}")

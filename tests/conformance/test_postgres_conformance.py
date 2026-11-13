@@ -28,6 +28,7 @@ from orkexa.testing.conformance import (
 )
 
 from ..backends.postgres import support
+from ..backends.postgres.support import orkexa_postgres_gate, tabrion_postgres_url  # noqa: F401  # fixtures
 from .adapter import run_and_check
 
 ALL = frozenset({"vectors", "reindex", "partitioned", "concurrent_writers"})
