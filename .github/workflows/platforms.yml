@@ -44,14 +44,18 @@ jobs:
         run: |
           # Windows ARM64: cryptography (google-auth) has win_arm64 wheels only up to 46.0.3, and sqlite-vec
           # has none (its retrieval tests skip without it); the other dev tools are installed one by one.
+          # --prefer-binary (both branches): a release that is on PyPI as an sdist only (pglast 8.8, 2026-11-13) must
+          # not force a source build, which fails on the Windows runners (x64 and ARM64); pip takes the newest
+          # release with a wheel for the platform instead.
           # Tabrion (-r requirements/tabrion.txt, TABRION VER-1) is pure Python and installs here as well.
           if [ "$RUNNER_OS" = "Windows" ] && [ "$RUNNER_ARCH" = "ARM64" ]; then
             echo "cryptography==46.0.3" > "$RUNNER_TEMP/constraints.txt"
             export PIP_CONSTRAINT="$RUNNER_TEMP/constraints.txt"
-            pip install -r requirements/tabrion.txt -e . "anthropic>=2.0,<3" "openai>=3.0,<4" "google-genai>=2.0,<3" "boto3>=1.43.80,<2" \
+            pip install --prefer-binary -r requirements/tabrion.txt -e . "anthropic>=2.0,<3" "openai>=3.0,<4" \
+              "google-genai>=2.0,<3" "boto3>=1.43.80,<2" \
               "pypdf>=6.21.4" "pytest>=8" "pytest-cov>=5" "mypy>=1.13" "pglast>=7,<9"
           else
-            pip install -r requirements/tabrion.txt -e ".[dev]"
+            pip install --prefer-binary -r requirements/tabrion.txt -e ".[dev]"
           fi
       - name: System
         run: python -c "import platform, sys; print(sys.platform, platform.machine(), platform.platform())"
