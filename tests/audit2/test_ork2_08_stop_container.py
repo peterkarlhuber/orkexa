@@ -45,6 +45,19 @@ def _log(tmp_path: Path) -> list[str]:
     return (tmp_path / "log").read_text().split()
 
 
+class _SleepClock:
+    """Stands in for the ``time`` module: ``monotonic()`` moves only when ``sleep()`` is called."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
 def test_a_killed_container_is_confirmed_gone_without_the_settle_wait(tmp_path: Path) -> None:
     docker = _docker(tmp_path, kill_rc=0, ps=[])
     started = time.monotonic()
@@ -63,14 +76,16 @@ def test_without_a_kill_the_name_is_watched_for_the_settle_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The client may have been killed with its create request in flight: the container can appear later.
+    # The settle watch runs on a clock that only the watch's own sleeps advance, so the number of checks is
+    # exact: with a real clock a slow runner (macOS Intel) spent the whole settle time in two docker calls.
+    clock = _SleepClock()
+    monkeypatch.setattr(_container, "time", clock)
     monkeypatch.setattr(_container, "_SETTLE_S", 0.6)
     monkeypatch.setattr(_container, "_SETTLE_POLL_S", 0.1)
     docker = _docker(tmp_path, kill_rc=1, ps=["", "late42"])
-    started = time.monotonic()
     stop_container(docker, "orkexa-x")
-    assert time.monotonic() - started >= 0.6
+    assert clock.now >= 0.6  # the whole settle time was watched
     log = _log(tmp_path)
-    assert log[:2] == ["kill", "rm"] and log.count("rm") == 2  # the late container was removed
-    # Empty, then the late container, then at least one more check: watching goes on after the late
-    # removal. Only a lower bound on polls, since a slow runner (macOS) fits fewer into the settle time.
-    assert log.count("ps") >= 3
+    # Empty, then the late container (removed), then the name is still watched until the settle time ends:
+    # one check per poll interval, 0.6 s / 0.1 s = 6 checks.
+    assert log == ["kill", "rm", "ps", "ps", "rm", "ps", "ps", "ps", "ps"]
