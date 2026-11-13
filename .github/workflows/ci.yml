@@ -35,13 +35,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: pip install -e ".[dev]"
+      # TABRION VER-1: Tabrion is not on a package index; the pin file supplies the one Tabrion that the range of
+      # the "dev" extra (MIG-ORK-1) accepts. The same install is used in every workflow that installs ".[dev]".
+      - run: pip install -r requirements/tabrion.txt -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy --strict src
       - run: mypy --strict examples
       # MUP-ONA B0: the import contracts in pyproject.toml ([tool.importlinter]).
       - run: lint-imports
+      # TABRION QA-21 (AC-7, ORK-039): only public Tabrion names, and docs/api-consumers.md lists them.
+      - run: python scripts/check_tabrion_api.py --check-export docs/api-consumers.md
       # Offline only: no API keys are configured, and live tests run only with -m live.
       # MUP-ONA B1: the conformance reports (tests/conformance) are saved per target and compared with the
       # skips this job expects (tests/conformance/expected_skips.json).
@@ -77,7 +81,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: pip install -r requirements/tabrion.txt -e ".[dev]"
       # The lower bounds of pyproject.toml (pydantic 2.9 is the minimum of google-genai 2.0; pglast 7.20 is the
       # oldest 7.x release on PyPI; psycopg 3.2.0 is the lower bound of the extra "postgres"; its
       # "binary" extra names a dev build, so psycopg-binary is pinned by name).
@@ -104,6 +108,62 @@ jobs:
       - run: pip install -e . "pytest==9.1.1"
       - run: python -c "import importlib.util as u; assert u.find_spec('psycopg') is None and u.find_spec('pglast') is None"
       - run: pytest tests/packaging/test_core_without_extras.py -v -rs --noconftest -p no:cacheprovider
+
+  # TABRION VER-1 (plan doc 06 section 6.4): Tabrion is not on a package index, so every install of ".[dev]" adds
+  # -r requirements/tabrion.txt (one direct-URL pin on a final Tabrion commit). pip 25.0 is the oldest pip that
+  # installs that file (older pips refuse it); "latest" is the current pip. Each installs the editable checkout with
+  # ".[dev]" and, in a second virtual environment, the plain package the way a standalone user does, then checks that
+  # exactly the pinned Tabrion is installed and that the dependencies are consistent.
+  tabrion-install:
+    name: tabrion install (pip ${{ matrix.pip }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        pip: ["25.0", "latest"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install with pip ${{ matrix.pip }}
+        env:
+          PIP_VERSION: ${{ matrix.pip }}
+        run: |
+          set -euo pipefail
+          if [ "$PIP_VERSION" = latest ]; then spec="pip"; else spec="pip==$PIP_VERSION"; fi
+          for venv in "$RUNNER_TEMP/dev" "$RUNNER_TEMP/plain"; do
+            python -m venv "$venv"
+            "$venv/bin/python" -m pip install --upgrade "$spec"
+            "$venv/bin/python" -m pip --version
+          done
+          "$RUNNER_TEMP/dev/bin/python" -m pip install -r requirements/tabrion.txt -e ".[dev]"
+          "$RUNNER_TEMP/plain/bin/python" -m pip install -r requirements/tabrion.txt .
+      - name: Exactly the pinned Tabrion is installed
+        run: |
+          set -euo pipefail
+          sha="$(sed -n 's/^tabrion\(\[[^]]*\]\)\{0,1\} @ git+https:\/\/github\.com\/peterkarlhuber\/tabrion\.git@\([0-9a-f]\{40\}\)$/\2/p' requirements/tabrion.txt)"
+          test "${#sha}" -eq 40
+          for venv in "$RUNNER_TEMP/dev" "$RUNNER_TEMP/plain"; do
+            "$venv/bin/python" -m pip check
+            "$venv/bin/python" - "$sha" <<'PY'
+          import importlib.metadata as metadata
+          import json
+          import re
+          import sys
+
+          dist = metadata.distribution("tabrion")
+          direct = json.loads(dist.read_text("direct_url.json") or "{}")
+          commit = direct.get("vcs_info", {}).get("commit_id")
+          print("tabrion", dist.version, commit)
+          assert commit == sys.argv[1], (commit, sys.argv[1])
+          assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", dist.version), dist.version  # a final version
+          PY
+          done
+      - run: "$RUNNER_TEMP/dev/bin/python -m pytest tests/architecture/test_tabrion_requirements.py -q -p no:cacheprovider"
 
   # MUP-ONA B5 (T-CONF-* (PG), T-PART-*, T-DDL-*, T-SCH-*, T-PG-*): the PostgreSQL backend against a real server.
   # pg-a: postgres:17 without pgvector (vectors ranked in Python, mode A); pg-b: pgvector/pgvector:pg17 (mode B),
@@ -151,7 +211,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: pip install -r requirements/tabrion.txt -e ".[dev]"
       - name: PostgreSQL tests (superuser)
         run: >-
           pytest -rs --junitxml=junit-${{ matrix.job }}.xml

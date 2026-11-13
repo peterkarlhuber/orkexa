@@ -11,6 +11,8 @@
       "pg-a (Python 3.14)",
       "pg-b (Python 3.11)",
       "pg-b (Python 3.14)",
+      "tabrion install (pip 25.0)",
+      "tabrion install (pip latest)",
       "test (Python 3.11)",
       "test (Python 3.12)",
       "test (Python 3.13)",
