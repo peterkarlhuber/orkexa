@@ -17,8 +17,9 @@ listed here. The development version is `0.2.0.dev0`.
   `ORKEXA_REQUIRE_POSTGRES=1`, `ORKEXA_REQUIRE_PGVECTOR=1` and `ORKEXA_TEST_RUNTIME_ROLE=1` keep their meaning and
   messages: Orkexa decides skip or failure itself (Tabrion's require variables count any value but `0` and expect
   extension names). The test schemas, the runtime role, the DDL log and the catalog snapshot stay Orkexa's own. The
-  collected tests and the skipped sets are unchanged. `docs/api-consumers.md` lists the three Tabrion names. Tests
-  only.
+  collected tests and the skipped sets are unchanged. `docs/api-consumers.md` lists the three Tabrion names. The core suite without extras
+  (`tests/packaging/block_extras.py`) also blocks `tabrion`: there the support module falls back to a fixture that
+  skips the `postgres` tests (fails under `ORKEXA_REQUIRE_POSTGRES=1`). Tests only.
 
 ### Changed: CI installs Tabrion from `requirements/tabrion.txt` (TABRION VER-1, 2026-11-13)
 

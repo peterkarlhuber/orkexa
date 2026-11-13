@@ -36,10 +36,25 @@ from typing import Any
 import uuid
 
 import pytest
-from tabrion.testing import configure, require_extension
-from tabrion.testing import tabrion_postgres_url as tabrion_postgres_url  # a fixture: conftests import it
 
 from orkexa.backends.postgres import PostgresLayout, PsycopgSource, migrate
+
+try:
+    from tabrion.testing import configure, require_extension
+    from tabrion.testing import tabrion_postgres_url as tabrion_postgres_url  # a fixture: conftests import it
+except ImportError:  # no dev extra: the core suite without extras (tests/packaging)
+    configure = require_extension = None  # type: ignore[assignment]
+
+    @pytest.fixture(scope="session")
+    def tabrion_postgres_url() -> str:  # type: ignore[misc]
+        """Without Tabrion no ``postgres`` test runs: skip, or fail under ``ORKEXA_REQUIRE_POSTGRES=1``."""
+        message = (
+            'the PostgreSQL tests need the dev extra: pip install -r requirements/tabrion.txt -e ".[dev]"'
+        )
+        if REQUIRED:
+            pytest.fail(message, pytrace=False)
+        pytest.skip(message)
+
 
 DSN = os.environ.get("ORKEXA_TEST_POSTGRES", "")
 REQUIRED = os.environ.get("ORKEXA_REQUIRE_POSTGRES") == "1"
@@ -57,14 +72,15 @@ _resolved: list[str] = []
 
 # Orkexa's variable names for tabrion.testing. The require variables are listed for completeness only: the
 # decisions below read ORKEXA_REQUIRE_POSTGRES and ORKEXA_REQUIRE_PGVECTOR as "1" or not, as before.
-configure(
-    env_prefix="ORKEXA",
-    postgres_env=["ORKEXA_TEST_POSTGRES"],
-    require_env=["ORKEXA_REQUIRE_POSTGRES"],
-    runtime_role_env=["ORKEXA_TEST_RUNTIME_ROLE"],
-    require_extensions_env=["ORKEXA_REQUIRE_PGVECTOR"],
-    schema_prefix="orkexa_test_",
-)
+if configure is not None:
+    configure(
+        env_prefix="ORKEXA",
+        postgres_env=["ORKEXA_TEST_POSTGRES"],
+        require_env=["ORKEXA_REQUIRE_POSTGRES"],
+        runtime_role_env=["ORKEXA_TEST_RUNTIME_ROLE"],
+        require_extensions_env=["ORKEXA_REQUIRE_PGVECTOR"],
+        schema_prefix="orkexa_test_",
+    )
 
 
 def _no_server() -> None:
