@@ -12,7 +12,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 4 |
-| P3 Low | 11 |
+| P3 Low | 12 |
 | P4 Optional | 7 |
 
 **Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
@@ -159,6 +159,18 @@ None known.
 - **Next step:** Mark it as synthetic or drop it on commit; agree with Nodestro how chat views show it.
 
 ## Tests and quality assurance
+
+### ORK-042 · Dependency confusion: the poisoned-index leg joins the mandatory checks (TABRION DC-OR-1)
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** TABRION DC-OR-1, `scripts/check_tabrion_source.py`
+  (checksummed copy from nodestro-studio, `tests/architecture/test_tabrion_source_check.py`),
+  `tests/architecture/test_tabrion_requirements.py::test_the_installed_tabrion_is_the_pin`, CI job
+  `tabrion install (pip latest, poisoned index)`
+- **What:** every suite run checks that the installed Tabrion is the pin's commit, and the new CI leg installs under a
+  poisoned index that must get no request for `tabrion`. Open: the leg is not yet in `.github/ci-manifest.json`
+  (CI-FAST owns that file), and the copy names an unmerged nodestro-studio commit as its origin until the studio's
+  DC-NS-2 branch is merged.
+- **Next step:** after the studio merge, update the origin commit and add the leg to the manifest; close this entry.
 
 ### ORK-030 · Live tests of the larger local models
 

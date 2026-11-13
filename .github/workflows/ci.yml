@@ -113,15 +113,25 @@ jobs:
   # -r requirements/tabrion.txt (one direct-URL pin on a final Tabrion commit). pip 25.0 is the oldest pip that
   # installs that file (older pips refuse it); "latest" is the current pip. Each installs the editable checkout with
   # ".[dev]" and, in a second virtual environment, the plain package the way a standalone user does, then checks that
-  # exactly the pinned Tabrion is installed and that the dependencies are consistent.
+  # the dependencies are consistent and that exactly the pinned Tabrion is installed
+  # (tests/architecture/test_tabrion_requirements.py::test_the_installed_tabrion_is_the_pin, which every suite run
+  # checks too). DC-OR-1 (dependency confusion), leg "poisoned index": both installs run under
+  # scripts/check_tabrion_source.py (a checksummed copy from nodestro-studio), which replaces the index with a
+  # poisoned one serving tabrion 0.1.99 (a wheel and an sdist that run code) and redirecting every other name to
+  # PyPI; it fails when pip asks that index for tabrion at all, when poisoned code ran, or when the installed tabrion
+  # is not the pin. Its positive control first shows that a plain "pip install tabrion" would take the poisoned one.
   tabrion-install:
-    name: tabrion install (pip ${{ matrix.pip }})
+    name: tabrion install (pip ${{ matrix.pip }}${{ matrix.index == 'poisoned' && ', poisoned index' || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         pip: ["25.0", "latest"]
+        index: ["pypi"]
+        include:
+          - pip: latest
+            index: poisoned
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,6 +142,7 @@ jobs:
       - name: Install with pip ${{ matrix.pip }}
         env:
           PIP_VERSION: ${{ matrix.pip }}
+          POISONED: ${{ matrix.index == 'poisoned' && '1' || '' }}
         run: |
           set -euo pipefail
           if [ "$PIP_VERSION" = latest ]; then spec="pip"; else spec="pip==$PIP_VERSION"; fi
@@ -140,30 +151,25 @@ jobs:
             "$venv/bin/python" -m pip install --upgrade "$spec"
             "$venv/bin/python" -m pip --version
           done
-          "$RUNNER_TEMP/dev/bin/python" -m pip install -r requirements/tabrion.txt -e ".[dev]"
-          "$RUNNER_TEMP/plain/bin/python" -m pip install -r requirements/tabrion.txt .
+          install() {  # install VENV ARGS...: plain, or under the poisoned index (no pip cache: every request is seen)
+            local venv=$1; shift
+            if [ -n "$POISONED" ]; then
+              python -I scripts/check_tabrion_source.py --lock requirements/tabrion.txt --python "$venv/bin/python" -- \
+                "$venv/bin/python" -m pip install --no-cache-dir "$@"
+            else
+              "$venv/bin/python" -m pip install "$@"
+            fi
+          }
+          install "$RUNNER_TEMP/dev" -r requirements/tabrion.txt -e ".[dev]"
+          install "$RUNNER_TEMP/plain" -r requirements/tabrion.txt .
       - name: Exactly the pinned Tabrion is installed
         run: |
           set -euo pipefail
-          sha="$(sed -n 's/^tabrion\(\[[^]]*\]\)\{0,1\} @ git+https:\/\/github\.com\/peterkarlhuber\/tabrion\.git@\([0-9a-f]\{40\}\)$/\2/p' requirements/tabrion.txt)"
-          test "${#sha}" -eq 40
+          "$RUNNER_TEMP/plain/bin/python" -m pip install pytest==9.1.1
           for venv in "$RUNNER_TEMP/dev" "$RUNNER_TEMP/plain"; do
             "$venv/bin/python" -m pip check
-            "$venv/bin/python" - "$sha" <<'PY'
-          import importlib.metadata as metadata
-          import json
-          import re
-          import sys
-
-          dist = metadata.distribution("tabrion")
-          direct = json.loads(dist.read_text("direct_url.json") or "{}")
-          commit = direct.get("vcs_info", {}).get("commit_id")
-          print("tabrion", dist.version, commit)
-          assert commit == sys.argv[1], (commit, sys.argv[1])
-          assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", dist.version), dist.version  # a final version
-          PY
+            "$venv/bin/python" -m pytest tests/architecture/test_tabrion_requirements.py -q -p no:cacheprovider --noconftest
           done
-      - run: "$RUNNER_TEMP/dev/bin/python -m pytest tests/architecture/test_tabrion_requirements.py -q -p no:cacheprovider"
 
   # MUP-ONA B5 (T-CONF-* (PG), T-PART-*, T-DDL-*, T-SCH-*, T-PG-*): the PostgreSQL backend against a real server.
   # pg-a: postgres:17 without pgvector (vectors ranked in Python, mode A); pg-b: pgvector/pgvector:pg17 (mode B),
