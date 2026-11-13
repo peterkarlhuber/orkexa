@@ -12,8 +12,8 @@ listed here. The development version is `0.2.0.dev0`.
   25.0 or newer; `-r`, not `-c`). `pyproject.toml` keeps naming Tabrion by a final range only (it names none yet).
 * `tests/architecture/test_tabrion_requirements.py` checks RC-1 and RC-8: exactly one pin in the canonical form
   `tabrion[...] @ git+https://github.com/peterkarlhuber/tabrion.git@<40-hex SHA>`, the SHA of a final Tabrion version,
-  no direct URL and no pre-release specifier for Tabrion in `pyproject.toml`, bounded ranges that contain the pinned
-  version, and the pin file present once the manifest names Tabrion; negative probes turn each rule red. Tooling
+  no direct URL and no pre-release specifier for Tabrion in `pyproject.toml`, ranges of one minor line only
+  (`>=0.N[.M],<0.(N+1)`, an unparseable specifier is named) that contain the pinned version, and the pin file present once the manifest names Tabrion; negative probes turn each rule red. Tooling
   only; see "Versioning and releases" in `docs/development/releasing.md`.
 
 ### Fixed: `--surface` accepts enum members and dataclass fields (TABRION QA-21, 2026-11-12)

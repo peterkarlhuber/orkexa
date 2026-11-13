@@ -23,7 +23,7 @@ from typing import Any
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +60,32 @@ def manifest_requirements(pyproject: dict[str, Any]) -> list[tuple[str, str]]:
     return found
 
 
+def range_problem(requirement: Requirement) -> str | None:
+    """Why a Tabrion requirement is not a range of one minor line of final versions, or ``None``.
+
+    The only accepted shape is ``>=A.B[.C],<A.(B+1)`` for ``A == 0`` (RC-3: a 0.x minor may break) and
+    ``>=A.B[.C],<(A+1)`` from 1.0 on (RC-1, RC-8): no pre-release, no other operator, no second line.
+    """
+    versions: dict[str, Version] = {}
+    for spec in requirement.specifier:
+        try:
+            version = Version(spec.version)
+        except InvalidVersion:
+            return f"has an unparseable specifier {str(spec)!r}; use a range like >=0.1,<0.2"
+        if version.is_prerelease or version.is_postrelease or version.local:
+            return f"has a pre-release or non-final specifier {str(spec)!r} (RC-8)"
+        if spec.operator not in (">=", "<") or spec.operator in versions:
+            return "is not a range like >=0.1,<0.2 of one minor line (RC-1, RC-8)"
+        versions[spec.operator] = version
+    low, high = versions.get(">="), versions.get("<")
+    if low is None or high is None:
+        return "is not a range like >=0.1,<0.2 of one minor line (RC-1, RC-8)"
+    expected = f"{low.major}.{low.minor + 1}" if low.major == 0 else f"{low.major + 1}"
+    if str(high) != expected or len(low.release) > 3:
+        return f"is not a range of one minor line: the upper bound must be <{expected} (RC-1, RC-8)"
+    return None
+
+
 def check(requirements_text: str | None, pyproject: dict[str, Any]) -> list[str]:
     """Every rule violation of the pin file and the manifest (empty when both are fine)."""
     errors: list[str] = []
@@ -75,12 +101,9 @@ def check(requirements_text: str | None, pyproject: dict[str, Any]) -> list[str]
         if requirement.url is not None:
             errors.append(f"{where}: {item!r} names Tabrion by a direct URL (RC-1); use a range (>=0.1,<0.2)")
             continue
-        specifiers = list(requirement.specifier)
-        if any(Version(spec.version.removesuffix(".*")).is_prerelease for spec in specifiers):
-            errors.append(f"{where}: {item!r} has a pre-release specifier (RC-8)")
-        operators = {spec.operator for spec in specifiers}
-        if not ({">=", ">"} & operators and {"<", "<="} & operators):
-            errors.append(f"{where}: {item!r} is not a bounded range like >=0.1,<0.2 (RC-1)")
+        problem = range_problem(requirement)
+        if problem is not None:
+            errors.append(f"{where}: {item!r} {problem}")
         ranges.append((where, requirement))
     if requirements_text is None:
         if ranges:
@@ -167,11 +190,22 @@ def test_a_bad_pin_file_turns_red(text: str, message: str) -> None:
             "direct URL (RC-1)",
             id="direct-url",
         ),
-        pytest.param(["tabrion[postgres]>=0.1.0a1,<0.2"], "pre-release specifier (RC-8)", id="pre-release"),
-        pytest.param(["tabrion[postgres]>=0.1.0rc1,<0.2"], "pre-release specifier (RC-8)", id="release-cand"),
-        pytest.param(["tabrion==0.1.0.dev0"], "pre-release specifier (RC-8)", id="dev-pin"),
-        pytest.param(["tabrion>=0.1"], "not a bounded range", id="unbounded"),
-        pytest.param(["tabrion"], "not a bounded range", id="bare-name"),
+        pytest.param(["tabrion[postgres]>=0.1.0a1,<0.2"], "pre-release or non-final", id="pre-release"),
+        pytest.param(["tabrion[postgres]>=0.1.0rc1,<0.2"], "pre-release or non-final", id="release-cand"),
+        pytest.param(["tabrion==0.1.0.dev0"], "pre-release or non-final", id="dev-pin"),
+        pytest.param(["tabrion>=0.1,<0.2.0.post1"], "pre-release or non-final", id="post-release"),
+        pytest.param(["tabrion>=0.1"], "not a range like", id="unbounded"),
+        pytest.param(["tabrion<0.2"], "not a range like", id="no-lower-bound"),
+        pytest.param(["tabrion"], "not a range like", id="bare-name"),
+        pytest.param(["tabrion==0.1.0"], "not a range like", id="exact-pin"),
+        pytest.param(["tabrion~=0.1"], "not a range like", id="compatible-release"),
+        pytest.param(["tabrion>0.1,<0.2"], "not a range like", id="exclusive-lower"),
+        pytest.param(["tabrion>=0.1,<=0.2"], "not a range like", id="inclusive-upper"),
+        pytest.param(["tabrion>=0.1,<0.2,!=0.1.1"], "not a range like", id="exclusion"),
+        pytest.param(["tabrion>=0.1,<0.3"], "upper bound must be <0.2", id="two-minor-lines"),
+        pytest.param(["tabrion>=0.1,<1"], "upper bound must be <0.2", id="up-to-one"),
+        pytest.param(["tabrion>=0.1,<0.2.5"], "upper bound must be <0.2", id="patch-upper"),
+        pytest.param(["tabrion===0.1.0-foo"], "unparseable specifier", id="arbitrary-equality"),
         pytest.param(["tabrion>=0.2,<0.3"], "does not contain the pinned Tabrion 0.1.0", id="outside-range"),
     ],
 )
@@ -183,3 +217,8 @@ def test_a_bad_manifest_requirement_turns_red(items: list[str], message: str) ->
 def test_a_manifest_range_needs_the_pin_file() -> None:
     errors = check(None, _with("probe", ["tabrion[postgres]>=0.1,<0.2"]))
     assert errors == ["requirements/tabrion.txt is missing, but pyproject.toml names tabrion"]
+
+
+@pytest.mark.parametrize("item", ["tabrion>=0.1,<0.2", "tabrion[postgres]>=0.1.3,<0.2", "tabrion>=1.2,<2"])
+def test_a_range_of_one_minor_line_is_accepted(item: str) -> None:
+    assert range_problem(Requirement(item)) is None

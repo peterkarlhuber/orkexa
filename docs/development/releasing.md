@@ -41,7 +41,7 @@ published, and it cannot upload anything until the one-time setup below is done.
     ```
 
     `tests/architecture/test_tabrion_requirements.py` checks the file and the manifest
-    (one pin, canonical URL, full SHA of a final version listed in the test, every range
+    (one pin, canonical URL, full SHA of a final version listed in the test, every range (only `>=0.N[.M],<0.(N+1)`, one minor line)
     of the manifest contains it). Moving the pin to a newer final Tabrion adds its SHA
     to that list in the same change. Nodestro's own Tabrion pin decides for Nodestro
     installs; this file may stay on an older final version of the same minor line.
