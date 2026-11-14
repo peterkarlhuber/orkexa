@@ -13,7 +13,7 @@
     "tabrion": {
       "kind": "foundation",
       "no_direct_url": true,
-      "comment": "RC-1: libraries require it by a version range; runtime extras and api dev carry the git pin (V-B0, RC-2)"
+      "comment": "RC-1: every component requires it by one version range; the studio lock holds its commit (RC-2)"
     },
     "axentra": {
       "kind": "library"
@@ -73,7 +73,7 @@
       "to": "tabrion",
       "kind": "required",
       "extra": null,
-      "status": "pending:E-ORK-CORE"
+      "status": "active"
     },
     {
       "from": "orkexa",

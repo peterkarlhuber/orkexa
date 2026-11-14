@@ -7,10 +7,10 @@ orkexa's outgoing edges. `python scripts/check_dependency_policy.py` checks this
 checks the copies against the SHA-256 below, runs the checker and probes forbidden requirements.
 
 Origin: `https://github.com/peterkarlhuber/nodestro-studio`, files `scripts/check_dependency_policy.py` and the output
-of `python scripts/check_dependency_policy.py --copy orkexa`, at commit `a0c5762ffd360b9d7d8f66c8e62e1a9c88bca368`
+of `python scripts/check_dependency_policy.py --copy orkexa`, at commit `25401389ac9e8b8568708cd096ca5af5f39f70be`
 
 - `check_dependency_policy.py`: `9c790533d9bc7e34927b48f532dfcb311f6841984430bf501e05304816ff386e`
-- `dependency-policy.json`: `5f7b2fb0dcfb6b41cf0412a5d6047f0b264a1ae2b6f37f5cc47cf722aeed488d`
+- `dependency-policy.json`: `50e13de5c755b7a9978c5b681da468331791c8eee5f42e443102eeb383acc4b7`
 
 ## Updating the copies
 

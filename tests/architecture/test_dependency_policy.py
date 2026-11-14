@@ -64,7 +64,10 @@ def test_the_copy_holds_only_this_component() -> None:
     [
         pytest.param('["axentra>=0.1"]', None, "no edge orkexa -> axentra", id="library-to-library"),
         pytest.param(
-            '["tabrion>=0.1,<0.2"]', None, "pending:E-ORK-CORE, not active yet", id="pending-core-edge"
+            '["tabrion[postgres]>=0.1,<0.2"]',
+            None,
+            "are not in the policy's []",
+            id="core-edge-without-extras",
         ),
         pytest.param('["tabrion[postgres]>=0.1,<0.2"]', "pdf", "not allowed here", id="wrong-extra"),
         pytest.param('["tabrion_studio"]', "ui", "no edge orkexa -> tabrion-studio", id="studio"),
