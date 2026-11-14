@@ -303,7 +303,9 @@ API snapshot, import contracts, release rules), the Orkexa part of MP-B1 (storag
 suite `orkexa.testing.conformance`, `ScriptedClient`), MP-B2 (SQLite backends in `orkexa.backends.sqlite`) and
 MP-B5 (`orkexa.testing.sqlcheck`, `orkexa.backends.postgres`, CI jobs `pg-a`, `pg-b`, `core-no-extras`) are in
 place; each entry is removed in the change that completes its package. Nodestro switches to the PostgreSQL
-backends in MP-B6 (nodestro-runtime).
+backends in MP-B6 (nodestro-runtime). [ADR 0016](architecture/decisions/0016-product-family-responsibilities.md)
+(2026-11-13) records that embedding and retrieval belong to Orkexa and that Tabrion stays a database layer without
+retrieval logic; new retrieval work (for example an ANN index) is planned here, not in Nodestro or Tabrion.
 
 ## Cross-repository dependencies
 
