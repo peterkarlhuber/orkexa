@@ -5,6 +5,16 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Fixed: Tabrion API check, `__x__` names under `--surface` (TABRION QA-7, 2026-11-14)
+
+* `scripts/check_tabrion_api.py --surface` no longer reports a `__x__` name such as
+  `tabrion.postgres.SessionSettings.__dataclass_fields__` (axentra) as missing from Tabrion's
+  `docs/api/surface.json`. Such names are public (the `__all__` check already skipped them) and have no entry of
+  their own; `--surface` now checks the name before the first `__x__` part (here the stable
+  `tabrion.postgres.SessionSettings`). The docstring names tabrion-studio's copy as the source and nodestro-api as
+  a new copy holder; the test has a case for dunder names and pins the new SHA-256 (`e48cc7f230c1…`), the same in
+  tabrion-studio, axentra, orkexa, nodestro-runtime and nodestro-api. Tooling only.
+
 ### Added: skill recommendations in the orchestration protocol (NAL-B4, 2026-11-14)
 
 * `Member.skills` names the skills a member's agents have; the decision prompt lists them (`skills: ...`).
