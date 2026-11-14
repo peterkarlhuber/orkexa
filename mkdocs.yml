@@ -2,7 +2,7 @@ site_name: Orkexa
 site_description: One agent runtime for Anthropic Claude, OpenAI, Google Gemini, Amazon Bedrock and OpenAI-compatible endpoints (Ollama, vLLM).
 repo_url: https://github.com/peterkarlhuber/orkexa
 repo_name: peterkarlhuber/orkexa
-copyright: Copyright &copy; 2026 Peter Karlhuber – MIT License
+copyright: Copyright &copy; 2026 Levuvo. All rights reserved.
 
 theme:
   name: material

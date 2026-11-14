@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/peterkarlhuber/orkexa/actions/workflows/ci.yml"><img src="https://github.com/peterkarlhuber/orkexa/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-16243B" alt="Python 3.11 | 3.12 | 3.13 | 3.14">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0079FE" alt="MIT License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-proprietary-0079FE" alt="Proprietary license"></a>
 </p>
 
 Orkexa is a Python library for tool-using AI agents and multi-agent systems. You write
@@ -191,7 +191,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow. Open work is track
 
 ## Project
 
-* **License:** [MIT](LICENSE).
+* **License:** proprietary, Copyright (c) 2026 Levuvo. All rights reserved. See [LICENSE](LICENSE).
 * **Notices:** [NOTICE](NOTICE).
 * **Independence:** Orkexa is an independent open-source project. It is not affiliated
   with, endorsed by or sponsored by Anthropic, OpenAI, Google or Amazon Web Services;
