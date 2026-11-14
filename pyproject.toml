@@ -7,7 +7,7 @@ name = "orkexa"
 version = "0.2.0.dev0"
 description = "Provider-independent Python agents and multi-agent systems: one runtime for Anthropic Claude, OpenAI, Google Gemini, Amazon Bedrock and OpenAI-compatible endpoints, with strict tools, memory, RAG, evaluation, dynamic agents and cost tracking."
 dynamic = ["readme"]
-license = "MIT"
+license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Peter Karlhuber" }]
