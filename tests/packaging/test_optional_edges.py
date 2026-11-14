@@ -5,8 +5,8 @@ Orkexa's edges of the Tabrion plan (document 13, section 2.2; document 07, AC-3)
 * ``tabrion``: the core imports without Tabrion until MIG-ORK-3 (E-ORK-CORE); today only the ``dev``
   extra names Tabrion (MIG-ORK-1, the test support), and this test keeps the core so until that step changes
   the edge on purpose;
-* ``postgres``: ``orkexa[postgres]`` brings psycopg (and ``tabrion[postgres]`` after MIG-ORK-2); the core and
-  ``orkexa.backends.postgres`` import without it, and the backend names the extra only on use.
+* ``postgres``: ``orkexa[postgres]`` brings psycopg and ``tabrion[postgres]`` (MIG-ORK-2); the core and
+  ``orkexa.backends.postgres`` import without them, and the backend names the extra only on use.
 
 Each edge runs once in a fresh ``python -I`` with its modules blocked (``sys.modules[name] = None``). The
 probe adds a top-level import of the blocked module to a copy of the package: the same check must fail. The

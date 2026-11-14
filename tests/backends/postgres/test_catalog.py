@@ -417,8 +417,10 @@ def test_values_are_bound_and_psycopg_is_imported_late() -> None:
 
 
 def test_the_backend_imports_only_orkexa_and_the_standard_library() -> None:
-    """import-linter does not see the third-party imports; this does (psycopg is checked above)."""
-    allowed = set(sys.stdlib_module_names) | {"__future__", "orkexa", "psycopg"}
+    """import-linter does not see the third-party imports; this does (psycopg is checked above). Tabrion is
+    the K-33 edge ``orkexa[postgres] -> tabrion[postgres]`` (TABRION MIG-ORK-2), imported inside functions
+    only (``tests/packaging/test_optional_edges.py``)."""
+    allowed = set(sys.stdlib_module_names) | {"__future__", "orkexa", "psycopg", "tabrion"}
     for path in _modules():
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):

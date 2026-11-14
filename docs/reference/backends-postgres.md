@@ -9,10 +9,15 @@ behavior; Nodestro switches to them in MUP-ONA B6.
 pip install "orkexa[postgres]"    # psycopg 3; it needs libpq, or add "psycopg[binary]" for a bundled one
 ```
 
+The extra also names `tabrion[postgres]>=0.1,<0.2` (TABRION MIG-ORK-2). Tabrion is not on a package index yet:
+install it with `pip install -r requirements/tabrion.txt "orkexa[postgres]"` (pip 25.0 or newer; see
+`requirements/tabrion.txt` in the repository), or let the product's own Tabrion pin satisfy the range.
+
 `import orkexa` never imports this package, and `import orkexa.backends.postgres` works without psycopg and opens
 no connection. psycopg is imported when a connection is first needed (`PsycopgSource(...)`, `migrate`); without it
 that raises `ImportError` with the message `The PostgreSQL backend needs psycopg: pip install "orkexa[postgres]"`
-(`MISSING_PSYCOPG`).
+(`MISSING_PSYCOPG`). Tabrion is imported only by the session settings and `ping` of `PsycopgSource` and by the
+error texts of `verify_schema`; a `PsycopgSource` without session settings works without it.
 
 ## A first index
 
@@ -64,7 +69,8 @@ def transaction(self, mode: TransactionMode = "transaction", *, tenant_id: str |
 `mode` is `"read"`, `"write"` or `"transaction"` (`MODES`); `tenant_id` is the partition of the statement, for a
 source that sets it on the session (row-level security). A host with its own pool passes its own source.
 
-`PsycopgSource(conninfo, *, max_connections=10, timeout=30.0, tenant_setting=None, **connect_args)` is the source
+`PsycopgSource(conninfo, *, max_connections=10, timeout=30.0, tenant_setting=None, statement_timeout=None,
+idle_in_transaction_timeout=None, lock_timeout=None, application_name=None, **connect_args)` is the source
 that comes with Orkexa: psycopg 3 with a small pool of its own (autocommit connections, opened on demand, a broken
 connection is discarded). A `transaction` block is joined by every `transaction` the same thread opens inside it,
 so the commands of several stores can form one transaction. With `tenant_setting="app.tenant_id"` it sets that
@@ -73,6 +79,31 @@ security. The stores on one `PsycopgSource` share its `lock` by default, so two 
 lose each other's read-modify-write change (pass `lock=` to use another lock). Processes do not share the lock: a
 host that runs `PostgresMemory` or `PostgresFileStore` for one tenant and namespace in several processes at once
 serializes those commands itself, as with Nodestro's classes.
+
+Session settings (TABRION MIG-ORK-2): `statement_timeout`, `idle_in_transaction_timeout` and `lock_timeout` (in
+seconds; `0` turns a limit off) and `application_name` are set once on every new connection, right after it is
+opened, with `tabrion.postgres` (one `set_config(..., false)` round trip, Tabrion's allowlist of settings). They
+are all `None` by default: then nothing is set and a connection is exactly what `psycopg.connect` gives, as
+before. Invalid values raise `ValueError` when the source is built; a connection whose settings fail is closed.
+A timeout ends the statement with psycopg's error (`QueryCanceled`, `LockNotAvailable`), as any server error.
+
+```python
+source = PsycopgSource(
+    "host=db dbname=app user=app_runtime",
+    statement_timeout=30,
+    idle_in_transaction_timeout=300,
+    lock_timeout=10,
+    application_name="my-product",
+)
+if not source.ping(timeout=5):  # True or False, never an exception for a database or connection error
+    raise SystemExit("PostgreSQL is not reachable")
+```
+
+`ping(timeout=5.0)` runs `tabrion.postgres.ping` on a connection of the pool (inside a `transaction` block of the
+same thread on that block's connection, under a savepoint): `False` when the server does not answer within
+`timeout`, the connection fails or no connection is free in time. A pooled connection the server has dropped is
+discarded and the next one is tried. `verify_schema` describes a database error with Tabrion's `safe_message`
+(kind and SQLSTATE, never the server's text, the statement or connection parameters).
 
 ## Statement catalog and partition guard
 

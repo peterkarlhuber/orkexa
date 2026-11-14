@@ -41,7 +41,8 @@ Without pglast, `orkexa.testing.sqlcheck` still imports; its first check raises
 [the tenant SQL rule engine](../reference/testing.md#the-tenant-sql-rule-engine)).
 Without psycopg, `orkexa.backends.postgres` still imports and opens no connection; creating a
 `PsycopgSource` (or calling `migrate`) raises `ImportError` naming `orkexa[postgres]` (see
-[PostgreSQL backends](../reference/backends-postgres.md)).
+[PostgreSQL backends](../reference/backends-postgres.md)). The `postgres` extra also names
+`tabrion[postgres]`, which is not on a package index yet: add `-r requirements/tabrion.txt` (pip 25.0 or newer).
 
 ## API keys
 

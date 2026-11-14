@@ -286,7 +286,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      # Every runtime dependency, all provider SDKs and optional extras, and the docs toolchain.
+      # Every runtime dependency, all provider SDKs and optional extras, and the docs toolchain. TABRION MIG-ORK-2:
+      # the extra "postgres" names Tabrion, which is not on a package index (VER-1); pip-audit cannot audit it and
+      # reports it as skipped (Tabrion's own CI audits it).
       - run: python -m pip install --upgrade pip
-      - run: pip install pip-audit==2.10.1 -e ".[all,pdf,vector,sqlcheck,postgres,docs]"
+      - run: pip install -r requirements/tabrion.txt pip-audit==2.10.1 -e ".[all,pdf,vector,sqlcheck,postgres,docs]"
       - run: pip-audit --skip-editable --progress-spinner off

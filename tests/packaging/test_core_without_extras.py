@@ -74,7 +74,7 @@ def test_the_packages_import_without_extras_and_open_no_connection() -> None:
         from orkexa import SQLiteIndex
         from orkexa.backends.postgres import PostgresIndex, PostgresLayout, verify_schema
         assert PostgresLayout("t_").table("chunks") == "t_chunks"
-        watched = {"psycopg", "pglast", "pytest", "_pytest"}
+        watched = {"psycopg", "pglast", "pytest", "_pytest", "tabrion"}  # tabrion: TABRION MIG-ORK-2
         loaded = sorted(m for m in sys.modules if m.split(".")[0] in watched and sys.modules[m] is not None)
         print(loaded)
         """

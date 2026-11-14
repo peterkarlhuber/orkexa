@@ -356,13 +356,35 @@ def _check_table(
     return schema
 
 
+def _error_text(exc: Exception) -> str:
+    """What a failed check reports: a database error by Tabrion's ``safe_message`` (TABRION MIG-ORK-2: no
+    server text such as ``DETAIL`` or the statement, no connection parameters), any other error as before.
+
+    Without Tabrion (it comes with the extra ``postgres``) a driver error is reported by its type name only.
+    """
+    plain = f"{type(exc).__name__}: {exc}".strip()
+    try:
+        from tabrion.errors import classify, safe_message
+    except ImportError:
+        if type(exc).__module__.partition(".")[0] in {"psycopg", "sqlalchemy", "sqlite3"}:
+            return type(exc).__name__
+        return plain
+    try:
+        if classify(exc).driver == "other":
+            return plain
+        return f"{type(exc).__name__}: {safe_message(exc)}"
+    except Exception:  # classify never raises by contract; the report must not either
+        return type(exc).__name__
+
+
 def verify_schema(source: ConnectionSource, layout: PostgresLayout) -> SchemaReport:
     """Check read-only that the database of ``source`` holds schema version 1 for ``layout``.
 
     Reads ``information_schema``, ``pg_indexes``, ``pg_extension`` and the version table of :func:`migrate`
     (when it exists) in one ``read`` transaction; changes nothing, needs no DDL privilege (a table the role
     may not use counts as missing) and never raises: a failing check (no connection, no psycopg) is a problem
-    of the kind ``error`` in the report.
+    of the kind ``error`` in the report. A database error is described by Tabrion's ``safe_message`` (kind and
+    SQLSTATE, never the server's text).
 
     Args:
         source: Gives the connection (the product's runtime role is enough).
@@ -397,7 +419,7 @@ def verify_schema(source: ConnectionSource, layout: PostgresLayout) -> SchemaRep
                         )
                     )
     except Exception as exc:  # never raises: the report says what failed
-        problems.append(SchemaProblem("error", "", "", f"{type(exc).__name__}: {exc}".strip()))
+        problems.append(SchemaProblem("error", "", "", _error_text(exc)))
     return SchemaReport(prefix, schema, version, pgvector is not None, pgvector, tuple(problems))
 
 

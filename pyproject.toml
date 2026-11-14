@@ -51,7 +51,10 @@ convert = ["gguf>=0.17,<1"]
 sqlcheck = ["pglast>=7,<9"]
 # MUP-ONA B5: the PostgreSQL backend orkexa.backends.postgres. Only the driver: no "binary" (libpq comes from the
 # system or the product chooses psycopg[binary]) and no "pool" (PsycopgSource keeps a small pool of its own).
-postgres = ["psycopg>=3.2,<4"]
+# TABRION MIG-ORK-2: PsycopgSource's session settings and ping and the safe error texts of verify_schema use
+# tabrion.postgres / tabrion.errors. A range of final versions only (RC-1, RC-8); without a package index install
+# with -r requirements/tabrion.txt (TABRION VER-1).
+postgres = ["psycopg>=3.2,<4", "tabrion[postgres]>=0.1,<0.2"]
 docs = [
     "mkdocs>=1.6,<2",  # MkDocs 2 drops the plugin system that Material and mkdocstrings use
     "mkdocs-material>=9.5",
