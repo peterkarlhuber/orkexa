@@ -70,4 +70,4 @@ dependencies with `pip-audit`.
 3. Describe what changed and why, and how you tested it.
 4. Make sure all checks pass.
 
-Contributions are accepted under the project's [MIT License](LICENSE).
+Contributions are accepted only with Levuvo's written consent and under the project's [license](LICENSE).
