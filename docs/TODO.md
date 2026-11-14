@@ -181,7 +181,8 @@ None known.
   requests); the installed-pin test only detects an accidental index install (`direct_url.json` can be forged by a
   wheel). Open: the copy names an unmerged nodestro-studio commit as its origin until the studio's DC-NS-2 branch is
   merged.
-- **Next step:** after the studio merge, update the origin commit; close this entry.
+- **Next step:** after the studio merge, update the origin commit; close this entry. Since the poisoned-0.2.99
+  copy (nodestro-studio #198) the origin commit is that PR's head `c036a29`; it moves to the merge commit too.
 
 ### ORK-030 · Live tests of the larger local models
 
