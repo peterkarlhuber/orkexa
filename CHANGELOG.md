@@ -5,6 +5,20 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: a poisoned index proves the Tabrion pin (TABRION DC-OR-1, 2026-11-13)
+
+* CI: a `poisoned index` leg of `tabrion-install` (reported by ci-ok) runs both installs with
+  `scripts/check_tabrion_source.py` (an unchanged, checksummed copy from nodestro-studio): an index serving a poisoned
+  `tabrion` must get no request for it, which proves that `-r requirements/tabrion.txt` keeps a foreign `tabrion` out.
+  The install must also use that index for the other packages and pass no option that bypasses it, and no poisoned
+  code may run.
+* `tests/architecture/test_tabrion_requirements.py::test_the_installed_tabrion_is_the_pin` (moved from an inline
+  check of the `tabrion-install` job): the installed Tabrion's `direct_url.json` must name
+  `https://github.com/peterkarlhuber/tabrion.git` at the commit of `requirements/tabrion.txt` and its final version,
+  in every job that runs the suite. It detects an accidental index install; it is no proof of origin (a wheel can
+  forge the file).
+* Dependabot ignores `tabrion` (it is not on PyPI; the pin moves by hand).
+
 ### Changed: the PostgreSQL test support uses `tabrion.testing` (TABRION MIG-ORK-1, 2026-11-13)
 
 * The `dev` extra names `tabrion[testing,postgres]>=0.1,<0.2` (a range of final versions, RC-1/RC-8; install with

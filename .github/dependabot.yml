@@ -19,6 +19,9 @@ updates:
       python-minor-and-patch:
         update-types: [minor, patch]
     ignore:
+      # Tabrion is not on PyPI (TABRION DC-OR-1): the pin in requirements/tabrion.txt moves by hand, and a PyPI
+      # project of that name is someone else's, so Dependabot never proposes it.
+      - dependency-name: tabrion
       - dependency-name: anthropic
         update-types: [version-update:semver-major]
       - dependency-name: openai
