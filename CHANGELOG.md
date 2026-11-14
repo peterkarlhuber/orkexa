@@ -5,6 +5,14 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: skill recommendations in the orchestration protocol (NAL-B4, 2026-11-14)
+
+* `Member.skills` names the skills a member's agents have; the decision prompt lists them (`skills: ...`).
+* `Delegate.skills` and `Assignment.skills` are optional (at most 8, `MAX_SKILL_HINTS`). The driver passes the
+  recommended names the member has as `Delegation.skills` and the others as `Delegation.ignored_skills`; a
+  recommendation is never refused and grants nothing. Records without the field read and replay unchanged, so the
+  protocol version stays 2.
+
 ### Changed: `orkexa.skills` hardened after an internal security review (NAL-B3, 2026-11-14)
 
 * Paths that are unsafe when a ZIP is unpacked on Windows are refused (`skill.unsafe_path` with reason

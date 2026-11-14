@@ -11,6 +11,7 @@ from .._aio import gather_or_cancel
 from ..dynamic.errors import BudgetExceededError
 from .protocol import (
     AnyDecision,
+    Assignment,
     Delegate,
     Member,
     OrchestrationLimits,
@@ -55,6 +56,10 @@ class Delegation:
         slot: The position of the assignment within the decision (0 for :class:`Delegate`).
         ref: When the assignment waited before: the reference it raised with :class:`DelegationSuspended`.
             The application continues that execution and must not start a new one.
+        skills: The skills the orchestrator recommended that the member has (:attr:`Member.skills`). The
+            application may point the member's agents to them; it grants nothing.
+        ignored_skills: Recommended names the member does not have; they are ignored (the application may log
+            them).
     """
 
     member: Member
@@ -63,6 +68,9 @@ class Delegation:
     step: int = 0
     slot: int = 0
     ref: str | None = None
+    #: The recommended skills the member has (NAL-B4), and the recommended names it does not have (ignored).
+    skills: tuple[str, ...] = ()
+    ignored_skills: tuple[str, ...] = ()
 
 
 class DelegationSuspended(Exception):
@@ -106,6 +114,8 @@ def _member_line(member: Member) -> str:
         parts.append(f"  does: {member.description}")
     if member.capabilities:
         parts.append(f"  capabilities: {', '.join(member.capabilities)}")
+    if member.skills:
+        parts.append(f"  skills: {', '.join(member.skills)}")
     if member.contract:
         parts.append(f"  result fields: {', '.join(member.contract)}")
     for parameter in member.parameters:
@@ -204,13 +214,21 @@ def _adapt(delegate: Any, execute: Any) -> Any:
     return lambda item: delegate(item.member, item.task)
 
 
+def _hints(member: Member, item: Assignment) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The recommended skills the member has and the ones it does not (in order, without repeats)."""
+    names = tuple(dict.fromkeys(name.strip() for name in item.skills if name.strip()))
+    known = set(member.skills)
+    return tuple(name for name in names if name in known), tuple(name for name in names if name not in known)
+
+
 def _assignments(decision: AnyDecision, pool: Pool, step: int, refs: list[str | None]) -> list[Delegation]:
     assert isinstance(decision, (Delegate, Parallel))
     found = []
     for slot, item in enumerate(decision.parts()):
         member = pool.get(item.member)
         assert member is not None
-        found.append(Delegation(member, item.task, dict(item.values), step, slot, refs[slot]))
+        hints = _hints(member, item)
+        found.append(Delegation(member, item.task, dict(item.values), step, slot, refs[slot], *hints))
     return found
 
 
@@ -270,7 +288,9 @@ def _resume_items(
             )
             continue
         slots.append(slot)
-        items.append(Delegation(member, item.task, dict(item.values), pending.index, slot, outcome.ref))
+        skills, ignored = _hints(member, item)
+        values = dict(item.values)
+        items.append(Delegation(member, item.task, values, pending.index, slot, outcome.ref, skills, ignored))
     return slots, items, gone
 
 

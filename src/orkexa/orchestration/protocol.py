@@ -46,6 +46,8 @@ MAX_TASK_CHARS = 20_000
 MAX_VALUE_CHARS = 4000
 MAX_PARALLEL = 10
 MAX_TEAM = 20
+#: The most skills an assignment may recommend (NAL-B4).
+MAX_SKILL_HINTS = 8
 
 OutcomeStatus = Literal["succeeded", "failed", "rejected", "cancelled", "expired", "waiting"]
 """How one delegation ended; ``waiting`` while the member waits for something outside (an approval)."""
@@ -84,6 +86,8 @@ class Member(_Frozen):
         capabilities: Short tags of what the member can do.
         contract: Field names the member's result promises (empty: free text).
         parameters: Values the orchestrator may set when it delegates (empty: only the task).
+        skills: Names of the skills the member's agents have (NAL-B4). The orchestrator may recommend some of
+            them for a task; a recommendation grants nothing, and names the member does not have are ignored.
     """
 
     id: str = Field(min_length=1, max_length=200)
@@ -93,6 +97,7 @@ class Member(_Frozen):
     capabilities: tuple[str, ...] = ()
     contract: tuple[str, ...] = ()
     parameters: tuple[Parameter, ...] = ()
+    skills: tuple[str, ...] = Field(default=(), max_length=200)
 
 
 class Pool(_Frozen):
@@ -136,6 +141,11 @@ class Assignment(_Frozen):
     member: str = Field(description="The id of the pool member.")
     task: str = Field(description="A complete task for the member; it does not see this conversation.")
     values: dict[str, Any] = Field(default_factory=dict, description="Values for the member's parameters.")
+    skills: tuple[str, ...] = Field(
+        default=(),
+        max_length=MAX_SKILL_HINTS,
+        description="Skills of the member (from its list) that suit the task; optional.",
+    )
 
 
 class Delegate(_Frozen):
@@ -147,10 +157,15 @@ class Delegate(_Frozen):
     values: dict[str, Any] = Field(
         default_factory=dict, description="Values for the member's parameters (only the ones it lists)."
     )
+    skills: tuple[str, ...] = Field(
+        default=(),
+        max_length=MAX_SKILL_HINTS,
+        description="Skills of the member (from its list) that suit the task; optional.",
+    )
     reason: str = Field(default="", description="Why this member, in one or two sentences.")
 
     def parts(self) -> tuple[Assignment, ...]:
-        return (Assignment(member=self.member, task=self.task, values=self.values),)
+        return (Assignment(member=self.member, task=self.task, values=self.values, skills=self.skills),)
 
 
 class Parallel(_Frozen):
