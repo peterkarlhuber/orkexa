@@ -36,6 +36,15 @@ listed here. The development version is `0.2.0.dev0`.
   capped); `SearXNGSearch(allow_private=False)` for multi-tenant hosts; hits with unusable URLs are dropped
   (`usable_hit_url`); deeply nested provider JSON is a `SearchUnavailable`.
 
+### Added: ADR 0016 on the responsibilities of the product family (2026-11-13)
+
+* ADR 0016 (`docs/architecture/decisions/0016-product-family-responsibilities.md`) records the owner decision of
+  2026-11-13: Orkexa owns provider-independent embedding and retrieval (chunking, vectorization, indexing, full-text,
+  semantic and hybrid search); Nodestro owns application-specific knowledge management, Axentra the SaaS backend
+  services, Tabrion the shared database infrastructure (not a vector database) and Tabrion Studio read-only
+  inspection. It supersedes the placement of the PostgreSQL retrieval backend in nodestro-studio ADR-0002, point 5.
+  Migration runners and connection pools stay per product. Docs only.
+
 ### Changed: a poisoned index proves the Tabrion pin (TABRION DC-OR-1, 2026-11-13)
 
 * CI: a `poisoned index` leg of `tabrion-install` (reported by ci-ok) runs both installs with
