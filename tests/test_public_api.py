@@ -374,6 +374,8 @@ SQLITE_CLASSES = {
 # MUP-ONA T-API-1
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_the_public_names_are_unchanged(module: str) -> None:
+    if module == "orkexa.net.http":  # needs the extra web (httpx); the core suite runs without extras
+        pytest.importorskip("httpx")
     imported = importlib.import_module(module)
     assert sorted(imported.__all__) == PUBLIC[module]
     for name in PUBLIC[module]:
