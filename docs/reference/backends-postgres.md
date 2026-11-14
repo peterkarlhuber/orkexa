@@ -9,9 +9,10 @@ behavior; Nodestro switches to them in MUP-ONA B6.
 pip install -r requirements/tabrion.txt "orkexa[postgres]"  # psycopg 3 and the pinned Tabrion; psycopg needs libpq
 ```
 
-The extra also names `tabrion[postgres]>=0.1,<0.2` (TABRION MIG-ORK-2). Tabrion is not on a package index yet:
-install it with `pip install -r requirements/tabrion.txt "orkexa[postgres]"` (pip 25.0 or newer; see
-`requirements/tabrion.txt` in the repository), or let the product's own Tabrion pin satisfy the range.
+The extra also names `tabrion[postgres]>=0.2,<0.3` (TABRION MIG-ORK-2; `>=0.1,<0.2` before the Tabrion 0.2.1
+switch). Tabrion is not on a package index yet: install it with
+`pip install -r requirements/tabrion.txt "orkexa[postgres]"` (pip 25.0 or newer; see `requirements/tabrion.txt` in
+the repository), or let the product's own Tabrion pin satisfy the range.
 
 `import orkexa` never imports this package, and `import orkexa.backends.postgres` works without psycopg and opens
 no connection. psycopg is imported when a connection is first needed (`PsycopgSource(...)`, `migrate`); without it
