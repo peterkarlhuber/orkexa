@@ -33,11 +33,11 @@ dependencies = [
 [project.optional-dependencies]
 anthropic = ["anthropic>=2.0,<3"]
 openai = ["openai>=3.0,<4"]
-gemini = ["google-genai>=2.0,<3"]
+gemini = ["google-genai>=2.0,<4"]
 # 1.43.80 is the first release whose Converse model has outputConfig.effort (structured output,
 # strict tools and serviceTier are older); boto3 and botocore share version numbers.
 bedrock = ["boto3>=1.43.80,<2"]
-all = ["anthropic>=2.0,<3", "openai>=3.0,<4", "google-genai>=2.0,<3", "boto3>=1.43.80,<2"]
+all = ["anthropic>=2.0,<3", "openai>=3.0,<4", "google-genai>=2.0,<4", "boto3>=1.43.80,<2"]
 # 6.21.4 is the first pypdf without a known advisory (OSV/GitHub, 2026-11-06: the last fixes, e.g.
 # GHSA-mfr5-77xh-9j7h, GHSA-cggf-277g-3q54 and GHSA-5849-834g-hvw5, are in 6.21.4; most advisories are
 # denial of service by memory or run time, which pdf_pages_isolated also bounds).
@@ -80,7 +80,7 @@ docs = [
 dev = [
     "anthropic>=2.0,<3",
     "openai>=3.0,<4",
-    "google-genai>=2.0,<3",
+    "google-genai>=2.0,<4",
     "boto3>=1.43.80,<2",
     "build>=1.2",
     "mypy>=1.13",
