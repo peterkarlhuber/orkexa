@@ -6,7 +6,7 @@ come from Nodestro's generic PostgreSQL backend (nodestro-runtime `pg_generic`, 
 behavior; Nodestro switches to them in MUP-ONA B6.
 
 ```bash
-pip install "orkexa[postgres]"    # psycopg 3; it needs libpq, or add "psycopg[binary]" for a bundled one
+pip install -r requirements/tabrion.txt "orkexa[postgres]"  # psycopg 3 and the pinned Tabrion; psycopg needs libpq
 ```
 
 The extra also names `tabrion[postgres]>=0.1,<0.2` (TABRION MIG-ORK-2). Tabrion is not on a package index yet:

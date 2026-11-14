@@ -129,7 +129,8 @@ def test_session_settings_and_ping_name_the_extra_without_tabrion() -> None:
         "    try:\n"
         "        attempt()\n"
         "    except ImportError as exc:\n"
-        "        assert 'pip install \"orkexa[postgres]\"' in str(exc) and exc.name == 'tabrion', exc\n"
+        "        assert 'pip install -r requirements/tabrion.txt \"orkexa[postgres]\"' in str(exc), exc\n"
+        "        assert exc.name == 'tabrion', exc\n"
         "    else:\n"
         "        raise AssertionError('no ImportError')\n"
         "print('ok')\n"
@@ -140,7 +141,7 @@ def test_session_settings_and_ping_name_the_extra_without_tabrion() -> None:
 
 def test_invalid_session_settings_are_refused_at_construction() -> None:
     for name in ("statement_timeout", "idle_in_transaction_timeout", "lock_timeout"):
-        for bad in (-1, -0.001, float("nan"), float("inf"), True, "1", 2_147_483.648):
+        for bad in (-1, -0.001, float("nan"), float("inf"), True, "1", 2_147_483.648, 1e306, 10**400):
             with pytest.raises(ValueError, match=name):
                 PsycopgSource("host=db", **{name: bad})
     for bad_name in ("ünïcode", "x" * 64, "tab\there"):

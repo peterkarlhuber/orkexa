@@ -55,7 +55,10 @@ MODES: frozenset[str] = frozenset({"read", "write", "transaction"})
 #: The message of the :class:`ImportError` raised when psycopg is missing.
 MISSING_PSYCOPG = 'The PostgreSQL backend needs psycopg: pip install "orkexa[postgres]"'
 #: The message of the :class:`ImportError` raised when Tabrion's PostgreSQL helpers are missing.
-_MISSING_TABRION = 'Session settings and ping of PsycopgSource need Tabrion: pip install "orkexa[postgres]"'
+_MISSING_TABRION = (
+    "Session settings and ping of PsycopgSource need Tabrion, which is not on a package index: "
+    'pip install -r requirements/tabrion.txt "orkexa[postgres]"'
+)
 #: A setting name for :class:`PsycopgSource` ``tenant_setting``: ``<prefix>.<name>`` (a custom setting).
 _SETTING = re.compile(r"[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*")
 #: The largest timeout PostgreSQL accepts (``INT_MAX`` milliseconds).
@@ -123,10 +126,15 @@ def _milliseconds(name: str, seconds: float | None) -> int | None:
     """A timeout in seconds (``0`` turns it off) in the milliseconds PostgreSQL counts; ``None`` stays."""
     if seconds is None:
         return None
-    if isinstance(seconds, bool) or not isinstance(seconds, int | float) or not math.isfinite(seconds):
+    if isinstance(seconds, bool) or not isinstance(seconds, int | float):
+        raise ValueError(f"{name} must be a finite number of seconds or None")
+    if isinstance(seconds, float) and not math.isfinite(seconds):
         raise ValueError(f"{name} must be a finite number of seconds or None")
     if seconds < 0:
         raise ValueError(f"{name} must be at least 0 seconds")
+    # A huge int or float is refused before the multiplication would overflow to infinity (OverflowError).
+    if seconds > _MAX_TIMEOUT_MS / 1000:
+        raise ValueError(f"{name} must be at most {_MAX_TIMEOUT_MS / 1000} seconds")
     milliseconds = math.ceil(seconds * 1000)
     if milliseconds > _MAX_TIMEOUT_MS:
         raise ValueError(f"{name} must be at most {_MAX_TIMEOUT_MS / 1000} seconds")
