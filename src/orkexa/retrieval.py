@@ -165,7 +165,9 @@ class RetrievalError(OrkexaError, RuntimeError):
     * ``schema.mismatch``: a database schema differs from what the backend needs (PostgreSQL backends).
     * ``storage.symlink``: a SQLite database path (or its journal, WAL or shared-memory file) is a
       symbolic link; :class:`SQLiteIndex`, :class:`~orkexa.SQLiteFileStore` and :class:`~orkexa.SQLiteMemory`
-      refuse it.
+      refuse it. Since TABRION MIG-ORK-3 also an existing file of another user or one writable by group or
+      others; ``reason`` says which: ``symlink``, ``other_owner``, ``writable_by_others`` or
+      ``unsafe_path`` (no regular file, or the path changed while it was opened).
     * ``storage.corrupt``: a SQLite database file is damaged or not a database; the
       ``sqlite3.DatabaseError`` is the ``__cause__``.
     * ``document.too_complex``: a PDF exceeds a :class:`PdfLimits` budget (:func:`pdf_pages`,
@@ -180,7 +182,8 @@ class RetrievalError(OrkexaError, RuntimeError):
         super().__init__(message)
         self.code = code
         self.reason = reason
-        """Which limit was hit, for ``document.too_complex``; otherwise ``None``."""
+        """Which limit was hit, for ``document.too_complex``; which rule refused the path, for
+        ``storage.symlink``; otherwise ``None``."""
 
 
 class VectorError(RetrievalError, ValueError):

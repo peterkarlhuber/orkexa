@@ -1,14 +1,15 @@
 """QA-16 (AC-1): the import-linter contracts follow the edge list K-33, and a forbidden import turns them red.
 
 Edge list K-33 of the Tabrion plan: Orkexa never imports Axentra, Nodestro or a Studio; ``orkexa[postgres]``
-may use ``tabrion[postgres]`` (the PostgreSQL backend); the core may import ``tabrion`` only after MIG-ORK-3
-(E-ORK-CORE).
+may use ``tabrion[postgres]`` (the PostgreSQL backend); the core may import only ``tabrion.sqlite`` and
+``tabrion.errors`` (MIG-ORK-3, E-ORK-CORE, plan doc 06 field 7).
 
 * ``lint-imports`` on an unmodified copy of the package passes (positive control;
   ``tests/test_public_api.py`` runs it on the repository).
 * Mutation probe (Tabrion plan 07 section 7): a copy with one forbidden import fails ``lint-imports`` and
   names the broken contract. Every contract has at least one probe.
-* The allowed edge ``orkexa.backends.postgres -> tabrion`` stays green.
+* The allowed edges ``orkexa.backends.postgres -> tabrion`` and core -> ``tabrion.sqlite``/``tabrion.errors``
+  stay green; the core contract names every other module of the installed tabrion.
 * The K-33 contract names every known platform package, and an AST scan catches any ``axentra*``,
   ``nodestro*``, ``levuvo*`` or ``*_studio`` package by prefix, which import-linter cannot express.
 """
@@ -33,7 +34,8 @@ PYPROJECT = ROOT / "pyproject.toml"
 FORBIDDEN_PREFIXES = ("axentra", "nodestro", "levuvo", "tabrion_studio")
 
 NO_PLATFORM = "Orkexa depends on no Axentra, Nodestro or Studio package (K-33)"
-CORE_NO_TABRION = "Core modules do not import tabrion until MIG-ORK-3 (E-ORK-CORE, K-33)"
+CORE_NO_TABRION = "Core modules import only tabrion.sqlite and tabrion.errors (MIG-ORK-3, K-33)"
+CORE_TABRION_ALLOWED = ("tabrion.sqlite", "tabrion.errors")
 CORE_NO_POSTGRES = "Core modules do not import orkexa.backends.postgres"
 CORE_NO_TESTING = "Core modules do not import orkexa.testing"
 CONTRACT_NO_BACKENDS = "Contract modules do not import orkexa.backends at runtime"
@@ -94,9 +96,10 @@ def test_unmodified_copy_is_kept(tmp_path: Path) -> None:
         ("providers/__init__.py", "import nodestro_api", NO_PLATFORM),
         ("flow/__init__.py", "import axentra_studio", NO_PLATFORM),
         ("tools.py", "import tabrion_studio", NO_PLATFORM),
-        ("_storage.py", "import tabrion", CORE_NO_TABRION),
-        ("backends/sqlite/index.py", "import tabrion.sqlite", CORE_NO_TABRION),
-        ("__init__.py", "import tabrion.errors", CORE_NO_TABRION),
+        ("_storage.py", "import tabrion.postgres", CORE_NO_TABRION),
+        ("backends/sqlite/index.py", "from tabrion._sa.database import Database", CORE_NO_TABRION),
+        ("__init__.py", "import tabrion", CORE_NO_TABRION),
+        ("retrieval.py", "import tabrion.config", CORE_NO_TABRION),
         ("testing/conformance/_core.py", "import tabrion.testing", CORE_NO_TABRION),
         ("core/types.py", "import orkexa.backends.postgres.connection", CORE_NO_POSTGRES),
         ("usage.py", "import orkexa.testing.fakes", CORE_NO_TESTING),
@@ -121,6 +124,23 @@ def test_mutation_probe_turns_red(tmp_path: Path, module: str, line: str, contra
 )
 def test_the_postgres_backend_may_import_tabrion(tmp_path: Path, module: str, line: str) -> None:
     """K-33: orkexa[postgres] -> tabrion[postgres] is an allowed edge (MIG-ORK-2)."""
+    root = _copy(tmp_path)
+    _inject(root / "src" / "orkexa" / module, line)
+    result = _lint_imports(root, root / "src")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "6 kept, 0 broken" in _report(result)
+
+
+@pytest.mark.parametrize(
+    ("module", "line"),
+    [
+        ("agent.py", "import tabrion.sqlite"),
+        ("retrieval.py", "from tabrion.errors import classify"),
+        ("testing/conformance/_core.py", "from tabrion import sqlite"),
+    ],
+)
+def test_the_core_may_import_tabrion_sqlite_and_errors(tmp_path: Path, module: str, line: str) -> None:
+    """K-33, E-ORK-CORE: orkexa -> tabrion (stdlib-only) is a required edge since MIG-ORK-3."""
     root = _copy(tmp_path)
     _inject(root / "src" / "orkexa" / module, line)
     result = _lint_imports(root, root / "src")
@@ -161,7 +181,31 @@ def test_core_tabrion_contract_covers_the_same_modules_as_the_postgres_contract(
     postgres_core = by_name[CORE_NO_POSTGRES]["source_modules"]
     assert isinstance(postgres_core, list)
     assert by_name[CORE_NO_TABRION]["source_modules"] == [*postgres_core, *testing]
-    assert by_name[CORE_NO_TABRION]["forbidden_modules"] == ["tabrion"]
+
+
+def test_core_tabrion_contract_names_every_other_module_of_tabrion() -> None:
+    """Field 7: every module of the installed tabrion but ``tabrion.sqlite``/``tabrion.errors`` is forbidden.
+
+    import-linter forbids only listed modules, so a module added to tabrion later must be added to the list.
+    """
+    tabrion = pytest.importorskip("tabrion")
+    package = Path(tabrion.__file__).parent
+    modules = {"tabrion"}
+    for path in package.rglob("*.py"):
+        parts = path.relative_to(package).with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        if parts:
+            modules.add(".".join(("tabrion", *parts)))
+    (contract,) = [c for c in _contracts() if c["name"] == CORE_NO_TABRION]
+    forbidden = contract["forbidden_modules"]
+    assert isinstance(forbidden, list)
+    covered = set(forbidden)
+    for name in modules - covered:
+        if any(name.startswith(prefix[: -len("**")]) for prefix in forbidden if prefix.endswith(".**")):
+            covered.add(name)
+    assert modules - covered == set(CORE_TABRION_ALLOWED), sorted(modules - covered)
+    assert not set(CORE_TABRION_ALLOWED) & set(forbidden)
 
 
 def _imported_top_levels(path: Path) -> set[str]:

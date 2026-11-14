@@ -5,8 +5,9 @@
   (:data:`CORE_SUITE`: contracts, SQLite, conformance, the PostgreSQL guard and prefix checks, the rule
   engine's skips, the public API) passes in a pytest run with ``psycopg`` and ``pglast`` blocked
   (``tests/packaging/block_extras.py``) and no third-party pytest plugin loaded. The CI job ``core-no-extras``
-  runs this file in an installation without any extra (``pip install . pytest``); the job ``test`` runs it
-  with the extras installed but blocked.
+  runs this file in an installation without any extra (``pip install -r requirements/tabrion.txt . pytest``:
+  the core requires the stdlib-only ``tabrion`` since TABRION MIG-ORK-3); the job ``test`` runs it with the
+  extras installed but blocked.
 * **T-PKG-2** ``import orkexa.backends.postgres`` works without psycopg; the clear message
   ``pip install "orkexa[postgres]"`` comes only on connection setup (``PsycopgSource``) or when a statement is
   rendered; ``verify_schema`` reports it instead of raising.
@@ -80,7 +81,8 @@ def test_the_packages_import_without_extras_and_open_no_connection() -> None:
         """
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "[]"
+    # TABRION MIG-ORK-3: the SQLite backends use the stdlib-only tabrion core, never its server layers.
+    assert result.stdout.strip() == "['tabrion', 'tabrion._version', 'tabrion.errors', 'tabrion.sqlite']"
 
 
 # MUP-ONA T-PKG-1

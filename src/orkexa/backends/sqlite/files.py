@@ -11,7 +11,7 @@ from contextlib import contextmanager
 import os
 from typing import Any
 
-from ..._storage import connect_private_database, storage_errors
+from ..._storage import connect_private_database, storage_errors, write_transaction
 from ...files import FileStore, StoredFile
 
 __all__ = ["SQLiteFileStore"]
@@ -84,14 +84,8 @@ class SQLiteFileStore(FileStore):
     @contextmanager
     def _transaction(self) -> Iterator[None]:
         # Two processes adding the same file must not both read "missing" and overwrite each other's entry.
-        with storage_errors():
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                yield
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            self._connection.execute("COMMIT")
+        with write_transaction(self._connection):  # BEGIN IMMEDIATE, rolled back on any error
+            yield
 
     def _save(self, entry: StoredFile, data: bytes | None) -> None:
         if data is None:

@@ -104,16 +104,16 @@ def _free_port() -> int:
 
 
 def test_the_default_source_imports_no_tabrion() -> None:
-    """Import isolation: ``import orkexa`` loads neither psycopg nor Tabrion, and a source without session
-    settings imports psycopg only."""
+    """Import isolation: ``import orkexa`` loads neither psycopg nor ``tabrion.postgres``, and a source
+    without session settings imports psycopg only (the core loads ``tabrion.sqlite`` since MIG-ORK-3)."""
     result = _python(
         "import sys\n"
         "import orkexa, orkexa.backends.postgres\n"
         "from orkexa.backends.postgres import PsycopgSource\n"
-        "watched = ('psycopg', 'tabrion')\n"
-        "print(sorted(m for m in sys.modules if m.split('.')[0] in watched))\n"
+        "watched = ('psycopg', 'tabrion.postgres')\n"
+        "print(sorted(m for m in sys.modules if m.startswith(watched)))\n"
         "PsycopgSource('host=db')\n"
-        "print(sorted(m for m in sys.modules if m.split('.')[0] == 'tabrion'))\n"
+        "print(sorted(m for m in sys.modules if m.startswith('tabrion.postgres')))\n"
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["[]", "[]"]
@@ -122,7 +122,7 @@ def test_the_default_source_imports_no_tabrion() -> None:
 def test_session_settings_and_ping_name_the_extra_without_tabrion() -> None:
     result = _python(
         "import sys\n"
-        "sys.modules['tabrion'] = None\n"
+        "sys.modules['tabrion.postgres'] = None\n"  # the core needs tabrion itself since MIG-ORK-3
         "from orkexa.backends.postgres import PsycopgSource\n"
         "source = PsycopgSource('host=db')\n"  # no setting: works without Tabrion, as before
         "for attempt in (lambda: PsycopgSource('host=db', statement_timeout=1), source.ping):\n"

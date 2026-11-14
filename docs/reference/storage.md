@@ -51,7 +51,7 @@ is discarded.
 | `vector.dimension` | a vector's length differs from the model's or the stored vectors' |
 | `partition.missing` | a partitioned backend got no valid partition (tenant) value (PostgreSQL backends) |
 | `schema.mismatch` | the database schema differs from what the backend needs (PostgreSQL backends) |
-| `storage.symlink` | a SQLite database path is a symbolic link |
+| `storage.symlink` | a SQLite database path is a symbolic link, or belongs to another user or is writable by group or others (`reason` says which) |
 | `storage.corrupt` | a SQLite database file is damaged or not a database |
 | `document.too_complex` | a PDF exceeds a `PdfLimits` budget (`reason` says which) |
 

@@ -8,10 +8,12 @@ process umask (which it never changes):
 * files written by replacement (histories, registry records): ``0600`` on every write;
 * new SQLite databases: ``0600``; SQLite gives its journal and WAL files the same mode.
 
-SQLite databases are opened by :func:`connect_private_database`: a database path (or its journal, WAL
-or shared-memory file) that is a symbolic link is refused (``storage.symlink``), and a damaged file is
-reported as ``storage.corrupt`` instead of a raw ``sqlite3.DatabaseError``
-(see :class:`~orkexa.retrieval.RetrievalError`).
+SQLite databases are opened by :func:`connect_private_database` through ``tabrion.sqlite`` (TABRION
+MIG-ORK-3, profile :data:`SQLITE_PROFILE`): a database path (or its journal, WAL or shared-memory file) that
+is a symbolic link, belongs to another user or is writable by group or others is refused
+(``storage.symlink``), and a damaged file is reported as ``storage.corrupt`` instead of a raw
+``sqlite3.DatabaseError`` (see :class:`~orkexa.retrieval.RetrievalError`). :func:`write_transaction` and
+:func:`read_transaction` are the transaction blocks of the SQLite backends.
 
 On Windows the mode bits only control the read-only flag; access is governed by the
 ACLs the new file inherits from its directory (by default private below the user
@@ -22,21 +24,34 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import contextlib
-import logging
 import os
 from pathlib import Path
 import sqlite3
 import tempfile
+from typing import TYPE_CHECKING
+
+from tabrion import sqlite as _tabrion_sqlite
+from tabrion.errors import Kind, UnsafePath, classify
+from tabrion.sqlite import JournalMode, SQLiteProfile, Synchronous
+
+if TYPE_CHECKING:
+    from .retrieval import RetrievalError
 
 PRIVATE_FILE_MODE = 0o600
 PRIVATE_DIR_MODE = 0o700
 
-logger = logging.getLogger("orkexa.storage")
+SQLITE_PROFILE = SQLiteProfile(
+    journal_mode=JournalMode.WAL,
+    synchronous=Synchronous.FULL,
+    foreign_keys=True,
+    busy_timeout=30.0,
+    secure_delete=True,
+)
+"""The profile of every Orkexa SQLite database (TABRION MIG-ORK-3, plan doc 06 field 4).
 
-# The primary result codes of a damaged database (SQLITE_CORRUPT, SQLITE_NOTADB); extended codes such as
-# SQLITE_CORRUPT_VTAB keep them in their low byte.
-_CORRUPT_CODES = (11, 26)
-_SQLITE_SIDE_FILES = ("-journal", "-wal", "-shm")
+WAL, ``synchronous=FULL``, foreign keys on, busy timeout 30 seconds, ``secure_delete`` on (deleted rows are
+overwritten instead of left in free pages of the file); Tabrion's defaults for the rest: ``trusted_schema``
+off, new files ``0600``, existing files of another user or writable by group or others refused."""
 
 
 def make_private_dirs(directory: str | os.PathLike[str]) -> None:
@@ -77,62 +92,60 @@ def write_private_text(path: str | os.PathLike[str], text: str) -> None:
         raise
 
 
-def create_private_file(path: str | os.PathLike[str]) -> None:
-    """Create an empty owner-only file if ``path`` does not exist yet.
+_UNSAFE_PATHS: dict[str, tuple[str, str]] = {
+    "sqlite.symlink": (
+        "symlink",
+        "The database path or one of its journal files is a symbolic link; use the real path",
+    ),
+    "sqlite.unsafe_owner": (
+        "other_owner",
+        "The database file or one of its journal files belongs to another user; Orkexa opens only files of"
+        " the user that runs it (change the owner with chown)",
+    ),
+    "sqlite.unsafe_mode": (
+        "writable_by_others",
+        "The database file or one of its journal files is writable by group or others; remove those"
+        " permissions (chmod go-w)",
+    ),
+    "sqlite.unsafe_path": (
+        "unsafe_path",
+        "The database path is no regular file of this user or changed while it was opened; use the real"
+        " path to a regular file",
+    ),
+}
+"""``tabrion.sqlite.UnsafePath`` codes -> (``RetrievalError.reason``, message) of ``storage.symlink``."""
 
-    Used before SQLite opens a database, so that the database (and the journal and
-    WAL files SQLite derives from it) is private from the start. An existing file
-    keeps its permissions. ``":memory:"`` is ignored.
-    """
-    if os.fspath(path) == ":memory:":
-        return
-    try:
-        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, PRIVATE_FILE_MODE)
-    except FileExistsError:
-        return
-    os.close(descriptor)
 
+def _unsafe_path(error: UnsafePath) -> RetrievalError:
+    """``storage.symlink`` for a refusal of ``tabrion.sqlite``; ``reason`` names the rule that refused."""
+    from .retrieval import RetrievalError
 
-def check_database_path(database: str | os.PathLike[str]) -> None:
-    """Refuse a database path that is a symbolic link, or whose journal, WAL or shared-memory file is one.
-
-    Raises :class:`~orkexa.retrieval.RetrievalError` (``storage.symlink``). A link would let whoever can write
-    the directory redirect the database (and its private ``0600`` files) to another file. The message names no
-    path; the path is logged at debug level. ``":memory:"`` is accepted.
-    """
-    path = os.fspath(database)
-    if path == ":memory:":
-        return
-    for candidate in (path, *(path + suffix for suffix in _SQLITE_SIDE_FILES)):
-        if os.path.islink(candidate):
-            from .retrieval import RetrievalError
-
-            logger.debug("refusing the symbolic link %s", candidate)
-            raise RetrievalError(
-                "storage.symlink",
-                "The database path or one of its journal files is a symbolic link; use the real path",
-            )
+    reason, message = _UNSAFE_PATHS.get(error.code, _UNSAFE_PATHS["sqlite.unsafe_path"])
+    return RetrievalError("storage.symlink", message, reason=reason)
 
 
 def is_corruption(error: BaseException) -> bool:
-    """Whether ``error`` reports a damaged database file (not a lock, a constraint or a bad statement)."""
+    """Whether ``error`` reports a damaged database file (not a lock, a constraint or a bad statement).
+
+    A ``sqlite3.DatabaseError`` that ``tabrion.errors.classify`` reports as ``Kind.CORRUPT``
+    (``SQLITE_CORRUPT``, ``SQLITE_NOTADB`` and their extended codes).
+    """
     if not isinstance(error, sqlite3.DatabaseError):
         return False
-    code = getattr(error, "sqlite_errorcode", None)
-    if code is not None:
-        return bool(code & 0xFF in _CORRUPT_CODES)
-    text = str(error).lower()
-    return "malformed" in text or "not a database" in text
+    return classify(error).kind is Kind.CORRUPT
 
 
 @contextlib.contextmanager
 def storage_errors() -> Iterator[None]:
     """Report a damaged database as :class:`~orkexa.retrieval.RetrievalError` (``storage.corrupt``).
 
-    The original ``sqlite3.DatabaseError`` stays attached as the cause. Other errors pass unchanged.
+    The original ``sqlite3.DatabaseError`` stays attached as the cause. A path that ``tabrion.sqlite``
+    refuses (``UnsafePath``) is ``storage.symlink``. Other errors pass unchanged.
     """
     try:
         yield
+    except UnsafePath as exc:
+        raise _unsafe_path(exc) from None
     except sqlite3.DatabaseError as exc:
         if not is_corruption(exc):
             raise
@@ -146,21 +159,31 @@ def storage_errors() -> Iterator[None]:
 def connect_private_database(database: str | os.PathLike[str]) -> sqlite3.Connection:
     """Open a SQLite database the way every Orkexa SQLite class does.
 
-    Refuses symbolic links (:func:`check_database_path`), creates a new file with mode ``0600``
-    (:func:`create_private_file`), enables ``secure_delete`` and, for files, WAL mode. The connection runs in
-    autocommit mode (``isolation_level=None``) and may be used from several threads under the caller's lock.
-    A damaged file raises ``storage.corrupt``.
+    ``tabrion.sqlite.connect`` under :data:`SQLITE_PROFILE`: refuses symbolic links and files of another
+    user or writable by group or others (``storage.symlink``), creates a new file with mode ``0600``,
+    enables ``secure_delete``, ``synchronous=FULL``, foreign keys, a busy timeout of 30 seconds and, for
+    files, WAL mode. The connection runs in autocommit mode (``isolation_level=None``) and may be used from
+    several threads under the caller's lock. A damaged file raises ``storage.corrupt``.
     """
-    check_database_path(database)
-    create_private_file(database)  # owner-only (0600) from the start; journals inherit it
-    connection = sqlite3.connect(database, isolation_level=None, check_same_thread=False, timeout=30)
-    try:
-        with storage_errors():
-            # Deleted rows are overwritten instead of left in free pages of the file.
-            connection.execute("PRAGMA secure_delete=ON")
-            if os.fspath(database) != ":memory:":
-                connection.execute("PRAGMA journal_mode=WAL")
-    except BaseException:
-        connection.close()
-        raise
-    return connection
+    with storage_errors():
+        return _tabrion_sqlite.connect(database, profile=SQLITE_PROFILE, check_same_thread=False)
+
+
+@contextlib.contextmanager
+def write_transaction(connection: sqlite3.Connection) -> Iterator[None]:
+    """A write transaction (``BEGIN IMMEDIATE``): committed on a normal exit, rolled back on any error.
+
+    ``tabrion.sqlite.write_transaction``; a damaged file raises ``storage.corrupt``. Callers hold their lock.
+    """
+    with storage_errors(), _tabrion_sqlite.write_transaction(connection):
+        yield
+
+
+@contextlib.contextmanager
+def read_transaction(connection: sqlite3.Connection) -> Iterator[None]:
+    """A read transaction: one snapshot of the file (WAL mode), with ``PRAGMA query_only`` for the block.
+
+    ``tabrion.sqlite.read_transaction``; a damaged file raises ``storage.corrupt``. Callers hold their lock.
+    """
+    with storage_errors(), _tabrion_sqlite.read_transaction(connection):
+        yield
