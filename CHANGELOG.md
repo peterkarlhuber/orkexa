@@ -5,6 +5,13 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: the poisoned tabrion inside Orkexa's range (TABRION DC-OR-1 follow-up, 2026-11-14)
+
+* `scripts/check_tabrion_source.py` is nodestro-studio's new copy (#198, SHA-256
+  `f1edfc71b5da4986547abe0824833fb73bba532cb5e6a00e202c9ff317747456`): the poisoned `tabrion` is 0.2.99 (was 0.1.0,
+  outside `>=0.2,<0.3`), so an install by range picks it over the pinned 0.2.1. The probe in
+  `tests/architecture/test_tabrion_source_check.py` installs by Orkexa's own range again (was `>=0.1,<0.2`).
+
 ### Fixed: Tabrion API check, `__x__` names under `--surface` (TABRION QA-7, 2026-11-14)
 
 * `scripts/check_tabrion_api.py --surface` no longer reports a `__x__` name such as
