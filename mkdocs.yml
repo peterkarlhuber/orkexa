@@ -124,6 +124,7 @@ nav:
       - ADR 0013 Bedrock credentials and residency: architecture/decisions/0013-bedrock-credentials-and-residency.md
       - ADR 0014 storage contracts and conformance: architecture/decisions/0014-storage-contracts-and-conformance.md
       - ADR 0015 statement catalog and SQL rule engine: architecture/decisions/0015-statement-catalog-and-sql-rule-engine.md
+      - ADR 0017 egress guard, web search and page fetching: architecture/decisions/0017-web-and-egress.md
   - Development:
       - development/index.md
       - Releasing: development/releasing.md

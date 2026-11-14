@@ -1,0 +1,14 @@
+{
+  "type": "news",
+  "query": {"original": "election"},
+  "results": [
+    {
+      "title": "Results are in",
+      "url": "https://news.example.org/2026/11/results",
+      "description": "Counting finished on <strong>Sunday</strong>.",
+      "age": "2 hours ago",
+      "page_age": "2026-11-13T08:00:00",
+      "meta_url": {"hostname": "news.example.org"}
+    }
+  ]
+}
