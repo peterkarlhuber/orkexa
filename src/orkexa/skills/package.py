@@ -347,7 +347,9 @@ def read_zip(data: bytes, *, limits: SkillLimits | None = None) -> SkillPackage:
         files: dict[str, bytes] = {}
         total = 0
         for entry in entries:
-            name = entry.filename
+            # The stored name: zipfile turns backslashes into "/" only on Windows; a package reads the same
+            # everywhere.
+            name = entry.orig_filename
             if entry.is_dir() or _JUNK.search(name):
                 continue
             mode = entry.external_attr >> 16
