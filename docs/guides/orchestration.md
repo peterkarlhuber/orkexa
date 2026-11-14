@@ -96,3 +96,8 @@ if state.paused:
   the driver again with that state runs only the waiting members, with the `ref` they
   waited with, and asks the model nothing until they ended. `DelegationEnded("rejected")`,
   `"expired"` or `"cancelled"` reports a member that ended without a result.
+* **Skill recommendations:** a `Member` can list the skills its agents have (`skills`). The
+  orchestrator may name up to 8 of them in a `Delegate` or an `Assignment`. `item.skills`
+  holds the names the member has, and `item.ignored_skills` holds the rest, which are ignored.
+  A recommendation is never refused and grants nothing, and the application decides what
+  "recommended" means to the member's agents.
