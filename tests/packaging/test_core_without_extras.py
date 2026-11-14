@@ -164,3 +164,13 @@ def test_the_core_suite_passes_without_extras() -> None:
     summary = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
     assert result.returncode == 0, result.stdout[-5000:] + result.stderr[-2000:]
     assert " passed" in summary and "failed" not in summary and "error" not in summary, summary
+
+
+def test_the_readme_install_command_uses_the_pinned_tabrion_commit() -> None:
+    """README.md repeats the pin of requirements/tabrion.txt; both must name the same commit."""
+    import re
+
+    pin = re.search(r"tabrion\.git@([0-9a-f]{40})", (ROOT / "requirements" / "tabrion.txt").read_text())
+    assert pin is not None
+    readme = set(re.findall(r"tabrion\.git@([0-9a-f]{40})", (ROOT / "README.md").read_text(encoding="utf-8")))
+    assert readme == {pin.group(1)}

@@ -15,7 +15,8 @@ listed here. The development version is `0.2.0.dev0`.
   `read_transaction`. `nodestro.db` is now opened by Orkexa and nodestro-runtime (MIG-NOD-6) with the same rules.
 * Unchanged: the public API, the error codes, new databases and their `-wal`/`-shm` files `0600` under any umask,
   symbolic links refused (also for `-wal`, `-shm`, `-journal` and dangling links), damaged files as
-  `storage.corrupt` with the same message, the rollback of failing write blocks.
+  `storage.corrupt` with the same message, the rollback of failing write blocks, an empty path raising
+  `FileNotFoundError`.
 * Intended differences (listed one by one in `tests/test_sqlite_storage_snapshots.py` against
   `tests/fixtures/sqlite_storage_before.json`, written by the code before the switch):
   an existing database (or side file) writable by group or others or owned by another user is refused as

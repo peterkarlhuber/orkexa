@@ -105,7 +105,7 @@ _UNSAFE_PATHS: dict[str, tuple[str, str]] = {
     "sqlite.unsafe_mode": (
         "writable_by_others",
         "The database file or one of its journal files is writable by group or others; remove those"
-        " permissions (chmod go-w)",
+        " permissions from the database file and its -wal, -shm and -journal files (chmod go-w)",
     ),
     "sqlite.unsafe_path": (
         "unsafe_path",
@@ -165,6 +165,9 @@ def connect_private_database(database: str | os.PathLike[str]) -> sqlite3.Connec
     files, WAL mode. The connection runs in autocommit mode (``isolation_level=None``) and may be used from
     several threads under the caller's lock. A damaged file raises ``storage.corrupt``.
     """
+    if not os.fspath(database):
+        # tabrion would open an anonymous temporary database for ""; Orkexa keeps refusing it as before.
+        raise FileNotFoundError("The database path is empty")
     with storage_errors():
         return _tabrion_sqlite.connect(database, profile=SQLITE_PROFILE, check_same_thread=False)
 

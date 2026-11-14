@@ -31,7 +31,7 @@ _WRITABLE = {
     "cause": None,
     "code": "storage.symlink",
     "message": "The database file or one of its journal files is writable by group or others; remove those"
-    " permissions (chmod go-w)",
+    " permissions from the database file and its -wal, -shm and -journal files (chmod go-w)",
     "path_in_message": False,
     "reason": "writable_by_others",
 }
@@ -223,3 +223,8 @@ def test_the_core_imports_tabrion_sqlite_but_not_its_server_modules() -> None:
     assert not {
         name for name in loaded if name.startswith(("tabrion.postgres", "tabrion._sa", "tabrion.sqlalchemy"))
     }
+
+
+def test_an_empty_database_path_is_refused_as_before() -> None:
+    with pytest.raises(FileNotFoundError):
+        _storage.connect_private_database("")
