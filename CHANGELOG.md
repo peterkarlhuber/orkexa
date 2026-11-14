@@ -5,6 +5,15 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: `orkexa.skills` hardened after an internal security review (NAL-B3, 2026-11-14)
+
+* Paths that are unsafe when a ZIP is unpacked on Windows are refused (`skill.unsafe_path` with reason
+  `compatibility_character`, `windows_character`, `windows_name` or `reserved_name`).
+* `read_zip` refuses an archive whose end-of-central-directory record declares too many entries before zipfile
+  indexes it.
+* `render_activation` neutralises frame tags (`</skill_content>` and similar) inside the instructions, so they cannot
+  close the wrapper.
+
 ### Changed: TABRION 0.2.1 switch (2026-11-14)
 
 * The core, the extra `postgres` and the `dev` extra require `tabrion>=0.2,<0.3` instead of `>=0.1,<0.2`;
