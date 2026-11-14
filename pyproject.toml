@@ -7,7 +7,7 @@ name = "orkexa"
 version = "0.2.0.dev0"
 description = "Provider-independent Python agents and multi-agent systems: one runtime for Anthropic Claude, OpenAI, Google Gemini, Amazon Bedrock and OpenAI-compatible endpoints, with strict tools, memory, RAG, evaluation, dynamic agents and cost tracking."
 dynamic = ["readme"]
-license = "MIT"
+license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Peter Karlhuber" }]
@@ -151,8 +151,9 @@ show_missing = true
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-# scripts/check_dependency_policy.py is an unchanged, checksummed copy from nodestro-studio (TABRION QA-17), linted there.
-extend-exclude = ["docs/examples.md", "scripts/check_dependency_policy.py"]
+# scripts/check_dependency_policy.py and scripts/check_tabrion_source.py are unchanged, checksummed copies from
+# nodestro-studio (TABRION QA-17, DC-OR-1), linted there.
+extend-exclude = ["docs/examples.md", "scripts/check_dependency_policy.py", "scripts/check_tabrion_source.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]

@@ -12,10 +12,21 @@ The file holds exactly one requirement line in the canonical form
 and the SHA is the commit of a final Tabrion version listed in :data:`FINAL_TABRION_COMMITS`. A new pin adds
 its SHA there in the same change, which the reviewer checks against Tabrion's history. The pinned version
 satisfies every Tabrion range of the manifest. The probes below turn each rule red.
+
+TABRION DC-OR-1 (dependency confusion): the installed Tabrion's ``direct_url.json`` must name
+``https://github.com/peterkarlhuber/tabrion.git`` at the pinned commit and the version must be that commit's
+final; a Tabrion from a package index (no ``direct_url.json``), a local checkout or another commit fails, in
+every CI job that runs the suite (before, only the ``tabrion-install`` job checked it, inline). This detects
+an accidental index install; it is no proof of origin, because a wheel can ship a forged
+``direct_url.json``. The protection is the direct-URL pin (``-r requirements/tabrion.txt``), and the proof
+that it never asks an index for Tabrion is the ``poisoned index`` leg of ``tabrion-install``
+(``scripts/check_tabrion_source.py``: zero requests for ``tabrion``).
 """
 
 from __future__ import annotations
 
+from importlib import metadata
+import json
 from pathlib import Path
 import re
 import tomllib
@@ -222,3 +233,75 @@ def test_a_manifest_range_needs_the_pin_file() -> None:
 @pytest.mark.parametrize("item", ["tabrion>=0.1,<0.2", "tabrion[postgres]>=0.1.3,<0.2", "tabrion>=1.2,<2"])
 def test_a_range_of_one_minor_line_is_accepted(item: str) -> None:
     assert range_problem(Requirement(item)) is None
+
+
+def installed_problems(version: str, direct_url: dict[str, Any] | None, pin_sha: str) -> list[str]:
+    """Why the installed Tabrion (``version``, its ``direct_url.json``) is not the pin at ``pin_sha``."""
+    if not direct_url:
+        return [f"tabrion {version} has no direct_url.json: installed from a package index, not from the pin"]
+    url = str(direct_url.get("url", ""))
+    vcs = direct_url.get("vcs_info") or {}
+    commit = str(vcs.get("commit_id", ""))
+    if vcs.get("vcs") != "git":
+        return [f"tabrion {version} is not a git install ({url}); the pin is {pin_sha[:12]}"]
+    if url.removesuffix("/").removesuffix(".git") != "https://github.com/peterkarlhuber/tabrion":
+        return [f"tabrion is installed from {url}, not https://github.com/peterkarlhuber/tabrion.git"]
+    if commit != pin_sha:
+        return [f"tabrion is installed at {commit[:12] or '-'}, requirements/tabrion.txt pins {pin_sha[:12]}"]
+    expected = FINAL_TABRION_COMMITS.get(pin_sha)
+    if version != expected:
+        return [f"tabrion {version} is installed, the pinned commit is the final {expected}"]
+    return []
+
+
+def test_the_installed_tabrion_is_the_pin() -> None:
+    match = PIN.fullmatch(requirement_lines(REQUIREMENTS.read_text(encoding="utf-8"))[0])
+    assert match is not None
+    dist = metadata.distribution("tabrion")
+    text = dist.read_text("direct_url.json")
+    assert installed_problems(dist.version, json.loads(text) if text else None, match["sha"]) == []
+
+
+_URL = "https://github.com/peterkarlhuber/tabrion.git"
+
+
+@pytest.mark.parametrize(
+    ("version", "direct_url", "message"),
+    [
+        pytest.param("0.1.99", None, "installed from a package index", id="index"),
+        pytest.param(
+            "0.1.0",
+            {"url": "file:///src/tabrion", "dir_info": {"editable": True}},
+            "not a git install",
+            id="local",
+        ),
+        pytest.param(
+            "0.1.0",
+            {"url": _URL, "vcs_info": {"vcs": "git", "commit_id": "e" * 40}},
+            "installed at eeee",
+            id="other-commit",
+        ),
+        pytest.param(
+            "0.1.0",
+            {"url": "https://evil.invalid/tabrion.git", "vcs_info": {"vcs": "git", "commit_id": SHA}},
+            "installed from https://evil.invalid",
+            id="other-url",
+        ),
+        pytest.param(
+            "0.1.1",
+            {"url": _URL, "vcs_info": {"vcs": "git", "commit_id": SHA}},
+            "the final 0.1.0",
+            id="other-version",
+        ),
+    ],
+)
+def test_an_installed_tabrion_other_than_the_pin_turns_red(
+    version: str, direct_url: dict[str, Any] | None, message: str
+) -> None:
+    problems = installed_problems(version, direct_url, SHA)
+    assert len(problems) == 1 and message in problems[0], problems
+
+
+@pytest.mark.parametrize("url", [_URL, _URL.removesuffix(".git"), _URL + "/"])
+def test_the_pin_passes_in_any_url_spelling(url: str) -> None:
+    assert installed_problems("0.1.0", {"url": url, "vcs_info": {"vcs": "git", "commit_id": SHA}}, SHA) == []
