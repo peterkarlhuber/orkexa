@@ -2,6 +2,6 @@
 # pyproject.toml names Tabrion by a final range only (RC-1, RC-8); this file pins the one Tabrion that installs:
 #   python -m pip install -r requirements/tabrion.txt -e ".[dev]"
 # Use -r, never -c (pip 25.0 rejects a direct URL in a constraints file); pip 25.0 or newer is needed.
-# Exactly one requirement line, a full 40-hex commit SHA of a final Tabrion version (v0.1.0);
+# Exactly one requirement line, a full 40-hex commit SHA of a final Tabrion version (v0.2.1);
 # tests/architecture/test_tabrion_requirements.py checks this file and pyproject.toml.
-tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@d5821faa8742dea012abda3b663549c038d76543
+tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@af0458d54467571abfc1afdd44d76e1f4d727c06

@@ -64,12 +64,12 @@ def test_the_copy_holds_only_this_component() -> None:
     [
         pytest.param('["axentra>=0.1"]', None, "no edge orkexa -> axentra", id="library-to-library"),
         pytest.param(
-            '["tabrion[postgres]>=0.1,<0.2"]',
+            '["tabrion[postgres]>=0.2,<0.3"]',
             None,
             "are not in the policy's []",
             id="core-edge-without-extras",
         ),
-        pytest.param('["tabrion[postgres]>=0.1,<0.2"]', "pdf", "not allowed here", id="wrong-extra"),
+        pytest.param('["tabrion[postgres]>=0.2,<0.3"]', "pdf", "not allowed here", id="wrong-extra"),
         pytest.param('["tabrion_studio"]', "ui", "no edge orkexa -> tabrion-studio", id="studio"),
         pytest.param(
             '["tabrion[postgres] @ https://example.invalid/tabrion.whl"]', "postgres", "RC-1", id="direct-url"

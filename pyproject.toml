@@ -30,7 +30,7 @@ dependencies = [
     # TABRION MIG-ORK-3 (E-ORK-CORE): the SQLite backends open their databases through tabrion.sqlite (standard
     # library only). A range of final versions only (RC-1, RC-8); without a package index install with
     # -r requirements/tabrion.txt (TABRION VER-1).
-    "tabrion>=0.1,<0.2",
+    "tabrion>=0.2,<0.3",
     "typing-extensions>=4.14",
 ]
 
@@ -72,7 +72,7 @@ sqlcheck = ["pglast>=7,<9"]
 # TABRION MIG-ORK-2: PsycopgSource's session settings and ping and the safe error texts of verify_schema use
 # tabrion.postgres / tabrion.errors. A range of final versions only (RC-1, RC-8); without a package index install
 # with -r requirements/tabrion.txt (TABRION VER-1).
-postgres = ["psycopg>=3.2,<4", "tabrion[postgres]>=0.1,<0.2"]
+postgres = ["psycopg>=3.2,<4", "tabrion[postgres]>=0.2,<0.3"]
 docs = [
     "mkdocs>=1.6,<2",  # MkDocs 2 drops the plugin system that Material and mkdocstrings use
     "mkdocs-material>=9.5",
@@ -109,7 +109,7 @@ dev = [
     "ddgs>=9.16,<10",
     # TABRION MIG-ORK-1: tests/backends/postgres/support.py uses tabrion.testing. A range of final versions only
     # (RC-1, RC-8); without a package index install with -r requirements/tabrion.txt (TABRION VER-1).
-    "tabrion[testing,postgres]>=0.1,<0.2",
+    "tabrion[testing,postgres]>=0.2,<0.3",
 ]
 
 [project.scripts]
@@ -535,6 +535,8 @@ forbidden_modules = [
     "tabrion.migrations",
     "tabrion.postgres",
     "tabrion.postgres.**",
+    "tabrion.profilefile",
+    "tabrion.schema",
     "tabrion.sql",
     "tabrion.testing",
     "tabrion.testing.**",

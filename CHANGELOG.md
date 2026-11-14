@@ -14,6 +14,13 @@ listed here. The development version is `0.2.0.dev0`.
 * `render_activation` neutralises frame tags (`</skill_content>` and similar) inside the instructions, so they cannot
   close the wrapper.
 
+### Changed: TABRION 0.2.1 switch (2026-11-14)
+
+* The core, the extra `postgres` and the `dev` extra require `tabrion>=0.2,<0.3` instead of `>=0.1,<0.2`;
+  `requirements/tabrion.txt` pins the Tabrion 0.2.1 final commit `af0458d54467571abfc1afdd44d76e1f4d727c06`. No
+  Orkexa API or behavior change. The import contract "Core modules import only tabrion.sqlite and tabrion.errors"
+  also forbids Tabrion's new modules `tabrion.profilefile` and `tabrion.schema`.
+
 ### Added: `orkexa.skills` reads, checks and writes Agent Skills packages (NAL-B3, 2026-11-14)
 
 * `read_zip` and `parse_skill` read a package from ZIP bytes or `{path: bytes}`; `validate` lists findings of the
