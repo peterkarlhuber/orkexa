@@ -45,6 +45,7 @@ def _zip(
     with zipfile.ZipFile(buffer, "w", compression=method) as archive:
         for name, data in entries.items():
             info = zipfile.ZipInfo(name)
+            info.filename = name  # ZipInfo turns backslashes into "/" on Windows; store the name as given
             info.external_attr = mode << 16
             info.compress_type = method
             archive.writestr(info, data)
