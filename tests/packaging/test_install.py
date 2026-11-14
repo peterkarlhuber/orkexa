@@ -55,10 +55,14 @@ class Venv:
         self.python = path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
     def install(self, *requirements: str | Path) -> None:
+        # TABRION MIG-ORK-3: the core requires tabrion, which is on no package index (VER-1): the pin file
+        # installs the one final commit.
+        pin = ("-r", ROOT / "requirements" / "tabrion.txt")
+        links = ("--find-links", self.wheels)
         if UV is not None:
-            _run(UV, "pip", "install", "--python", self.python, "--find-links", self.wheels, *requirements)
+            _run(UV, "pip", "install", "--python", self.python, *links, *pin, *requirements)
         else:
-            _run(self.python, "-m", "pip", "install", "--find-links", self.wheels, *requirements)
+            _run(self.python, "-m", "pip", "install", *links, *pin, *requirements)
 
     def uninstall(self, *names: str) -> None:
         if UV is not None:

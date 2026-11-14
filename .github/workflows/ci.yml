@@ -91,7 +91,8 @@ jobs:
           ORKEXA_CONFORMANCE_JOB: lowest-versions
       - run: python scripts/check_skips.py junit-lowest-versions.xml tests/ci/skipped-lowest-versions.txt
 
-  # MUP-ONA B5 (T-PKG-1, T-PKG-2): the core without any extra. orkexa and pytest only; the packages import
+  # MUP-ONA B5 (T-PKG-1, T-PKG-2): the core without any extra. orkexa, its stdlib-only tabrion (required since
+  # TABRION MIG-ORK-3, on no package index: -r requirements/tabrion.txt) and pytest only; the packages import
   # without psycopg and pglast and open no connection, and the core suite passes.
   core-no-extras:
     name: core without extras
@@ -105,7 +106,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -e . "pytest==9.1.1"
+      - run: pip install -r requirements/tabrion.txt -e . "pytest==9.1.1"
       - run: python -c "import importlib.util as u; assert u.find_spec('psycopg') is None and u.find_spec('pglast') is None"
       - run: pytest tests/packaging/test_core_without_extras.py -v -rs --noconftest -p no:cacheprovider
 
@@ -279,7 +280,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[docs]"
+      - run: pip install -r requirements/tabrion.txt -e ".[docs]"
       - run: mkdocs build --strict
 
   audit:

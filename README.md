@@ -27,10 +27,13 @@ you asked for, Orkexa raises an error instead of silently doing something else.
 ## Installation
 
 ```bash
-pip install "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"
+pip install "tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@d5821faa8742dea012abda3b663549c038d76543" \
+    "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"
 ```
 
-The core needs only Pydantic. Each provider SDK is an extra: `orkexa[anthropic]`,
+The core needs only Pydantic and Tabrion's standard-library core (`tabrion.sqlite`, which opens the SQLite
+databases). Tabrion is not on a package index yet, so it is installed from the commit that
+`requirements/tabrion.txt` names (in a checkout: `pip install -r requirements/tabrion.txt -e .`). Each provider SDK is an extra: `orkexa[anthropic]`,
 `orkexa[openai]` (also for compatible endpoints), `orkexa[gemini]`, `orkexa[bedrock]`
 (Amazon Bedrock through `boto3`), or `orkexa[all]` with all of them;
 `orkexa[pdf]` and `orkexa[vector]` add PDF extraction and vector search; `orkexa[local]` and

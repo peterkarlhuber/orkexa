@@ -1,0 +1,442 @@
+{
+  "codes": {
+    "cancelled": "a reindex was cancelled",
+    "document.too_complex": "a PDF exceeds a PdfLimits budget",
+    "mode_unsupported": "the index cannot rank this way",
+    "partition.missing": "an operation of a partitioned backend has no valid partition (tenant) value",
+    "query.too_long": "the query exceeds the character or word limit of the index",
+    "reindex_required": "the vectors belong to another embedding model",
+    "schema.mismatch": "a database schema differs from what the backend needs",
+    "storage.corrupt": "a SQLite database file is damaged or not a database",
+    "storage.symlink": "a SQLite database path is a symbolic link",
+    "vector.dimension": "a vector's length differs from the embedding model's or the stored vectors'",
+    "vector.invalid": "a vector holds NaN or infinity",
+    "vector_incomplete": "not every chunk has a vector yet",
+    "vector_unavailable": "no embedding model or no vectors"
+  },
+  "corrupt": {
+    "SQLiteFileStore:random": {
+      "cause": "DatabaseError",
+      "code": "storage.corrupt",
+      "message": "The database file is damaged or not a SQLite database (file is not a database)",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteFileStore:truncated": {
+      "cause": "DatabaseError",
+      "code": "storage.corrupt",
+      "message": "The database file is damaged or not a SQLite database (database disk image is malformed)",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteIndex:random": {
+      "cause": "DatabaseError",
+      "code": "storage.corrupt",
+      "message": "The database file is damaged or not a SQLite database (file is not a database)",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteIndex:truncated": {
+      "cause": "DatabaseError",
+      "code": "storage.corrupt",
+      "message": "The database file is damaged or not a SQLite database (database disk image is malformed)",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteMemory:random": {
+      "cause": "DatabaseError",
+      "code": "storage.corrupt",
+      "message": "The database file is damaged or not a SQLite database (file is not a database)",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteMemory:truncated": {
+      "cause": "DatabaseError",
+      "code": "storage.corrupt",
+      "message": "The database file is damaged or not a SQLite database (database disk image is malformed)",
+      "path_in_message": false,
+      "reason": null
+    }
+  },
+  "existing": {
+    "600:SQLiteFileStore": {
+      "mode_after": "0o600",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "600:SQLiteIndex": {
+      "mode_after": "0o600",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "600:SQLiteMemory": {
+      "mode_after": "0o600",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "640:SQLiteFileStore": {
+      "mode_after": "0o640",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "640:SQLiteIndex": {
+      "mode_after": "0o640",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "640:SQLiteMemory": {
+      "mode_after": "0o640",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "644:SQLiteFileStore": {
+      "mode_after": "0o644",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "644:SQLiteIndex": {
+      "mode_after": "0o644",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "644:SQLiteMemory": {
+      "mode_after": "0o644",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "660:SQLiteFileStore": {
+      "mode_after": "0o660",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "660:SQLiteIndex": {
+      "mode_after": "0o660",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "660:SQLiteMemory": {
+      "mode_after": "0o660",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "664:SQLiteFileStore": {
+      "mode_after": "0o664",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "664:SQLiteIndex": {
+      "mode_after": "0o664",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "664:SQLiteMemory": {
+      "mode_after": "0o664",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "666:SQLiteFileStore": {
+      "mode_after": "0o666",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "666:SQLiteIndex": {
+      "mode_after": "0o666",
+      "outcome": {
+        "ok": "opened"
+      }
+    },
+    "666:SQLiteMemory": {
+      "mode_after": "0o666",
+      "outcome": {
+        "ok": "opened"
+      }
+    }
+  },
+  "files": {
+    "umask_002:SQLiteFileStore": {
+      "-shm": "0o600",
+      "-wal": "0o600",
+      "db": "0o600"
+    },
+    "umask_002:SQLiteIndex": {
+      "-shm": "0o600",
+      "-wal": "0o600",
+      "db": "0o600"
+    },
+    "umask_002:SQLiteMemory": {
+      "-shm": "0o600",
+      "-wal": "0o600",
+      "db": "0o600"
+    },
+    "umask_022:SQLiteFileStore": {
+      "-shm": "0o600",
+      "-wal": "0o600",
+      "db": "0o600"
+    },
+    "umask_022:SQLiteIndex": {
+      "-shm": "0o600",
+      "-wal": "0o600",
+      "db": "0o600"
+    },
+    "umask_022:SQLiteMemory": {
+      "-shm": "0o600",
+      "-wal": "0o600",
+      "db": "0o600"
+    }
+  },
+  "pragmas": {
+    "SQLiteFileStore:file": {
+      "busy_timeout": 30000,
+      "foreign_keys": 0,
+      "in_transaction": false,
+      "isolation_level": null,
+      "journal_mode": "wal",
+      "query_only": 0,
+      "secure_delete": 1,
+      "synchronous": 2,
+      "trusted_schema": 1
+    },
+    "SQLiteFileStore:memory": {
+      "busy_timeout": 30000,
+      "foreign_keys": 0,
+      "in_transaction": false,
+      "isolation_level": null,
+      "journal_mode": "memory",
+      "query_only": 0,
+      "secure_delete": 1,
+      "synchronous": 2,
+      "trusted_schema": 1
+    },
+    "SQLiteIndex:file": {
+      "busy_timeout": 30000,
+      "foreign_keys": 0,
+      "in_transaction": false,
+      "isolation_level": null,
+      "journal_mode": "wal",
+      "query_only": 0,
+      "secure_delete": 1,
+      "synchronous": 2,
+      "trusted_schema": 1
+    },
+    "SQLiteIndex:memory": {
+      "busy_timeout": 30000,
+      "foreign_keys": 0,
+      "in_transaction": false,
+      "isolation_level": null,
+      "journal_mode": "memory",
+      "query_only": 0,
+      "secure_delete": 1,
+      "synchronous": 2,
+      "trusted_schema": 1
+    },
+    "SQLiteMemory:file": {
+      "busy_timeout": 30000,
+      "foreign_keys": 0,
+      "in_transaction": false,
+      "isolation_level": null,
+      "journal_mode": "wal",
+      "query_only": 0,
+      "secure_delete": 1,
+      "synchronous": 2,
+      "trusted_schema": 1
+    },
+    "SQLiteMemory:memory": {
+      "busy_timeout": 30000,
+      "foreign_keys": 0,
+      "in_transaction": false,
+      "isolation_level": null,
+      "journal_mode": "memory",
+      "query_only": 0,
+      "secure_delete": 1,
+      "synchronous": 2,
+      "trusted_schema": 1
+    }
+  },
+  "symlink": {
+    "SQLiteFileStore:-journal": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteFileStore:-shm": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteFileStore:-wal": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteFileStore:dangling": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null,
+      "target_created": false
+    },
+    "SQLiteFileStore:main": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteIndex:-journal": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteIndex:-shm": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteIndex:-wal": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteIndex:dangling": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null,
+      "target_created": false
+    },
+    "SQLiteIndex:main": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteMemory:-journal": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteMemory:-shm": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteMemory:-wal": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    },
+    "SQLiteMemory:dangling": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null,
+      "target_created": false
+    },
+    "SQLiteMemory:main": {
+      "cause": null,
+      "code": "storage.symlink",
+      "message": "The database path or one of its journal files is a symbolic link; use the real path",
+      "path_in_message": false,
+      "reason": null
+    }
+  },
+  "transactions": {
+    "SQLiteFileStore:committed_write": {
+      "in_transaction": false,
+      "outcome": {
+        "ok": 1
+      },
+      "query_only": 0,
+      "rows": 1
+    },
+    "SQLiteFileStore:failing_write": {
+      "in_transaction": false,
+      "outcome": {
+        "message": "block failed",
+        "raised": "RuntimeError"
+      },
+      "query_only": 0,
+      "rows": 0
+    },
+    "SQLiteIndex:committed_write": {
+      "in_transaction": false,
+      "outcome": {
+        "ok": 1
+      },
+      "query_only": 0,
+      "rows": 1
+    },
+    "SQLiteIndex:failing_write": {
+      "in_transaction": false,
+      "outcome": {
+        "message": "block failed",
+        "raised": "RuntimeError"
+      },
+      "query_only": 0,
+      "rows": 0
+    },
+    "SQLiteIndex:write_in_read": {
+      "in_transaction": false,
+      "outcome": {
+        "ok": "written"
+      },
+      "query_only": 0,
+      "rows": 2
+    },
+    "SQLiteMemory:committed_write": {
+      "in_transaction": false,
+      "outcome": {
+        "ok": 1
+      },
+      "query_only": 0,
+      "rows": 1
+    },
+    "SQLiteMemory:failing_write": {
+      "in_transaction": false,
+      "outcome": {
+        "message": "block failed",
+        "raised": "RuntimeError"
+      },
+      "query_only": 0,
+      "rows": 0
+    }
+  }
+}

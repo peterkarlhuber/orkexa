@@ -27,6 +27,10 @@ classifiers = [
 ]
 dependencies = [
     "pydantic>=2.6,<3",
+    # TABRION MIG-ORK-3 (E-ORK-CORE): the SQLite backends open their databases through tabrion.sqlite (standard
+    # library only). A range of final versions only (RC-1, RC-8); without a package index install with
+    # -r requirements/tabrion.txt (TABRION VER-1).
+    "tabrion>=0.1,<0.2",
     "typing-extensions>=4.14",
 ]
 
@@ -196,7 +200,9 @@ known-first-party = ["orkexa"]
 # checks that the lists below name every top-level module (and, in the first contract, every backend but
 # postgres, B5), so a new module cannot slip past the contracts. CI runs `lint-imports` (job "test").
 [tool.importlinter]
-root_packages = ["orkexa"]
+# tabrion is a root package too, so that a contract can name its submodules (import-linter forbids only whole
+# external packages); no contract has tabrion as a source.
+root_packages = ["orkexa", "tabrion"]
 # QA-16: the K-33 contracts below forbid packages outside Orkexa (import-linter needs the external packages in the graph).
 include_external_packages = true
 
@@ -419,7 +425,7 @@ forbidden_modules = [
 
 # QA-16 (AC-1, edge list K-33 of the Tabrion plan): Orkexa never imports Axentra, Nodestro or a Studio. Tabrion is an
 # allowed edge for orkexa.backends.postgres (orkexa[postgres] -> tabrion[postgres], MIG-ORK-2); the core below may
-# import tabrion only once MIG-ORK-3 is merged (owner decision E-ORK-CORE), which removes the second contract.
+# import only tabrion.sqlite and tabrion.errors (MIG-ORK-3, owner decision E-ORK-CORE, plan doc 06 field 7).
 # tests/architecture/test_forbidden_probe.py turns each contract red with a forbidden import in a copy of the package.
 [[tool.importlinter.contracts]]
 name = "Orkexa depends on no Axentra, Nodestro or Studio package (K-33)"
@@ -440,7 +446,7 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Core modules do not import tabrion until MIG-ORK-3 (E-ORK-CORE, K-33)"
+name = "Core modules import only tabrion.sqlite and tabrion.errors (MIG-ORK-3, K-33)"
 type = "forbidden"
 as_packages = false
 source_modules = [
@@ -507,7 +513,24 @@ source_modules = [
     "orkexa.testing",
     "orkexa.testing.**",
 ]
-forbidden_modules = ["tabrion"]
+# Every other part of tabrion (its package __init__ exports the SQLAlchemy layer lazily); the server layers
+# tabrion.postgres and tabrion._sa (tabrion's SQLAlchemy layer) stay behind the extras. A module added to tabrion
+# later is caught by tests/architecture/test_forbidden_probe.py, which lists tabrion's modules.
+forbidden_modules = [
+    "tabrion",
+    "tabrion._deprecated",
+    "tabrion._sa",
+    "tabrion._sa.**",
+    "tabrion._version",
+    "tabrion.check",
+    "tabrion.config",
+    "tabrion.migrations",
+    "tabrion.postgres",
+    "tabrion.postgres.**",
+    "tabrion.sql",
+    "tabrion.testing",
+    "tabrion.testing.**",
+]
 
 [tool.mypy]
 python_version = "3.11"

@@ -5,6 +5,33 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: the SQLite backends open their databases through `tabrion.sqlite` (TABRION MIG-ORK-3, 2026-11-14)
+
+* The core requires `tabrion>=0.1,<0.2` (owner decision E-ORK-CORE; the stdlib-only Tabrion core, a range of final
+  versions, RC-1/RC-8; without a package index install with `-r requirements/tabrion.txt`, pip 25.0 or newer).
+  `SQLiteIndex`, `SQLiteFileStore` and `SQLiteMemory` open their databases with `tabrion.sqlite.connect` under
+  `orkexa._storage.SQLITE_PROFILE` (WAL, `synchronous=FULL`, foreign keys on, busy timeout 30 s, `secure_delete`
+  on, `trusted_schema` off), and their transaction blocks use `tabrion.sqlite.write_transaction` and
+  `read_transaction`. `nodestro.db` is now opened by Orkexa and nodestro-runtime (MIG-NOD-6) with the same rules.
+* Unchanged: the public API, the error codes, new databases and their `-wal`/`-shm` files `0600` under any umask,
+  symbolic links refused (also for `-wal`, `-shm`, `-journal` and dangling links), damaged files as
+  `storage.corrupt` with the same message, the rollback of failing write blocks, an empty path raising
+  `FileNotFoundError`.
+* Intended differences (listed one by one in `tests/test_sqlite_storage_snapshots.py` against
+  `tests/fixtures/sqlite_storage_before.json`, written by the code before the switch):
+  an existing database (or side file) writable by group or others or owned by another user is refused as
+  `storage.symlink` (`reason` `writable_by_others` or `other_owner`, a message that says what to do; E-NOD-SD), a
+  group- or world-readable one still opens and keeps its mode; `storage.symlink` carries a `reason` (`symlink`,
+  `other_owner`, `writable_by_others`, `unsafe_path`); `PRAGMA foreign_keys` is on and `trusted_schema` off; the
+  index's read block runs with `PRAGMA query_only` (a write inside it fails); a damaged file found while `reindex`
+  writes its vectors is `storage.corrupt` instead of a raw `sqlite3.DatabaseError`; a nested write block raises
+  Tabrion's `UsageError` (`sqlite.nested_transaction`) instead of `sqlite3.OperationalError` (internal only).
+* Import contract "Core modules import only tabrion.sqlite and tabrion.errors (MIG-ORK-3, K-33)" replaces "Core
+  modules do not import tabrion until MIG-ORK-3" (tabrion is an import-linter root package, so the contract can
+  name its other modules; a test keeps the list complete). The `tabrion` edge test now blocks only Tabrion's server
+  layers; CI jobs that install the core without `.[dev]` (core without extras, docs, release, packaging tests) add
+  `-r requirements/tabrion.txt`. `docs/api-consumers.md` lists the new Tabrion names.
+
 ### Added: session settings and `ping` for `PsycopgSource` through `tabrion[postgres]` (TABRION MIG-ORK-2, 2026-11-14)
 
 * The extra `postgres` names `tabrion[postgres]>=0.1,<0.2` besides psycopg (a range of final versions, RC-1/RC-8;

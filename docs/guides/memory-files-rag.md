@@ -83,7 +83,7 @@ other searches or writes. The search tool reports the error to the model like an
 | --- | --- | --- |
 | `query.too_long` | `SQLiteIndex.retrieve`, `search`, the search tool | the query exceeds `max_query_chars` or `max_query_words` |
 | `vector.dimension` | `SQLiteIndex.retrieve` (`vector`, `hybrid`) | the query vector's length differs from the stored vectors' |
-| `storage.symlink` | the SQLite classes' constructors | the database path, or its `-wal`, `-shm` or `-journal` file, is a symbolic link; it is refused, not followed |
+| `storage.symlink` | the SQLite classes' constructors | the database path, or its `-wal`, `-shm` or `-journal` file, is a symbolic link (`reason` `symlink`), belongs to another user (`other_owner`) or is writable by group or others (`writable_by_others`); it is refused, not followed or changed |
 | `storage.corrupt` | the SQLite classes | the file is damaged or not a SQLite database; the `sqlite3.DatabaseError` is `__cause__` |
 | `document.too_complex` | `pdf_pages`, `pdf_pages_isolated`, `Index.add_file` | a PDF exceeds a budget; `exc.reason` says which (see [PDF limits](#pdf-limits)) |
 | `mode_unsupported`, `vector_unavailable`, `reindex_required`, `vector_incomplete`, `cancelled` | `SQLiteIndex` vector search and `reindex()` | see [Local models](local-models.md) |

@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 import os
 
-from ..._storage import connect_private_database, storage_errors
+from ..._storage import connect_private_database, storage_errors, write_transaction
 from ...memory import MemoryBackend
 
 __all__ = ["SQLiteMemory"]
@@ -82,14 +82,8 @@ class SQLiteMemory(MemoryBackend):
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
-        with storage_errors():
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                yield
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            self._connection.execute("COMMIT")
+        with write_transaction(self._connection):  # BEGIN IMMEDIATE, rolled back on any error
+            yield
 
     def _read(self, key: str) -> str | None:
         row = self._connection.execute(

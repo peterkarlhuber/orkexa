@@ -7,12 +7,26 @@ is used.
 | Name | Used in |
 |---|---|
 | `tabrion.errors.ConfigurationError` | `src/orkexa/backends/postgres/connection.py` |
-| `tabrion.errors.classify` | `src/orkexa/backends/postgres/schema.py` |
+| `tabrion.errors.Kind` | `src/orkexa/_storage.py` |
+| `tabrion.errors.Kind.CORRUPT` | `src/orkexa/_storage.py` |
+| `tabrion.errors.UnsafePath` | `src/orkexa/_storage.py`, `tests/test_sqlite_storage_snapshots.py` |
+| `tabrion.errors.UsageError` | `tests/test_sqlite_storage_snapshots.py` |
+| `tabrion.errors.classify` | `src/orkexa/_storage.py`, `src/orkexa/backends/postgres/schema.py` |
 | `tabrion.errors.safe_message` | `src/orkexa/backends/postgres/schema.py` |
 | `tabrion.postgres` | `src/orkexa/backends/postgres/connection.py` |
 | `tabrion.postgres.SessionSettings` | `src/orkexa/backends/postgres/connection.py` |
 | `tabrion.postgres.ping` | `src/orkexa/backends/postgres/connection.py` |
 | `tabrion.postgres.session_configurator` | `src/orkexa/backends/postgres/connection.py` |
+| `tabrion.sqlite` | `src/orkexa/_storage.py` |
+| `tabrion.sqlite.JournalMode` | `src/orkexa/_storage.py` |
+| `tabrion.sqlite.JournalMode.WAL` | `src/orkexa/_storage.py` |
+| `tabrion.sqlite.SQLiteProfile` | `src/orkexa/_storage.py`, `tests/test_sqlite_storage_snapshots.py` |
+| `tabrion.sqlite.SQLiteProfile.orkexa` | `tests/test_sqlite_storage_snapshots.py` |
+| `tabrion.sqlite.Synchronous` | `src/orkexa/_storage.py` |
+| `tabrion.sqlite.Synchronous.FULL` | `src/orkexa/_storage.py` |
+| `tabrion.sqlite.connect` | `src/orkexa/_storage.py` |
+| `tabrion.sqlite.read_transaction` | `src/orkexa/_storage.py` |
+| `tabrion.sqlite.write_transaction` | `src/orkexa/_storage.py` |
 | `tabrion.testing.configure` | `tests/backends/postgres/support.py` |
 | `tabrion.testing.require_extension` | `tests/backends/postgres/support.py` |
 | `tabrion.testing.tabrion_postgres_url` | `tests/backends/postgres/support.py` |

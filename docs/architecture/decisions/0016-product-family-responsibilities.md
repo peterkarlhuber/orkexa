@@ -56,7 +56,10 @@ Orkexa (`src/orkexa/backends/postgres/index.py`), and Nodestro adds only its pro
   TABRION MIG-ORK-1); it is development and test only. The runtime package, including the `postgres` extra
   (`psycopg>=3.2,<4`), does not require Tabrion, and the core may not import it until MIG-ORK-3 (contract "Core
   modules do not import tabrion until MIG-ORK-3"). MIG-ORK-2 is planned to add `tabrion[postgres]` to the extra
-  `postgres`.
+  `postgres`. *Update 2026-11-14:* MIG-ORK-2 added `tabrion[postgres]` to the extra `postgres`; MIG-ORK-3 (owner
+  decision E-ORK-CORE) makes the stdlib-only `tabrion` a core requirement: the SQLite backends open their databases
+  through `tabrion.sqlite`, and the core may import only `tabrion.sqlite` and `tabrion.errors` (contract "Core
+  modules import only tabrion.sqlite and tabrion.errors (MIG-ORK-3, K-33)").
 
 ## Consequences
 

@@ -2,9 +2,9 @@
 
 Orkexa's edges of the Tabrion plan (document 13, section 2.2; document 07, AC-3):
 
-* ``tabrion``: the core imports without Tabrion until MIG-ORK-3 (E-ORK-CORE); today only the ``dev``
-  extra names Tabrion (MIG-ORK-1, the test support), and this test keeps the core so until that step changes
-  the edge on purpose;
+* ``tabrion``: since MIG-ORK-3 (E-ORK-CORE) the core requires the stdlib-only ``tabrion``
+  (``tabrion.sqlite``, ``tabrion.errors``); the core imports with Tabrion's server layers
+  (``tabrion.postgres``, its SQLAlchemy layer ``tabrion._sa`` and ``tabrion.testing``) blocked;
 * ``postgres``: ``orkexa[postgres]`` brings psycopg and ``tabrion[postgres]`` (MIG-ORK-2); the core and
   ``orkexa.backends.postgres`` import without them, and the backend names the extra only on use.
 
@@ -71,11 +71,11 @@ class Edge:
 
 EDGES: dict[str, Edge] = {
     "tabrion": Edge(
-        blocked=("tabrion",),
+        blocked=("tabrion.postgres", "tabrion._sa", "tabrion.testing"),
         imports=(*CORE, "orkexa.backends.postgres"),
         refuses=(),
         hint="",
-        probe=("backends/sqlite/__init__.py", "import tabrion"),
+        probe=("backends/sqlite/__init__.py", "import tabrion.postgres"),
     ),
     "postgres": Edge(
         blocked=("psycopg", "psycopg_binary", "psycopg_c", "psycopg_pool", "tabrion.postgres"),
@@ -88,7 +88,8 @@ EDGES: dict[str, Edge] = {
 """K-33 edge -> its blocked-module check (exactly one test each)."""
 
 K33_EDGES = frozenset({"tabrion", "postgres"})
-"""Orkexa's optional edges in document 13, section 2.2 (``orkexa → tabrion`` is optional until E-ORK-CORE)."""
+"""Orkexa's Tabrion edges in document 13, section 2.2 (``orkexa → tabrion`` is required since MIG-ORK-3: only
+its stdlib-only core; ``postgres`` stays optional)."""
 
 
 def check_source(edge: Edge) -> str:
@@ -133,9 +134,7 @@ def test_every_k33_edge_has_exactly_one_test() -> None:
     assert set(EDGES) == K33_EDGES
     project = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]
     names = {re.split(r"[\[<>=~!; ]", r, maxsplit=1)[0].lower() for r in project["dependencies"]}
-    assert "tabrion" not in names, (
-        "orkexa -> tabrion became mandatory: MIG-ORK-3 must change the tabrion edge"
-    )
+    assert "tabrion" in names, "MIG-ORK-3 (E-ORK-CORE): the core requires tabrion"
     postgres = {
         re.split(r"[\[<>=~!; ]", r, maxsplit=1)[0].lower()
         for r in project["optional-dependencies"]["postgres"]

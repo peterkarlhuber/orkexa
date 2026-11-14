@@ -16,7 +16,7 @@ import struct
 import threading
 from typing import TYPE_CHECKING, Any
 
-from ..._storage import connect_private_database, storage_errors
+from ..._storage import connect_private_database, read_transaction, storage_errors, write_transaction
 from ...retrieval import (
     _MAX_SOURCES,
     HYBRID_FUSIONS,
@@ -404,8 +404,7 @@ class SQLiteIndex(Index):
                     "vector_unavailable", "The embedding model returned a wrong number of vectors"
                 )
             with self._lock:
-                self._connection.execute("BEGIN IMMEDIATE")
-                try:
+                with self._write():
                     for (chunk_id, text), vector in zip(rows, vectors, strict=True):
                         if len(vector) != identity.dimensions:
                             raise RetrievalError(
@@ -419,10 +418,6 @@ class SQLiteIndex(Index):
                             " SELECT ?, id, ? FROM index_chunks WHERE id = ? AND namespace = ? AND text = ?",
                             (space, self._vector(vector), chunk_id, self.namespace, text),
                         )
-                except BaseException:
-                    self._connection.execute("ROLLBACK")
-                    raise
-                self._connection.execute("COMMIT")
                 done = self._count_vectors(space)
             if progress is not None:
                 progress(done, total)
@@ -436,36 +431,28 @@ class SQLiteIndex(Index):
                 f"{identity.model} changed during the reindex; its new vectors were discarded,"
                 " call reindex() again",
             )
-        with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                missing = self._connection.execute(
-                    "SELECT count(*) FROM index_chunks c WHERE c.namespace = ? AND NOT EXISTS"
-                    " (SELECT 1 FROM index_vectors v WHERE v.space = ? AND v.chunk_id = c.id)",
-                    (self.namespace, space),
-                ).fetchone()[0]
-                if missing:  # chunks added meanwhile: the caller runs reindex() again
-                    raise RetrievalError(
-                        "vector_incomplete", f"{missing} chunks were added during the reindex"
-                    )
-                old = self._connection.execute(
-                    "SELECT space FROM index_spaces WHERE namespace = ? AND state = 'active' AND space != ?",
-                    (self.namespace, space),
-                ).fetchall()
-                for (previous,) in old:
-                    self._connection.execute("DELETE FROM index_vectors WHERE space = ?", (previous,))
-                    self._connection.execute(
-                        "DELETE FROM index_spaces WHERE namespace = ? AND space = ?",
-                        (self.namespace, previous),
-                    )
+        with self._lock, self._write():
+            missing = self._connection.execute(
+                "SELECT count(*) FROM index_chunks c WHERE c.namespace = ? AND NOT EXISTS"
+                " (SELECT 1 FROM index_vectors v WHERE v.space = ? AND v.chunk_id = c.id)",
+                (self.namespace, space),
+            ).fetchone()[0]
+            if missing:  # chunks added meanwhile: the caller runs reindex() again
+                raise RetrievalError("vector_incomplete", f"{missing} chunks were added during the reindex")
+            old = self._connection.execute(
+                "SELECT space FROM index_spaces WHERE namespace = ? AND state = 'active' AND space != ?",
+                (self.namespace, space),
+            ).fetchall()
+            for (previous,) in old:
+                self._connection.execute("DELETE FROM index_vectors WHERE space = ?", (previous,))
                 self._connection.execute(
-                    "UPDATE index_spaces SET state = 'active' WHERE namespace = ? AND space = ?",
-                    (self.namespace, space),
+                    "DELETE FROM index_spaces WHERE namespace = ? AND space = ?",
+                    (self.namespace, previous),
                 )
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            self._connection.execute("COMMIT")
+            self._connection.execute(
+                "UPDATE index_spaces SET state = 'active' WHERE namespace = ? AND space = ?",
+                (self.namespace, space),
+            )
         self.embeddings = model
         return self.vector_status()
 
@@ -476,14 +463,8 @@ class SQLiteIndex(Index):
         Two instances or processes must not read rows outside the transaction and write based on them
         (PS-8). Rolled back on any error; a damaged file raises ``storage.corrupt``. Callers hold the lock.
         """
-        with storage_errors():
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                yield
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            self._connection.execute("COMMIT")
+        with write_transaction(self._connection):
+            yield
 
     @contextmanager
     def _read(self) -> Iterator[None]:
@@ -492,12 +473,8 @@ class SQLiteIndex(Index):
         A search ranks chunk ids and then reads their rows; another instance or process may delete a ranked
         chunk in between. Inside one transaction the search still sees it. Callers hold the lock.
         """
-        with storage_errors():
-            self._connection.execute("BEGIN")
-            try:
-                yield
-            finally:
-                self._connection.execute("COMMIT")
+        with read_transaction(self._connection):  # with PRAGMA query_only for the block
+            yield
 
     def _discard(self, space: str) -> None:
         self._connection.execute("DELETE FROM index_vectors WHERE space = ?", (space,))
