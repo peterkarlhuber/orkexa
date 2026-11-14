@@ -1,0 +1,22 @@
+{
+  "query": "who maintains trafilatura",
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "trafilatura on GitHub",
+      "url": "https://github.com/adbar/trafilatura",
+      "content": "Python package and command-line tool to gather text on the Web.",
+      "score": 0.91,
+      "raw_content": null
+    },
+    {
+      "title": "trafilatura documentation",
+      "url": "https://trafilatura.readthedocs.io/",
+      "content": "Web scraping, text discovery and extraction.",
+      "score": 0.84,
+      "published_date": "2025-10-01"
+    }
+  ],
+  "response_time": 1.2
+}

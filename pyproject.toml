@@ -47,6 +47,20 @@ vector = ["sqlite-vec>=0.1.6"]
 local = ["zstandard>=0.23"]
 # Building models from upstream weights (orkexa.local.convert), e.g. mDenseOn.
 convert = ["gguf>=0.17,<1"]
+# NAL-A2 (ADR 0017): web search and page fetching (orkexa.web) on the egress guard client (orkexa.net.http). The
+# libraries are pure Python or ship wheels for the six desktop platforms (lxml and charset-normalizer, through
+# trafilatura); 6.21.4 is the pdf extra's pypdf floor (fetched PDFs are read by pdf_pages_isolated).
+web = [
+    "httpx>=0.27,<1",
+    "httpcore>=1.0.5,<2",
+    "anyio>=4.4,<5",
+    "trafilatura>=2.0,<3",
+    "charset-normalizer>=3.3,<4",
+    "pypdf>=6.21.4",
+]
+# NAL-A2: the DDGS metasearch adapter (orkexa.web.DDGSSearch). Never a default; primp ships wheels for the six
+# desktop platforms.
+web-ddgs = ["ddgs>=9.16,<10"]
 # MUP-ONA B5: the SQL rule engine orkexa.testing.sqlcheck (PostgreSQL's parser; the range nodestro-runtime uses).
 sqlcheck = ["pglast>=7,<9"]
 # MUP-ONA B5: the PostgreSQL backend orkexa.backends.postgres. Only the driver: no "binary" (libpq comes from the
@@ -79,6 +93,13 @@ dev = [
     "psycopg[binary]>=3.2,<4",
     # MUP-ONA B0: import contracts ([tool.importlinter] below; CI runs lint-imports).
     "import-linter>=2.1",
+    # NAL-A2: the extras web and web-ddgs (tests/net, tests/web).
+    "httpx>=0.27,<1",
+    "httpcore>=1.0.5,<2",
+    "anyio>=4.4,<5",
+    "trafilatura>=2.0,<3",
+    "charset-normalizer>=3.3,<4",
+    "ddgs>=9.16,<10",
     # TABRION MIG-ORK-1: tests/backends/postgres/support.py uses tabrion.testing. A range of final versions only
     # (RC-1, RC-8); without a package index install with -r requirements/tabrion.txt (TABRION VER-1).
     "tabrion[testing,postgres]>=0.1,<0.2",
@@ -139,7 +160,7 @@ markers = [
 [tool.coverage.run]
 source = ["orkexa"]
 # The PDF worker and probe run in child processes (tests/test_pdf_limits.py), outside coverage measurement.
-omit = ["*/dynamic/_sandbox_runner.py", "*/dynamic/docker/__main__.py", "*/_pdf_worker.py", "*/_pdf_probe.py"]
+omit = ["*/dynamic/_sandbox_runner.py", "*/dynamic/docker/__main__.py", "*/_pdf_worker.py", "*/_pdf_probe.py", "*/web/_html_worker.py"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -223,6 +244,8 @@ source_modules = [
     "orkexa.local.**",
     "orkexa.memory",
     "orkexa.memory.**",
+    "orkexa.net",
+    "orkexa.net.**",
     "orkexa.orchestration",
     "orkexa.orchestration.**",
     "orkexa.pricing",
@@ -235,6 +258,8 @@ source_modules = [
     "orkexa.tools.**",
     "orkexa.usage",
     "orkexa.usage.**",
+    "orkexa.web",
+    "orkexa.web.**",
 ]
 forbidden_modules = ["orkexa.*.postgres", "orkexa.*.postgres.**"]
 
@@ -284,6 +309,8 @@ source_modules = [
     "orkexa.local.**",
     "orkexa.memory",
     "orkexa.memory.**",
+    "orkexa.net",
+    "orkexa.net.**",
     "orkexa.orchestration",
     "orkexa.orchestration.**",
     "orkexa.pricing",
@@ -296,6 +323,8 @@ source_modules = [
     "orkexa.tools.**",
     "orkexa.usage",
     "orkexa.usage.**",
+    "orkexa.web",
+    "orkexa.web.**",
 ]
 forbidden_modules = ["*.testing", "*.testing.**"]  # = orkexa.testing (a literal name must exist)
 
@@ -363,6 +392,8 @@ forbidden_modules = [
     "orkexa.local.**",
     "orkexa.memory",
     "orkexa.memory.**",
+    "orkexa.net",
+    "orkexa.net.**",
     "orkexa.orchestration",
     "orkexa.orchestration.**",
     "orkexa.pricing",
@@ -375,6 +406,8 @@ forbidden_modules = [
     "orkexa.tools.**",
     "orkexa.usage",
     "orkexa.usage.**",
+    "orkexa.web",
+    "orkexa.web.**",
     "orkexa.testing.conformance",
     "orkexa.testing.conformance.**",
     "orkexa.testing.fakes",
@@ -450,6 +483,8 @@ source_modules = [
     "orkexa.local.**",
     "orkexa.memory",
     "orkexa.memory.**",
+    "orkexa.net",
+    "orkexa.net.**",
     "orkexa.orchestration",
     "orkexa.orchestration.**",
     "orkexa.pricing",
@@ -462,6 +497,8 @@ source_modules = [
     "orkexa.tools.**",
     "orkexa.usage",
     "orkexa.usage.**",
+    "orkexa.web",
+    "orkexa.web.**",
     # Plan 05 section 4.2: the core is everything but orkexa.backends.postgres, so orkexa.testing
     # (shipped in the core wheel) may not import tabrion either (QA-16 review C-1).
     "orkexa.testing",

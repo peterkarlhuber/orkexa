@@ -106,12 +106,15 @@ def run_worker(
     max_chars: int,
     worker_module: str = WORKER_MODULE,
     extra_header: dict[str, Any] | None = None,
+    module_directory: str | None = None,
 ) -> WorkerRun:
     """Run ``worker_module`` on ``data`` and return its JSON result (``None`` if it gave none).
 
     ``worker_module`` and ``extra_header`` exist for the isolation tests only (:mod:`orkexa._pdf_probe`, a
     diagnostic worker started the same way); the public :func:`~orkexa.retrieval.pdf_pages_isolated` always
-    uses :mod:`orkexa._pdf_worker` and accepts neither.
+    uses :mod:`orkexa._pdf_worker` and accepts neither. :func:`orkexa.web.fetch.html_to_text_isolated` starts
+    :mod:`orkexa.web._html_worker` the same way, with the directory of trafilatura as ``module_directory``
+    (default: the directory of pypdf) and the URL in ``extra_header``.
     """
     header = {
         "max_pages": max_pages,
@@ -125,7 +128,7 @@ def run_worker(
     workdir = tempfile.mkdtemp(prefix="orkexa-pdf-")  # mode 0700, empty
     posix = os.name == "posix"
     process = subprocess.Popen(
-        [sys.executable, "-I", "-m", worker_module, _pypdf_directory()],
+        [sys.executable, "-I", "-m", worker_module, module_directory or _pypdf_directory()],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
