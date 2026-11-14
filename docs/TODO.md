@@ -106,8 +106,8 @@ None known.
   `SECURITY.md`), and whether to deploy the docs site. (The actions are SHA-pinned, #20; `releasing.md` says so.)
 - **Next step:** The release rules (MUP-ONA B0, [Versioning and releases](development/releasing.md#versioning-and-releases))
   say no PyPI. If the owner decides to publish after all: complete the setup and make the workflow's tag check accept
-  `orkexa-vX.Y.Z`. Since TABRION MIG-ORK-3 the core requires `tabrion>=0.1,<0.2`, so Tabrion must be on PyPI first
-  (TABRION G-R).
+  `orkexa-vX.Y.Z`. Since TABRION MIG-ORK-3 the core requires a Tabrion range (now `tabrion>=0.2,<0.3`), so Tabrion
+  must be on PyPI first (TABRION G-R).
 
 ### ORK-011 · Deferred Bedrock features
 

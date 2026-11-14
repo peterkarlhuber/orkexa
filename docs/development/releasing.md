@@ -26,12 +26,12 @@ published, and it cannot upload anything until the one-time setup below is done.
   (`[tool.importlinter]` in `pyproject.toml`, checked with `lint-imports` in CI) keep
   the core modules free of `orkexa.backends.postgres` and `orkexa.testing`.
 * **Tabrion (TABRION VER-1, V-B0).** Orkexa is a library: `pyproject.toml` names
-  Tabrion only by a range of final versions such as `tabrion[testing,postgres]>=0.1,<0.2`,
+  Tabrion only by a range of final versions such as `tabrion[testing,postgres]>=0.2,<0.3`,
   never by a direct URL (RC-1) and never with a pre-release specifier (RC-8). Tabrion is
   not on a package index, so `requirements/tabrion.txt` pins the one Tabrion a standalone
   install uses: exactly one line
   `tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@<40-hex SHA>` on the commit
-  of a final Tabrion version (now v0.1.0, `d5821faa8742dea012abda3b663549c038d76543`).
+  of a final Tabrion version (now v0.2.1, `af0458d54467571abfc1afdd44d76e1f4d727c06`).
   Install it with `-r`, never `-c` (pip 25.0 refuses a direct URL in a constraints file),
   with pip 25.0 or newer:
 

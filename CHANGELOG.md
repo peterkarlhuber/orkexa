@@ -5,6 +5,13 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: TABRION 0.2.1 switch (2026-11-14)
+
+* The core, the extra `postgres` and the `dev` extra require `tabrion>=0.2,<0.3` instead of `>=0.1,<0.2`;
+  `requirements/tabrion.txt` pins the Tabrion 0.2.1 final commit `af0458d54467571abfc1afdd44d76e1f4d727c06`. No
+  Orkexa API or behavior change. The import contract "Core modules import only tabrion.sqlite and tabrion.errors"
+  also forbids Tabrion's new modules `tabrion.profilefile` and `tabrion.schema`.
+
 ### Changed: the SQLite backends open their databases through `tabrion.sqlite` (TABRION MIG-ORK-3, 2026-11-14)
 
 * The core requires `tabrion>=0.1,<0.2` (owner decision E-ORK-CORE; the stdlib-only Tabrion core, a range of final
