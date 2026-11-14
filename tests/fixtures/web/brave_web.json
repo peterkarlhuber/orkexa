@@ -1,0 +1,24 @@
+{
+  "type": "search",
+  "query": {"original": "rust async runtime", "more_results_available": true},
+  "web": {
+    "type": "search",
+    "results": [
+      {
+        "title": "Asynchronous Programming in <strong>Rust</strong>",
+        "url": "https://rust-lang.github.io/async-book/",
+        "description": "A book on <strong>async</strong> &amp; await in Rust.",
+        "age": "March 3, 2026",
+        "page_age": "2026-03-03T10:00:00",
+        "meta_url": {"scheme": "https", "hostname": "rust-lang.github.io", "path": "› async-book"}
+      },
+      {
+        "title": "Tokio - An asynchronous Rust runtime",
+        "url": "https://tokio.rs/",
+        "description": "Tokio is an event-driven, non-blocking I/O platform.",
+        "meta_url": {"hostname": "tokio.rs"}
+      },
+      {"title": "No URL here", "description": "dropped"}
+    ]
+  }
+}

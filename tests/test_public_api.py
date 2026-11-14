@@ -256,6 +256,56 @@ PUBLIC = {
         "ScriptedCall",
         "ScriptedClient",
     ],
+    "orkexa.net.guard": [  # NAL-A2; nodestro-runtime's MCP guard imports its core
+        "DEFAULT_MAX_BYTES",
+        "EgressError",
+        "EgressPolicy",
+        "GuardedBackend",
+        "IPAddress",
+        "LOOPBACK_HOSTS",
+        "METADATA_ADDRESSES",
+        "METADATA_HOSTS",
+        "Origin",
+        "PRIVATE_NETWORKS",
+        "Resolver",
+        "address_problem",
+        "host_problem",
+        "redact_url",
+        "system_resolver",
+        "url_secret_problem",
+    ],
+    "orkexa.net.http": [  # NAL-A2
+        "GuardedTransport",
+        "deadline",
+        "guarded_client",
+        "send_following_redirects",
+    ],
+    "orkexa.web": [  # NAL-A2
+        "BraveSearch",
+        "DDGSSearch",
+        "DDGS_BACKENDS",
+        "DEFAULT_ACCEPT",
+        "FetchError",
+        "FetchedPage",
+        "MojeekSearch",
+        "SearXNGSearch",
+        "SearchAuthFailed",
+        "SearchBadRequest",
+        "SearchCapabilities",
+        "SearchError",
+        "SearchHit",
+        "SearchKind",
+        "SearchProvider",
+        "SearchRateLimited",
+        "SearchRequest",
+        "SearchResponse",
+        "SearchUnavailable",
+        "TavilySearch",
+        "TestSearchProvider",
+        "TimeRange",
+        "fetch_page",
+        "usable_hit_url",
+    ],
     "orkexa.testing.sqlcheck": [  # MUP-ONA B5
         "ANY_REFUSED",
         "Finding",
@@ -266,7 +316,8 @@ PUBLIC = {
         "to_postgres_params",
     ],
 }
-"""``__all__`` of every public module of the storage and retrieval layer, plus the package itself."""
+"""``__all__`` of every public module of the storage and retrieval layer and of the web layer (NAL-A2),
+plus the package itself."""
 
 DEEP_PATHS = {
     # Nodestro (nodestro-runtime) imports these names from these modules, even where the package
@@ -323,6 +374,8 @@ SQLITE_CLASSES = {
 # MUP-ONA T-API-1
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_the_public_names_are_unchanged(module: str) -> None:
+    if module == "orkexa.net.http":  # needs the extra web (httpx); the core suite runs without extras
+        pytest.importorskip("httpx")
     imported = importlib.import_module(module)
     assert sorted(imported.__all__) == PUBLIC[module]
     for name in PUBLIC[module]:

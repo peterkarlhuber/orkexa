@@ -12,8 +12,8 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 4 |
-| P3 Low | 12 |
-| P4 Optional | 7 |
+| P3 Low | 13 |
+| P4 Optional | 8 |
 
 **Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
@@ -73,6 +73,16 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
   checkpoints and resumes them again after its own crash (by design), so it passes neither yet.
 - **Next step:** After the pin update, nodestro-runtime passes a per-installation `checkpoint_key` (from its secret
   store) and documents why it does not pass a claim (its journal and approval gate decide on a repeat).
+
+### ORK-043 · Independent review of the egress guard
+
+- **Priority:** P3 Low · **Status:** Needs external review · **Refs:** [ADR 0017](architecture/decisions/0017-web-and-egress.md),
+  `src/orkexa/net/guard.py`, `src/orkexa/net/http.py`, NAL-A2 (D1)
+- **What:** `orkexa.net.guard` generalizes nodestro-runtime's reviewed MCP guard (address rules, DNS pinning) and
+  adds request-level policy, manual redirects, the streamed size limit and the deadline. It has an internal SSRF
+  catalog (`tests/net`), no independent review yet.
+- **Next step:** Review it before `fetch_web_page` is enabled in a server profile (nodestro-runtime keeps it behind
+  `NODESTRO_WEB_TOOLS_SERVER` until then).
 
 ## Bugs and reliability
 
@@ -239,6 +249,16 @@ None known.
 
 ## Technical debt
 
+### ORK-042 · Watch httpx2 (httpx fork)
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** [ADR 0017](architecture/decisions/0017-web-and-egress.md),
+  extra `web`
+- **What:** `orkexa.net.http`, `fetch_page` and the search adapters use `httpx` and `httpcore`, whose last release
+  is from 12/2024; nodestro-runtime already uses the fork `httpx2`/`httpcore2` for MCP. `GuardedBackend` works with
+  both (`httpcore_module`), the client in `orkexa.net.http` only with `httpx`.
+- **Next step:** Switch the extra to `httpx2` when `httpx` breaks on a new Python version or a security fix lands
+  only in the fork; until then check both at each dependency round.
+
 ### ORK-041 · CI installs take any fresh upload from PyPI (upload cutoff)
 
 - **Priority:** P3 Low · **Status:** Open · **Refs:** `.github/workflows/platforms.yml` (offline suite, Windows
@@ -303,7 +323,9 @@ API snapshot, import contracts, release rules), the Orkexa part of MP-B1 (storag
 suite `orkexa.testing.conformance`, `ScriptedClient`), MP-B2 (SQLite backends in `orkexa.backends.sqlite`) and
 MP-B5 (`orkexa.testing.sqlcheck`, `orkexa.backends.postgres`, CI jobs `pg-a`, `pg-b`, `core-no-extras`) are in
 place; each entry is removed in the change that completes its package. Nodestro switches to the PostgreSQL
-backends in MP-B6 (nodestro-runtime).
+backends in MP-B6 (nodestro-runtime). [ADR 0016](architecture/decisions/0016-product-family-responsibilities.md)
+(2026-11-13) records that embedding and retrieval belong to Orkexa and that Tabrion stays a database layer without
+retrieval logic; new retrieval work (for example an ANN index) is planned here, not in Nodestro or Tabrion.
 
 ## Cross-repository dependencies
 
@@ -321,6 +343,7 @@ backends in MP-B6 (nodestro-runtime).
 | (done 2026-11-13, TABRION VER-1) | nodestro-studio | TABRION VER-1 (`scripts/check_versions.py`, RC-7 drift nightly) | The checker reads `requirements/tabrion.txt` (one canonical pin on a final Tabrion SHA) and compares it with the runtime's Tabrion SHA; an older final version of the same minor line is a notice, not an error |
 | (done 2026-11-13, TABRION MIG-ORK-1) | tabrion | `tabrion.testing` 0.1 (`configure`, `tabrion_postgres_url`, `require_extension`) | `tests/backends/postgres/support.py` uses them through the `dev` range `tabrion[testing,postgres]>=0.1,<0.2`; a new Tabrion minor needs the range raised after CI is green against it (RC-4), MIG-ORK-2 adds `tabrion[postgres]` to the extra `postgres` |
 | (done 2026-11-14, TABRION MIG-ORK-2) | tabrion, nodestro-runtime | `tabrion.postgres` 0.1 (`SessionSettings`, `session_configurator`, `ping`), `tabrion.errors` (`classify`, `safe_message`, `ConfigurationError`); PIN-W3 | The extra `postgres` names `tabrion[postgres]>=0.1,<0.2`; a product that installs `orkexa[postgres]` needs a Tabrion of that range (nodestro-runtime pins one since MIG-NOD-3); a new Tabrion minor needs both ranges raised after CI is green against it (RC-4). Merge only in wave W3, after PIN-W2 |
+| ORK-043 | nodestro-runtime | NAL-A2 (MCP guard on `orkexa.net.guard`, web tools) | With the next pin the runtime imports the guard core (`httpcore_module="httpcore2"`, its own `error()`); its MCP guard tests must stay unchanged |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
 
 ## Maintaining this file

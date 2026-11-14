@@ -1,0 +1,10 @@
+{
+  "response": {
+    "status": "OK",
+    "head": {"query": "independent search", "start": 1, "return": 2, "results": 1520, "timer": 0.08},
+    "results": [
+      {"url": "https://www.mojeek.com/about", "title": "About Mojeek", "desc": "An independent search engine with its own index.", "date": 1735689600},
+      {"url": "https://example.net/indie", "title": "Indie search engines", "desc": "A list &amp; comparison."}
+    ]
+  }
+}

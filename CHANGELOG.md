@@ -28,6 +28,46 @@ listed here. The development version is `0.2.0.dev0`.
   job installs `-r requirements/tabrion.txt` with the extras; pip-audit reports Tabrion as not on PyPI (skipped).
   `docs/api-consumers.md` lists the new Tabrion names.
 
+### Added: egress guard, web search and page fetching (NAL-A2, 2026-11-14)
+
+* `orkexa.net.guard` (standard library only): `EgressPolicy` (schemes, `allow_private`, `allow_hosts`,
+  `deny_hosts`, ports, `max_redirects`, `max_bytes`, `timeout`), `address_problem` (global unicast only; IPv4
+  embedded in IPv6, NAT64, 6to4 and Teredo; metadata addresses and names refused under every option), refusal of
+  numeric host forms (`2130706433`, `0x7f000001`, `127.1`, `0177.0.0.1`), and `GuardedBackend`, an `httpcore`
+  network backend that resolves once, checks every answer and connects to the checked address (DNS pinning).
+  Refusals raise `EgressError` with a `code` and a `reason`. The names, reasons and messages of nodestro-runtime's
+  MCP guard are kept, so the runtime can import the core (`httpcore_module`, overridable `error()`).
+* `orkexa.net.http` (extra `web`): `guarded_client`, `GuardedTransport`, `send_following_redirects` (every hop
+  checked again), `deadline` (one limit over name lookup, connects, redirects and body); no environment proxies,
+  identity encoding only, streamed byte limit.
+* `orkexa.web`: `SearchRequest`, `SearchResponse` (with `notes` and `billed_units`), `SearchHit`,
+  `SearchCapabilities`, the `SearchProvider` protocol and the errors `SearchUnavailable`, `SearchRateLimited`,
+  `SearchAuthFailed`, `SearchBadRequest`; adapters `TestSearchProvider` (deterministic, no network), `BraveSearch`,
+  `TavilySearch`, `MojeekSearch`, `SearXNGSearch` (through the guard) and `DDGSSearch` (extra `web-ddgs`; fixed
+  backends, never `books` or `extract`, an empty answer carries a blocking note). No provider is a default.
+  `fetch_page` returns a `FetchedPage` (Markdown via trafilatura or plain text, PDF text via
+  `pdf_pages_isolated`, character-set detection, truncation flag, SHA-256, redirects).
+* New extras `web` (httpx, httpcore, anyio, trafilatura, charset-normalizer, pypdf) and `web-ddgs` (ddgs), also in
+  `dev`; the Windows ARM64 CI install lists them. All are pure Python or have wheels for the six desktop
+  platforms. The import contracts cover `orkexa.net` and `orkexa.web`.
+* Tests: an SSRF catalog of more than 40 vectors (`tests/net`), the adapters against handwritten answers through
+  a mock transport, `fetch_page` fixtures (UTF-8, Latin-1, wrong header, PDF, empty page); a fixture fails any test
+  that tries a non-loopback lookup or connection. Design and threat model: ADR 0017. TODO: ORK-042 (watch
+  `httpx2`), ORK-043 (independent review of the guard).
+* Internal review fixes (ADR 0017 amendment): HTML is read in a separate, time- and memory-limited process
+  within the rest of the deadline (`html_to_text_isolated`, at most 2,000,000 characters, trafilatura's tree size
+  capped); `SearXNGSearch(allow_private=False)` for multi-tenant hosts; hits with unusable URLs are dropped
+  (`usable_hit_url`); deeply nested provider JSON is a `SearchUnavailable`.
+
+### Added: ADR 0016 on the responsibilities of the product family (2026-11-13)
+
+* ADR 0016 (`docs/architecture/decisions/0016-product-family-responsibilities.md`) records the owner decision of
+  2026-11-13: Orkexa owns provider-independent embedding and retrieval (chunking, vectorization, indexing, full-text,
+  semantic and hybrid search); Nodestro owns application-specific knowledge management, Axentra the SaaS backend
+  services, Tabrion the shared database infrastructure (not a vector database) and Tabrion Studio read-only
+  inspection. It supersedes the placement of the PostgreSQL retrieval backend in nodestro-studio ADR-0002, point 5.
+  Migration runners and connection pools stay per product. Docs only.
+
 ### Changed: a poisoned index proves the Tabrion pin (TABRION DC-OR-1, 2026-11-13)
 
 * CI: a `poisoned index` leg of `tabrion-install` (reported by ci-ok) runs both installs with
