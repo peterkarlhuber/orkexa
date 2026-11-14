@@ -16,6 +16,7 @@ for name in BLOCKED:
     sys.modules[name] = None
 def _no_network(*args, **kwargs):
     raise AssertionError("a network connection was opened on import")
+ORIGINAL = (socket.socket.connect, socket.create_connection, socket.getaddrinfo)
 socket.socket.connect = _no_network
 socket.create_connection = _no_network
 socket.getaddrinfo = _no_network
@@ -34,6 +35,9 @@ except MissingDependencyError as exc:
     assert 'orkexa[web]' in str(exc)
 else:
     raise AssertionError("orkexa.net.http imported without httpx")
+# The import checks are done. Restore the socket functions: on Windows, the asyncio event loop
+# connects a loopback socket pair for its self-pipe, which is not a network connection.
+socket.socket.connect, socket.create_connection, socket.getaddrinfo = ORIGINAL
 import asyncio
 for call in (lambda: web.fetch_page("https://example.com/"), lambda: web.BraveSearch("k").check()):
     try:
