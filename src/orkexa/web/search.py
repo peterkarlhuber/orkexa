@@ -9,11 +9,12 @@ from collections.abc import Mapping, Sequence
 import hashlib
 from typing import Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..errors import OrkexaError
 
 __all__ = [
+    "MAX_HIT_URL_CHARS",
     "SearchAuthFailed",
     "SearchBadRequest",
     "SearchCapabilities",
@@ -28,6 +29,7 @@ __all__ = [
     "TestSearchProvider",
     "TimeRange",
     "unsupported_notes",
+    "usable_hit_url",
 ]
 
 SearchKind = Literal["web", "news"]
@@ -76,14 +78,37 @@ class SearchHit(BaseModel):
     rank: int = Field(ge=1)
 
 
+#: The longest hit URL a response keeps.
+MAX_HIT_URL_CHARS = 2048
+
+
+def usable_hit_url(url: str) -> bool:
+    """Whether a hit's URL is kept: ``http``/``https``, at most :data:`MAX_HIT_URL_CHARS` characters, no
+    whitespace or control characters (a scraped ``href`` could otherwise carry text into a prompt)."""
+    if not 0 < len(url) <= MAX_HIT_URL_CHARS or not url.lower().startswith(("http://", "https://")):
+        return False
+    return not any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in url)
+
+
 class SearchResponse(BaseModel):
     """The hits of one search, the provider's name, notes (ignored parameters, empty answers) and the billed
-    units of the request (provider-specific: requests or credits; ``0`` for free providers)."""
+    units of the request (provider-specific: requests or credits; ``0`` for free providers).
+
+    Hits whose URL fails :func:`usable_hit_url` are dropped, with a note.
+    """
 
     hits: list[SearchHit]
     provider: str
     notes: list[str] = Field(default_factory=list)
     billed_units: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _drop_unusable_hits(self) -> SearchResponse:
+        kept = [hit for hit in self.hits if usable_hit_url(hit.url)]
+        if len(kept) != len(self.hits):
+            self.notes.append(f"{len(self.hits) - len(kept)} hit(s) with an unusable address were left out")
+            self.hits = kept
+        return self
 
 
 class SearchError(OrkexaError, RuntimeError):

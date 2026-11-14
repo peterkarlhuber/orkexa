@@ -11,7 +11,9 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 import hashlib
 from html.parser import HTMLParser
+from pathlib import Path
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
@@ -28,6 +30,14 @@ __all__ = ["DEFAULT_ACCEPT", "FetchError", "FetchedPage", "fetch_page"]
 DEFAULT_ACCEPT = frozenset({"text/html", "application/xhtml+xml", "text/plain", "application/pdf"})
 USER_AGENT = "Mozilla/5.0 (compatible; orkexa-fetch)"
 _HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
+#: At most this many characters of a decoded HTML page are parsed; a longer page is cut (``truncated=True``).
+MAX_HTML_CHARS = 2_000_000
+#: trafilatura gives up on a document tree with more elements than this (the plain-text fallback applies).
+MAX_TREE_SIZE = 50_000
+#: The memory limit of the HTML worker process (Linux only, like the PDF worker).
+HTML_MEMORY_MB = 1024
+#: The least time the HTML worker gets, even when the request used up most of the deadline.
+MIN_EXTRACT_SECONDS = 1.0
 
 
 class FetchedPage(BaseModel):
@@ -242,6 +252,15 @@ class _TextParser(HTMLParser):
         return " ".join("".join(self.title_parts).split()) or None
 
 
+def _trafilatura_config() -> Any:
+    from trafilatura.settings import use_config
+
+    config = use_config()
+    config.set("DEFAULT", "max_tree_size", str(MAX_TREE_SIZE))
+    config.set("DEFAULT", "external_urls", "off")
+    return config
+
+
 def html_to_text(markup: str, url: str | None = None) -> tuple[str | None, str]:
     """``(title, text)`` of an HTML page: trafilatura's Markdown of the main content, or plain text."""
     parser = _TextParser()
@@ -264,6 +283,7 @@ def html_to_text(markup: str, url: str | None = None) -> tuple[str | None, str]:
                 include_tables=True,
                 include_links=False,
                 include_images=False,
+                config=_trafilatura_config(),
             )
             or ""
         )
@@ -273,6 +293,52 @@ def html_to_text(markup: str, url: str | None = None) -> tuple[str | None, str]:
     except ImportError:  # pragma: no cover - trafilatura comes with orkexa[web]
         pass
     return title, text.strip() or parser.text()
+
+
+def _module_directory(name: str) -> str | None:
+    import importlib.util
+
+    spec = importlib.util.find_spec(name)
+    if spec is None or spec.origin is None:
+        return None
+    return str(Path(spec.origin).resolve().parent.parent)
+
+
+def html_to_text_isolated(
+    markup: str, url: str | None = None, *, timeout: float = 30.0, max_memory_mb: int = HTML_MEMORY_MB
+) -> tuple[str | None, str]:
+    """:func:`html_to_text` in a separate process that is stopped at ``timeout`` seconds (wall clock).
+
+    The process is started like the PDF worker (:func:`orkexa.retrieval.pdf_pages_isolated`): a new
+    interpreter with a minimal environment, an empty working directory, lowered CPU, file and (on Linux)
+    memory limits. Hostile markup can therefore not keep a thread of the caller busy or exhaust its memory.
+    Raises :class:`FetchError` (``fetch.unreadable``) when the time or memory budget is exceeded or parsing
+    fails.
+    """
+    from .._pdf_launch import run_worker
+
+    run = run_worker(
+        markup.encode("utf-8", errors="replace"),
+        timeout=timeout,
+        max_memory_mb=max_memory_mb,
+        max_pages=1,
+        max_chars=MAX_HTML_CHARS,
+        worker_module="orkexa.web._html_worker",
+        extra_header={"url": url},
+        module_directory=_module_directory("trafilatura"),
+    )
+    if run.timed_out:
+        raise FetchError("fetch.unreadable", f"Reading the page took longer than {timeout:g} seconds")
+    result = run.result
+    if result is None or result.get("ok") is not True:
+        reason = (
+            "the page needs more memory than allowed" if result and result.get("reason") == "memory" else ""
+        )
+        raise FetchError("fetch.unreadable", "The page cannot be read" + (f": {reason}" if reason else ""))
+    title, text = result.get("title"), result.get("text")
+    if not isinstance(text, str) or not (title is None or isinstance(title, str)):
+        raise FetchError("fetch.unreadable", "The page cannot be read")
+    return title, text
 
 
 # ---- fetching ----------------------------------------------------------------------------------------------
@@ -297,7 +363,10 @@ async def fetch_page(
     * The media type must be in ``accept``; a body without a type is sniffed (PDF header, HTML start tag).
       PDFs must start with the PDF header and are read in a separate, time- and memory-limited process
       (:func:`orkexa.retrieval.pdf_pages_isolated`) with at most ``max_pdf_pages`` pages.
-    * HTML becomes Markdown of the main content (trafilatura), or plain text when none is found.
+    * HTML becomes Markdown of the main content (trafilatura), or plain text when none is found. At most
+      :data:`MAX_HTML_CHARS` characters are parsed, in a separate time- and memory-limited process
+      (:func:`html_to_text_isolated`) that gets the rest of ``policy.timeout`` (at least
+      :data:`MIN_EXTRACT_SECONDS`).
 
     Raises :class:`~orkexa.net.guard.EgressError` (refused address, redirect limit, timeout, size of the
     whole answer) or :class:`FetchError`.
@@ -318,6 +387,7 @@ async def fetch_page(
     headers = {"User-Agent": user_agent, "Accept": _accept_header(accepted)}
     chunks: list[bytes] = []
     truncated = False
+    started = time.monotonic()
     try:
         async with guarded_client(
             policy, headers=headers, resolver=resolver, mock_transport=mock_transport
@@ -371,7 +441,11 @@ async def fetch_page(
         decoded, codec = decode_text(data, declared_charset, html=html, truncated=truncated)
         charset = codec
         if html:
-            title, text = await asyncio.to_thread(html_to_text, decoded, final_url)
+            if len(decoded) > MAX_HTML_CHARS:
+                decoded = decoded[:MAX_HTML_CHARS]
+                truncated = True
+            budget = max(MIN_EXTRACT_SECONDS, policy.timeout - (time.monotonic() - started))
+            title, text = await asyncio.to_thread(html_to_text_isolated, decoded, final_url, timeout=budget)
         else:
             text = decoded.strip()
     return FetchedPage(

@@ -28,6 +28,7 @@ from .search import (
     SearchUnavailable,
     TestSearchProvider,
     TimeRange,
+    usable_hit_url,
 )
 
 __all__ = [
@@ -54,4 +55,5 @@ __all__ = [
     "TestSearchProvider",
     "TimeRange",
     "fetch_page",
+    "usable_hit_url",
 ]

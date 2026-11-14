@@ -160,7 +160,7 @@ markers = [
 [tool.coverage.run]
 source = ["orkexa"]
 # The PDF worker and probe run in child processes (tests/test_pdf_limits.py), outside coverage measurement.
-omit = ["*/dynamic/_sandbox_runner.py", "*/dynamic/docker/__main__.py", "*/_pdf_worker.py", "*/_pdf_probe.py"]
+omit = ["*/dynamic/_sandbox_runner.py", "*/dynamic/docker/__main__.py", "*/_pdf_worker.py", "*/_pdf_probe.py", "*/web/_html_worker.py"]
 
 [tool.coverage.report]
 fail_under = 90

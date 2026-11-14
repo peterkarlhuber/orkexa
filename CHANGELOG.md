@@ -31,6 +31,10 @@ listed here. The development version is `0.2.0.dev0`.
   a mock transport, `fetch_page` fixtures (UTF-8, Latin-1, wrong header, PDF, empty page); a fixture fails any test
   that tries a non-loopback lookup or connection. Design and threat model: ADR 0017. TODO: ORK-042 (watch
   `httpx2`), ORK-043 (independent review of the guard).
+* Internal review fixes (ADR 0017 amendment): HTML is read in a separate, time- and memory-limited process
+  within the rest of the deadline (`html_to_text_isolated`, at most 2,000,000 characters, trafilatura's tree size
+  capped); `SearXNGSearch(allow_private=False)` for multi-tenant hosts; hits with unusable URLs are dropped
+  (`usable_hit_url`); deeply nested provider JSON is a `SearchUnavailable`.
 
 ### Changed: a poisoned index proves the Tabrion pin (TABRION DC-OR-1, 2026-11-13)
 

@@ -125,3 +125,18 @@ checks live in nodestro-runtime), compressed transfer encodings, HTTP/2, and liv
   stands in for public addresses, and a test fixture fails any test that tries a non-loopback lookup or connect.
 * The adapters are tested against handwritten answers from the providers' documentation, not recordings; the
   first live smoke test per provider may require small parser adjustments.
+
+## Amendment: internal review (2026-11-14)
+
+An internal review of the first implementation led to four changes; the independent external review (ORK-043)
+is still open.
+
+* HTML is turned into text in a separate process (`orkexa.web._html_worker`, started like the PDF worker), with
+  CPU, file and (on Linux) memory limits and at most the rest of `policy.timeout` (at least one second). At most
+  `MAX_HTML_CHARS` characters are parsed, and trafilatura gives up above `MAX_TREE_SIZE` elements. Before, a
+  5 MB page could keep a thread of the caller busy for about 30 to 50 seconds after the request deadline.
+* `SearXNGSearch(allow_private=False)` refuses private and loopback addresses for the instance; a multi-tenant
+  host must pass it, because a host name that resolves to the operator's network would otherwise be reachable.
+* `SearchResponse` drops hits whose URL is not `http`/`https`, longer than 2048 characters or contains whitespace
+  or control characters (`usable_hit_url`): scraped results could otherwise carry text into later prompts.
+* Deeply nested JSON from a provider is a `SearchUnavailable`, not an escaping `RecursionError`.

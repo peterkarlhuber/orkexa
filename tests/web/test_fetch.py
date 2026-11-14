@@ -239,3 +239,33 @@ def test_decode_text(data: bytes, declared: str | None, expected: tuple[str, str
         assert (text, codec) == expected
     else:
         assert text and codec
+
+
+# ---- review findings (internal A2 review) ------------------------------------------------------------------
+
+
+def test_html_is_read_in_a_separate_limited_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hostile markup cannot keep the caller busy: the worker is stopped at the rest of the deadline."""
+    from orkexa.web import fetch as fetch_module
+
+    seen: dict[str, Any] = {}
+    real = fetch_module.html_to_text_isolated
+
+    def spy(markup: str, url: str | None = None, *, timeout: float = 30.0, **kwargs: Any) -> Any:
+        seen["timeout"] = timeout
+        seen["chars"] = len(markup)
+        return real(markup, url, timeout=timeout, **kwargs)
+
+    monkeypatch.setattr(fetch_module, "html_to_text_isolated", spy)
+    page = fetch(html(b"<p>" + b"word " * 1_000_000 + b"</p>"), policy=EgressPolicy(timeout=12.0))
+    assert page.truncated and seen["chars"] == fetch_module.MAX_HTML_CHARS
+    assert fetch_module.MIN_EXTRACT_SECONDS <= seen["timeout"] <= 12.0
+
+
+def test_a_worker_over_its_time_budget_is_unreadable() -> None:
+    from orkexa.web.fetch import html_to_text_isolated
+
+    markup = "<table>" + "<tr><td>x</td><td>y</td></tr>" * 200_000 + "</table>"
+    with pytest.raises(FetchError) as caught:
+        html_to_text_isolated(markup, timeout=0.2)
+    assert caught.value.code == "fetch.unreadable"

@@ -304,6 +304,7 @@ PUBLIC = {
         "TestSearchProvider",
         "TimeRange",
         "fetch_page",
+        "usable_hit_url",
     ],
     "orkexa.testing.sqlcheck": [  # MUP-ONA B5
         "ANY_REFUSED",

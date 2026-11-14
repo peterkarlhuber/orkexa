@@ -142,7 +142,7 @@ class _HttpSearch:
             raise SearchUnavailable(f"{provider} answered HTTP {status}", provider=provider, status=status)
         try:
             return response.json()
-        except ValueError:
+        except (ValueError, RecursionError):  # RecursionError: deeply nested JSON
             raise SearchUnavailable(
                 f"{provider} sent an answer that is not JSON", provider=provider
             ) from None
@@ -423,8 +423,10 @@ class SearXNGSearch(_HttpSearch):
     """A SearXNG instance (``format=json`` must be enabled in its settings). Free; often self-hosted.
 
     The default policy allows exactly the instance's host and port and, because instances often run in the
-    local network, private addresses (``allow_private``); metadata addresses stay refused. ``headers`` go
-    with every request (for example a reverse proxy's authorization).
+    local network, private and loopback addresses unless ``allow_private=False`` (pass that on a multi-tenant
+    server, where a tenant must not reach the operator's network through the endpoint); metadata
+    addresses stay refused. An explicit ``policy`` replaces the default. ``headers`` go with every request
+    (for example a reverse proxy's authorization).
     """
 
     name = "searxng"
@@ -447,12 +449,13 @@ class SearXNGSearch(_HttpSearch):
         headers: Mapping[str, str] | None = None,
         mock_transport: httpx.AsyncBaseTransport | None = None,
         resolver: Resolver | None = None,
+        allow_private: bool = True,
     ) -> None:
-        origin = EgressPolicy(allow_private=True, ports=None).check_url(base_url)
+        origin = EgressPolicy(allow_private=allow_private, ports=None).check_url(base_url)
         if policy is None:
             policy = EgressPolicy(
                 schemes=frozenset({origin.scheme}),
-                allow_private=True,
+                allow_private=allow_private,
                 allow_hosts=frozenset({origin.host}),
                 ports=frozenset({origin.port}),
                 timeout=20.0,
