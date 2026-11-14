@@ -6,6 +6,13 @@ is used.
 
 | Name | Used in |
 |---|---|
+| `tabrion.errors.ConfigurationError` | `src/orkexa/backends/postgres/connection.py` |
+| `tabrion.errors.classify` | `src/orkexa/backends/postgres/schema.py` |
+| `tabrion.errors.safe_message` | `src/orkexa/backends/postgres/schema.py` |
+| `tabrion.postgres` | `src/orkexa/backends/postgres/connection.py` |
+| `tabrion.postgres.SessionSettings` | `src/orkexa/backends/postgres/connection.py` |
+| `tabrion.postgres.ping` | `src/orkexa/backends/postgres/connection.py` |
+| `tabrion.postgres.session_configurator` | `src/orkexa/backends/postgres/connection.py` |
 | `tabrion.testing.configure` | `tests/backends/postgres/support.py` |
 | `tabrion.testing.require_extension` | `tests/backends/postgres/support.py` |
 | `tabrion.testing.tabrion_postgres_url` | `tests/backends/postgres/support.py` |

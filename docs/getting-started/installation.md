@@ -25,14 +25,15 @@ pip install "orkexa[vector]"      # vector/hybrid search (sqlite-vec)
 pip install "orkexa[local]"       # unpack the pinned Ollama runtime for orkexa-local (zstandard)
 pip install "orkexa[convert]"     # build models from pinned upstream weights (gguf)
 pip install "orkexa[sqlcheck]"    # tenant SQL rule engine for your tests (pglast)
-pip install "orkexa[postgres]"    # PostgreSQL backends for index, files and memory (psycopg 3)
+pip install -r requirements/tabrion.txt "orkexa[postgres]"  # PostgreSQL backends (psycopg 3, pinned Tabrion)
 ```
 
 `orkexa[all]` contains the provider SDKs only; add `pdf`, `vector`, `local`, `convert`,
-`sqlcheck` or `postgres` when you need them, e.g. `pip install "orkexa[openai,vector,local]"` for local agents with
-semantic search. Every installation also gets the `orkexa-local` command (`python -m
-orkexa.local`), which manages local Ollama models; see
-[Local models, embeddings and retrieval modes](../guides/local-models.md).
+`sqlcheck` or `postgres` when you need them (`postgres` needs the Tabrion pin file `requirements/tabrion.txt` from
+the repository, because Tabrion is not on a package index), e.g. `pip install "orkexa[openai,vector,local]"` for
+local agents with semantic search. Every installation also gets the `orkexa-local` command (`python -m
+orkexa.local`), which manages local Ollama models; see [Local models, embeddings and retrieval
+modes](../guides/local-models.md).
 
 `import orkexa` never imports a provider SDK. Using a provider whose SDK is missing
 raises `MissingDependencyError` naming the extra, e.g. `pip install 'orkexa[openai]'`.
@@ -41,7 +42,8 @@ Without pglast, `orkexa.testing.sqlcheck` still imports; its first check raises
 [the tenant SQL rule engine](../reference/testing.md#the-tenant-sql-rule-engine)).
 Without psycopg, `orkexa.backends.postgres` still imports and opens no connection; creating a
 `PsycopgSource` (or calling `migrate`) raises `ImportError` naming `orkexa[postgres]` (see
-[PostgreSQL backends](../reference/backends-postgres.md)).
+[PostgreSQL backends](../reference/backends-postgres.md)). The `postgres` extra also names
+`tabrion[postgres]`, which is not on a package index yet: add `-r requirements/tabrion.txt` (pip 25.0 or newer).
 
 ## API keys
 

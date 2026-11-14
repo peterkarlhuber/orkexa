@@ -5,6 +5,29 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: session settings and `ping` for `PsycopgSource` through `tabrion[postgres]` (TABRION MIG-ORK-2, 2026-11-14)
+
+* The extra `postgres` names `tabrion[postgres]>=0.1,<0.2` besides psycopg (a range of final versions, RC-1/RC-8;
+  without a package index install with `-r requirements/tabrion.txt`, pip 25.0 or newer). The core and every other
+  extra name no Tabrion; the import contract "Core modules do not import tabrion until MIG-ORK-3" is unchanged.
+* `PsycopgSource` takes `statement_timeout`, `idle_in_transaction_timeout`, `lock_timeout` (seconds, `0` turns a
+  limit off) and `application_name`, all `None` by default. Set ones are applied to every new connection with
+  `tabrion.postgres.session_configurator` (one `set_config(..., false)` round trip, Tabrion's allowlist); invalid
+  values raise `ValueError` when the source is built, and a connection whose settings fail is closed. Without
+  them nothing changes: no setting is sent, Tabrion is not imported, and the `pg_settings` of a connection equal
+  those of a plain `psycopg.connect`.
+* New `PsycopgSource.ping(timeout=5.0) -> bool` on `tabrion.postgres.ping`: `False` for a stopped server, a failed
+  connection or no free connection within `timeout`, never an exception for those; a pooled connection the server
+  dropped is discarded and the next one tried. Inside a `transaction` block it pings that block's connection under
+  a savepoint.
+* `verify_schema` reports a database error with `tabrion.errors.safe_message` (kind and SQLSTATE) instead of
+  `str(exc)`, which could carry the server's `DETAIL`, the statement or the host and user of a failed connection.
+* Tests: `tests/backends/postgres/test_session.py` (marker `postgres`: settings on every connection and mode, the
+  empty `pg_settings` diff by default, statement, lock and idle-in-transaction timeouts, ping against a stopped
+  server, dropped connections and a full pool, the redacted `verify_schema` texts, import isolation). The audit
+  job installs `-r requirements/tabrion.txt` with the extras; pip-audit reports Tabrion as not on PyPI (skipped).
+  `docs/api-consumers.md` lists the new Tabrion names.
+
 ### Added: egress guard, web search and page fetching (NAL-A2, 2026-11-14)
 
 * `orkexa.net.guard` (standard library only): `EgressPolicy` (schemes, `allow_private`, `allow_hosts`,
