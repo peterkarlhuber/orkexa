@@ -210,6 +210,7 @@ def test_schemes_ports_and_lists() -> None:
     assert refusal(listed, "https://api.example.com.evil.test/") == ("host_refused", "not_allowed")
     denied = EgressPolicy(deny_hosts=frozenset({"*.tracker.example", "bad.example"}))
     assert refusal(denied, "https://x.tracker.example/") == ("host_refused", "denied")
+    assert refusal(denied, "https://tracker.example/") == ("host_refused", "denied")
     assert refusal(denied, "https://BAD.example./") == ("host_refused", "denied")
     assert denied.check_url("https://good.example/")
 

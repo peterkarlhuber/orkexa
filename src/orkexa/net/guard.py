@@ -248,11 +248,12 @@ def host_problem(host: str) -> str | None:
     return None
 
 
-def _host_matches(host: str, patterns: frozenset[str]) -> bool:
-    """``host`` is one of ``patterns``; a pattern ``*.example.com`` matches every name below example.com."""
+def _host_matches(host: str, patterns: frozenset[str], *, apex: bool = False) -> bool:
+    """``host`` is one of ``patterns``; a pattern ``*.example.com`` matches every name below example.com, and
+    with ``apex`` (deny lists: the safer reading) also example.com itself."""
     for pattern in patterns:
         if pattern.startswith("*."):
-            if host.endswith(pattern[1:]):
+            if host.endswith(pattern[1:]) or (apex and host == pattern[2:]):
                 return True
         elif host == pattern:
             return True
@@ -288,10 +289,10 @@ class EgressPolicy:
     * ``schemes``: allowed URL schemes (``http`` and ``https``; ``{"https"}`` for API clients).
     * ``allow_private``: permit :data:`PRIVATE_NETWORKS` and names of this computer (a self-hosted service).
       Metadata names and addresses stay refused.
-    * ``allow_hosts``: when set, only these host names (``*.example.com`` for a domain and its subdomains); IP
-      literals must be listed as written. ``None`` means any public host.
-    * ``deny_hosts``: refused host names (same syntax), besides :data:`METADATA_HOSTS`, which every policy
-      refuses.
+    * ``allow_hosts``: when set, only these host names (``*.example.com`` for the subdomains of example.com,
+      not example.com itself); IP literals must be listed as written. ``None`` means any public host.
+    * ``deny_hosts``: refused host names (same syntax, but ``*.example.com`` also refuses example.com itself),
+      besides :data:`METADATA_HOSTS`, which every policy refuses.
     * ``ports``: allowed ports (the scheme's default port counts); ``None`` allows any port.
     * ``max_redirects``: redirects followed by :mod:`orkexa.net.http` (each hop is checked again).
     * ``max_bytes``: the most bytes of one response body, counted on the wire while it is read.
@@ -371,7 +372,7 @@ class EgressPolicy:
                     "address_refused", f"The address {host} is refused", host=host, reason=reason
                 )
             host = str(literal)
-        if _host_matches(host, self.deny_hosts):
+        if _host_matches(host, self.deny_hosts, apex=True):
             raise EgressError(
                 "host_refused", f"The host {host} is on the deny list", host=host, reason="denied"
             )
