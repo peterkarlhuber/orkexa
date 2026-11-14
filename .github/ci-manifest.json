@@ -13,6 +13,7 @@
       "pg-b (Python 3.14)",
       "tabrion install (pip 25.0)",
       "tabrion install (pip latest)",
+      "tabrion install (pip latest, poisoned index)",
       "test (Python 3.11)",
       "test (Python 3.12)",
       "test (Python 3.13)",
