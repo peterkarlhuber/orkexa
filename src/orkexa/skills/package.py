@@ -49,6 +49,14 @@ SKILL_FILE = "SKILL.md"
 KNOWN_KEYS = frozenset({"name", "description", "license", "compatibility", "metadata", "allowed-tools"})
 _NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _DRIVE = re.compile(r"^[A-Za-z]:")
+#: Names Windows reserves for devices, with or without an extension (``CON``, ``nul.md``, ``COM1.txt``).
+_RESERVED = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$", re.IGNORECASE)
+#: Characters Windows does not allow in file names.
+_WINDOWS_FORBIDDEN = set('<>:"|?*')
+#: The tags that frame skill text in a prompt; inside the instructions they are neutralised (``&lt;``).
+_FRAME_TAG = re.compile(
+    r"<(/?\s*)(skill_content|skill_resources|available_skills|skill_file|skill)\b", re.IGNORECASE
+)
 _TEXT_SUFFIXES = (
     ".md",
     ".markdown",
@@ -179,6 +187,15 @@ def _path_problem(path: str) -> str | None:
         return "dot_segment"
     if unicodedata.normalize("NFC", path) != path:
         return "not_nfc"
+    # Compatibility characters (full-width dots, slashes) can become "../" when a ZIP is unpacked on Windows.
+    if unicodedata.normalize("NFKC", path) != path:
+        return "compatibility_character"
+    if any(char in _WINDOWS_FORBIDDEN for char in path):
+        return "windows_character"
+    if any(part.endswith((".", " ")) or part.startswith(" ") for part in parts):
+        return "windows_name"
+    if any(_RESERVED.match(part) for part in parts):
+        return "reserved_name"
     return None
 
 
@@ -318,6 +335,16 @@ def parse_skill(files: Mapping[str, bytes], *, limits: SkillLimits | None = None
     )
 
 
+def _declared_entries(data: bytes) -> int | None:
+    """The number of entries the ZIP's end-of-central-directory record declares, or ``None`` when it is not
+    found or the archive is ZIP64 (zipfile then reads and checks it)."""
+    found = data.rfind(b"PK\x05\x06", max(0, len(data) - 65_557))
+    if found < 0 or found + 12 > len(data):
+        return None
+    total = int.from_bytes(data[found + 10 : found + 12], "little")
+    return None if total == 0xFFFF else total
+
+
 def read_zip(data: bytes, *, limits: SkillLimits | None = None) -> SkillPackage:
     """Parse a package from the bytes of a ZIP file, with the size, path and ZIP-bomb limits of ``limits``.
 
@@ -331,6 +358,14 @@ def read_zip(data: bytes, *, limits: SkillLimits | None = None) -> SkillPackage:
             "skill.too_large",
             f"the ZIP file is larger than {limits.max_zip_bytes} bytes",
             limit=limits.max_zip_bytes,
+        )
+    declared = _declared_entries(data)
+    if declared is not None and declared > limits.max_files * 2:
+        # Refused before zipfile builds its index of every entry (internal review L1).
+        raise SkillPackageError(
+            "skill.too_many_files",
+            f"the package has more than {limits.max_files} files",
+            limit=limits.max_files,
         )
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
@@ -531,13 +566,16 @@ def _escape_attribute(value: str) -> str:
 def render_activation(package: SkillPackage) -> str:
     """The second loading stage: the instructions in a ``<skill_content>`` wrapper and the list of resources.
 
-    Resources are listed by path only; their content is the third stage and read on demand.
+    Resources are listed by path only; their content is the third stage and read on demand. Frame tags inside
+    the instructions are written as ``&lt;...``, so the text cannot close its wrapper and pose as text outside
+    it.
     """
     resources = package.resources
     listing = "".join(f"\n  <file>{_escape_attribute(path)}</file>" for path in resources)
     files = f"\n<skill_resources>{listing}\n</skill_resources>" if resources else ""
     head = f'<skill_content name="{_escape_attribute(package.name)}">'
-    return f"{head}\n{package.body.strip()}\n</skill_content>{files}"
+    body = _FRAME_TAG.sub(lambda match: f"&lt;{match.group(1)}{match.group(2)}", package.body.strip())
+    return f"{head}\n{body}\n</skill_content>{files}"
 
 
 def write_zip(package: SkillPackage) -> bytes:
