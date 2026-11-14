@@ -104,6 +104,7 @@ nav:
       - Dynamic agents: reference/dynamic.md
       - Flows: reference/flow.md
       - Orchestration: reference/orchestration.md
+      - Skills: reference/skills.md
       - Usage: reference/usage.md
       - Pricing: reference/pricing.md
       - Errors: reference/errors.md
@@ -126,6 +127,7 @@ nav:
       - ADR 0015 statement catalog and SQL rule engine: architecture/decisions/0015-statement-catalog-and-sql-rule-engine.md
       - ADR 0016 product family responsibilities: architecture/decisions/0016-product-family-responsibilities.md
       - ADR 0017 egress guard, web search and page fetching: architecture/decisions/0017-web-and-egress.md
+      - ADR 0018 Agent Skills packages: architecture/decisions/0018-agent-skills.md
   - Development:
       - development/index.md
       - Releasing: development/releasing.md

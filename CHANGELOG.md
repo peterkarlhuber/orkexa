@@ -12,6 +12,17 @@ listed here. The development version is `0.2.0.dev0`.
   Orkexa API or behavior change. The import contract "Core modules import only tabrion.sqlite and tabrion.errors"
   also forbids Tabrion's new modules `tabrion.profilefile` and `tabrion.schema`.
 
+### Added: `orkexa.skills` reads, checks and writes Agent Skills packages (NAL-B3, 2026-11-14)
+
+* `read_zip` and `parse_skill` read a package from ZIP bytes or `{path: bytes}`; `validate` lists findings of the
+  agentskills.io specification (errors) and of risks (warnings: unknown front matter keys, `allowed-tools`, long
+  instructions, scripts, non-UTF-8 text files); `catalog_entry` and `render_activation` give the first two loading
+  stages; `package_digest` and `write_zip` identify and export a package byte for byte (ADR 0018).
+* The front matter is read by a strict YAML subset parser (no new dependency). Unsafe packages (path traversal,
+  symbolic links, case clashes, ZIP bombs, oversized files) raise `SkillPackageError` with a stable `code`.
+* Pure module: no disk, network or model access, and scripts are never run. Import contracts and the public API
+  test include it.
+
 ### Changed: the SQLite backends open their databases through `tabrion.sqlite` (TABRION MIG-ORK-3, 2026-11-14)
 
 * The core requires `tabrion>=0.1,<0.2` (owner decision E-ORK-CORE; the stdlib-only Tabrion core, a range of final
