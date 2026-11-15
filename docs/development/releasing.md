@@ -31,7 +31,7 @@ published, and it cannot upload anything until the one-time setup below is done.
   not on a package index, so `requirements/tabrion.txt` pins the one Tabrion a standalone
   install uses: exactly one line
   `tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@<40-hex SHA>` on the commit
-  of a final Tabrion version (now v0.2.1, `af0458d54467571abfc1afdd44d76e1f4d727c06`).
+  of a final Tabrion version (now v0.2.2, `5bc690e2de74a92cd44bb4522cf2533cc2c8d14f`).
   Install it with `-r`, never `-c` (pip 25.0 refuses a direct URL in a constraints file),
   with pip 25.0 or newer:
 

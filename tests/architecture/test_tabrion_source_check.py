@@ -25,7 +25,7 @@ SCRIPT = ROOT / "scripts" / "check_tabrion_source.py"
 #: SHA-256 of ``scripts/check_tabrion_source.py``, the same in every repository that carries it.
 SCRIPT_SHA256 = "f1edfc71b5da4986547abe0824833fb73bba532cb5e6a00e202c9ff317747456"
 URL = "https://github.com/peterkarlhuber/tabrion.git"
-SHA = "af0458d54467571abfc1afdd44d76e1f4d727c06"
+SHA = "5bc690e2de74a92cd44bb4522cf2533cc2c8d14f"
 HAS_PIP = (
     subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, check=False).returncode
     == 0
@@ -44,7 +44,7 @@ def test_an_install_by_range_takes_the_forged_tabrion_and_only_the_requests_are_
     install = [sys.executable, "-m", "pip", "install", "--no-deps", "--no-cache-dir", "--target", str(target)]
     script = [sys.executable, "-I", str(SCRIPT), "--lock", str(lock), "--path", str(target), "--"]
     # Orkexa's own range without the pin: it picks the shared script's poisoned 0.2.99 (POISON_VERSION, inside
-    # >=0.2,<0.3 and above the pinned 0.2.1) over the real release.
+    # >=0.2,<0.3 and above the pinned 0.2.2) over the real release.
     result = subprocess.run(
         [*script, *install, "tabrion>=0.2,<0.3"], capture_output=True, text=True, check=False
     )

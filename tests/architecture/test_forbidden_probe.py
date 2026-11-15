@@ -35,7 +35,10 @@ FORBIDDEN_PREFIXES = ("axentra", "nodestro", "levuvo", "tabrion_studio")
 
 NO_PLATFORM = "Orkexa depends on no Axentra, Nodestro or Studio package (K-33)"
 CORE_NO_TABRION = "Core modules import only tabrion.sqlite and tabrion.errors (MIG-ORK-3, K-33)"
-CORE_TABRION_ALLOWED = ("tabrion.sqlite", "tabrion.errors")
+#: ``tabrion._since`` and ``tabrion._version`` are not forbidden: ``tabrion.errors`` imports them since
+#: Tabrion 0.2.2 (the version gate of ADR 0015, standard library only). Orkexa's own code may still not
+#: name them (``scripts/check_tabrion_api.py`` refuses private tabrion names).
+CORE_TABRION_ALLOWED = ("tabrion.sqlite", "tabrion.errors", "tabrion._since", "tabrion._version")
 CORE_NO_POSTGRES = "Core modules do not import orkexa.backends.postgres"
 CORE_NO_TESTING = "Core modules do not import orkexa.testing"
 CONTRACT_NO_BACKENDS = "Contract modules do not import orkexa.backends at runtime"
@@ -184,7 +187,7 @@ def test_core_tabrion_contract_covers_the_same_modules_as_the_postgres_contract(
 
 
 def test_core_tabrion_contract_names_every_other_module_of_tabrion() -> None:
-    """Field 7: every module of the installed tabrion but ``tabrion.sqlite``/``tabrion.errors`` is forbidden.
+    """Field 7: every module of the installed tabrion but ``CORE_TABRION_ALLOWED`` is forbidden.
 
     import-linter forbids only listed modules, so a module added to tabrion later must be added to the list.
     """
