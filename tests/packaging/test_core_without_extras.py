@@ -81,8 +81,11 @@ def test_the_packages_import_without_extras_and_open_no_connection() -> None:
         """
     )
     assert result.returncode == 0, result.stderr
-    # TABRION MIG-ORK-3: the SQLite backends use the stdlib-only tabrion core, never its server layers.
-    assert result.stdout.strip() == "['tabrion', 'tabrion._version', 'tabrion.errors', 'tabrion.sqlite']"
+    # TABRION MIG-ORK-3: the SQLite backends use the stdlib-only tabrion core, never its server layers. Since
+    # Tabrion 0.2.2 tabrion.errors imports its version gate tabrion._since (standard library only).
+    assert result.stdout.strip() == (
+        "['tabrion', 'tabrion._since', 'tabrion._version', 'tabrion.errors', 'tabrion.sqlite']"
+    )
 
 
 # MUP-ONA T-PKG-1

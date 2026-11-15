@@ -42,10 +42,12 @@ REQUIREMENTS = ROOT / "requirements" / "tabrion.txt"
 PYPROJECT = ROOT / "pyproject.toml"
 
 #: Commits of final Tabrion versions (``src/tabrion/_version.py`` at that commit): every known final, not only
-#: the current pin, so an older final stays a final commit. v0.1.0 = TABRION TAB-040, v0.2.1 = TAB-042 (#71).
+#: the current pin, so an older final stays a final commit. v0.1.0 = TABRION TAB-040, v0.2.1 = TAB-042 (#71),
+#: v0.2.2 = TAB-042 follow-up (#83).
 FINAL_TABRION_COMMITS = {
     "d5821faa8742dea012abda3b663549c038d76543": "0.1.0",
     "af0458d54467571abfc1afdd44d76e1f4d727c06": "0.2.1",
+    "5bc690e2de74a92cd44bb4522cf2533cc2c8d14f": "0.2.2",
 }
 
 PIN = re.compile(
@@ -160,7 +162,7 @@ def test_the_final_commits_are_final_versions() -> None:
         assert not (parsed.is_prerelease or parsed.is_postrelease or parsed.local), version
 
 
-SHA = "af0458d54467571abfc1afdd44d76e1f4d727c06"
+SHA = "5bc690e2de74a92cd44bb4522cf2533cc2c8d14f"
 GOOD = f"tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@{SHA}\n"
 
 
@@ -181,11 +183,11 @@ def test_extras_on_the_pin_are_allowed() -> None:
         pytest.param(GOOD + GOOD, "exactly one requirement line, not 2", id="two-pins"),
         pytest.param("# nothing\n", "exactly one requirement line, not 0", id="no-pin"),
         pytest.param(GOOD.replace(SHA, SHA[:12]), "is not 'tabrion", id="short-sha"),
-        pytest.param(GOOD.replace(SHA, "v0.2.1"), "is not 'tabrion", id="tag-ref"),
+        pytest.param(GOOD.replace(SHA, "v0.2.2"), "is not 'tabrion", id="tag-ref"),
         pytest.param(GOOD.replace("tabrion.git@", "tabrion@"), "is not 'tabrion", id="no-dot-git"),
         pytest.param(GOOD.replace("git+https", "git+http"), "is not 'tabrion", id="http"),
         pytest.param(GOOD.replace("peterkarlhuber", "someone"), "is not 'tabrion", id="other-repository"),
-        pytest.param("tabrion==0.2.1\n", "is not 'tabrion", id="version-pin"),
+        pytest.param("tabrion==0.2.2\n", "is not 'tabrion", id="version-pin"),
         pytest.param("tabrion>=0.2.0a1,<0.3\n", "is not 'tabrion", id="pre-release-range"),
         pytest.param(
             GOOD.replace(SHA, "85145cb" + SHA[7:]), "is not a final Tabrion commit", id="non-final-sha"
@@ -212,12 +214,12 @@ def test_a_bad_pin_file_turns_red(text: str, message: str) -> None:
         ),
         pytest.param(["tabrion[postgres]>=0.2.0a1,<0.3"], "pre-release or non-final", id="pre-release"),
         pytest.param(["tabrion[postgres]>=0.2.0rc1,<0.3"], "pre-release or non-final", id="release-cand"),
-        pytest.param(["tabrion==0.2.1.dev0"], "pre-release or non-final", id="dev-pin"),
+        pytest.param(["tabrion==0.2.2.dev0"], "pre-release or non-final", id="dev-pin"),
         pytest.param(["tabrion>=0.2,<0.3.0.post1"], "pre-release or non-final", id="post-release"),
         pytest.param(["tabrion>=0.2"], "not a range like", id="unbounded"),
         pytest.param(["tabrion<0.3"], "not a range like", id="no-lower-bound"),
         pytest.param(["tabrion"], "not a range like", id="bare-name"),
-        pytest.param(["tabrion==0.2.1"], "not a range like", id="exact-pin"),
+        pytest.param(["tabrion==0.2.2"], "not a range like", id="exact-pin"),
         pytest.param(["tabrion~=0.2"], "not a range like", id="compatible-release"),
         pytest.param(["tabrion>0.2,<0.3"], "not a range like", id="exclusive-lower"),
         pytest.param(["tabrion>=0.2,<=0.3"], "not a range like", id="inclusive-upper"),
@@ -225,10 +227,10 @@ def test_a_bad_pin_file_turns_red(text: str, message: str) -> None:
         pytest.param(["tabrion>=0.2,<0.4"], "upper bound must be <0.3", id="two-minor-lines"),
         pytest.param(["tabrion>=0.2,<1"], "upper bound must be <0.3", id="up-to-one"),
         pytest.param(["tabrion>=0.2,<0.3.5"], "upper bound must be <0.3", id="patch-upper"),
-        pytest.param(["tabrion===0.2.1-foo"], "unparseable specifier", id="arbitrary-equality"),
-        pytest.param(["tabrion>=0.1,<0.2"], "does not contain the pinned Tabrion 0.2.1", id="outside-range"),
+        pytest.param(["tabrion===0.2.2-foo"], "unparseable specifier", id="arbitrary-equality"),
+        pytest.param(["tabrion>=0.1,<0.2"], "does not contain the pinned Tabrion 0.2.2", id="outside-range"),
         pytest.param(
-            ["tabrion>=0.2.2,<0.3"], "does not contain the pinned Tabrion 0.2.1", id="floor-above-pin"
+            ["tabrion>=0.2.3,<0.3"], "does not contain the pinned Tabrion 0.2.2", id="floor-above-pin"
         ),
     ],
 )
@@ -282,27 +284,27 @@ _URL = "https://github.com/peterkarlhuber/tabrion.git"
     [
         pytest.param("0.2.99", None, "installed from a package index", id="index"),
         pytest.param(
-            "0.2.1",
+            "0.2.2",
             {"url": "file:///src/tabrion", "dir_info": {"editable": True}},
             "not a git install",
             id="local",
         ),
         pytest.param(
-            "0.2.1",
+            "0.2.2",
             {"url": _URL, "vcs_info": {"vcs": "git", "commit_id": "e" * 40}},
             "installed at eeee",
             id="other-commit",
         ),
         pytest.param(
-            "0.2.1",
+            "0.2.2",
             {"url": "https://evil.invalid/tabrion.git", "vcs_info": {"vcs": "git", "commit_id": SHA}},
             "installed from https://evil.invalid",
             id="other-url",
         ),
         pytest.param(
-            "0.2.2",
+            "0.2.3",
             {"url": _URL, "vcs_info": {"vcs": "git", "commit_id": SHA}},
-            "the final 0.2.1",
+            "the final 0.2.2",
             id="other-version",
         ),
     ],
@@ -316,4 +318,4 @@ def test_an_installed_tabrion_other_than_the_pin_turns_red(
 
 @pytest.mark.parametrize("url", [_URL, _URL.removesuffix(".git"), _URL + "/"])
 def test_the_pin_passes_in_any_url_spelling(url: str) -> None:
-    assert installed_problems("0.2.1", {"url": url, "vcs_info": {"vcs": "git", "commit_id": SHA}}, SHA) == []
+    assert installed_problems("0.2.2", {"url": url, "vcs_info": {"vcs": "git", "commit_id": SHA}}, SHA) == []

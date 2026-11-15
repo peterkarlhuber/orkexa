@@ -61,6 +61,9 @@ Orkexa (`src/orkexa/backends/postgres/index.py`), and Nodestro adds only its pro
   through `tabrion.sqlite`, and the core may import only `tabrion.sqlite` and `tabrion.errors` (contract "Core
   modules import only tabrion.sqlite and tabrion.errors (MIG-ORK-3, K-33)"). *Update 2026-11-14 (Tabrion 0.2.1
   switch):* the core, the extra `postgres` and the `dev` extra name `>=0.2,<0.3` instead of `>=0.1,<0.2`.
+  *Update 2026-11-15 (Tabrion 0.2.2 pin):* `tabrion.errors` imports Tabrion's internal version gate
+  (`tabrion._since`, `tabrion._version`, standard library only), so the contract no longer forbids these two; the new
+  `tabrion.rowedit` is forbidden.
 
 ## Consequences
 

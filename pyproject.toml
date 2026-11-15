@@ -523,19 +523,21 @@ source_modules = [
 ]
 # Every other part of tabrion (its package __init__ exports the SQLAlchemy layer lazily); the server layers
 # tabrion.postgres and tabrion._sa (tabrion's SQLAlchemy layer) stay behind the extras. A module added to tabrion
-# later is caught by tests/architecture/test_forbidden_probe.py, which lists tabrion's modules.
+# later is caught by tests/architecture/test_forbidden_probe.py, which lists tabrion's modules. Not forbidden: the
+# version gate tabrion._since and tabrion._version, which tabrion.errors imports since Tabrion 0.2.2 (standard
+# library only; scripts/check_tabrion_api.py still refuses a private tabrion name in Orkexa's own code).
 forbidden_modules = [
     "tabrion",
     "tabrion._deprecated",
     "tabrion._sa",
     "tabrion._sa.**",
-    "tabrion._version",
     "tabrion.check",
     "tabrion.config",
     "tabrion.migrations",
     "tabrion.postgres",
     "tabrion.postgres.**",
     "tabrion.profilefile",
+    "tabrion.rowedit",
     "tabrion.schema",
     "tabrion.sql",
     "tabrion.testing",

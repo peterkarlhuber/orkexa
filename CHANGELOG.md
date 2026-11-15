@@ -5,6 +5,21 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Changed: Tabrion 0.2.2 pin (2026-11-15)
+
+* `requirements/tabrion.txt` and the README pin the Tabrion 0.2.2 final commit
+  `5bc690e2de74a92cd44bb4522cf2533cc2c8d14f` (tabrion #83; was 0.2.1 `af0458d`); the range stays `>=0.2,<0.3`.
+  Tabrion 0.2.2 carries security fixes (`grant_runtime_role` refuses members of predefined roles, roles that can
+  still write a protected table and CREATEROLE roles before PostgreSQL 16; `tabrion.check` adds TAB-PG-013/014;
+  `tabrion.profilefile` refuses more host values). Orkexa uses none of these, so there is no Orkexa API or behavior
+  change. `tests/architecture/test_tabrion_requirements.py` and `test_tabrion_source_check.py` follow the new pin.
+* The import contract "Core modules import only tabrion.sqlite and tabrion.errors" no longer forbids
+  `tabrion._version` and does not forbid the new `tabrion._since`: `tabrion.errors` imports both since 0.2.2 (the
+  version gate of Tabrion ADR 0015, standard library only), so the contract broke on the core's
+  `tabrion.errors` imports. The new `tabrion.rowedit` (staged for 0.3) is forbidden. Orkexa's own code still may not
+  import a private tabrion name (`scripts/check_tabrion_api.py`).
+  `tests/packaging/test_core_without_extras.py` expects `tabrion._since` among the loaded tabrion modules.
+
 ### Changed: the poisoned tabrion inside Orkexa's range (TABRION DC-OR-1 follow-up, 2026-11-14)
 
 * `scripts/check_tabrion_source.py` is nodestro-studio's new copy (#198, SHA-256

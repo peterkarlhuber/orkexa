@@ -27,7 +27,7 @@ you asked for, Orkexa raises an error instead of silently doing something else.
 ## Installation
 
 ```bash
-pip install "tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@af0458d54467571abfc1afdd44d76e1f4d727c06" \
+pip install "tabrion @ git+https://github.com/peterkarlhuber/tabrion.git@5bc690e2de74a92cd44bb4522cf2533cc2c8d14f" \
     "orkexa[all] @ git+https://github.com/peterkarlhuber/orkexa"
 ```
 
