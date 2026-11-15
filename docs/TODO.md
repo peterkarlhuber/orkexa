@@ -82,7 +82,8 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
   adds request-level policy, manual redirects, the streamed size limit and the deadline. It has an internal SSRF
   catalog (`tests/net`), no independent review yet.
 - **Next step:** Review it before `fetch_web_page` is enabled in a server profile (nodestro-runtime keeps it behind
-  `NODESTRO_WEB_TOOLS_SERVER` until then).
+  `NODESTRO_WEB_TOOLS_SERVER` until then). It is part of the D1 brief P-Web (nodestro-studio
+  `docs/security/nal/p-web.md`, ST-064), prepared and not commissioned.
 
 ## Bugs and reliability
 
@@ -346,7 +347,7 @@ retrieval logic; new retrieval work (for example an ANN index) is planned here, 
 | (done 2026-11-13, TABRION VER-1) | nodestro-studio | TABRION VER-1 (`scripts/check_versions.py`, RC-7 drift nightly) | The checker reads `requirements/tabrion.txt` (one canonical pin on a final Tabrion SHA) and compares it with the runtime's Tabrion SHA; an older final version of the same minor line is a notice, not an error |
 | (done 2026-11-13, TABRION MIG-ORK-1) | tabrion | `tabrion.testing` 0.1 (`configure`, `tabrion_postgres_url`, `require_extension`) | `tests/backends/postgres/support.py` uses them through the `dev` range `tabrion[testing,postgres]>=0.1,<0.2`; a new Tabrion minor needs the range raised after CI is green against it (RC-4), MIG-ORK-2 adds `tabrion[postgres]` to the extra `postgres` |
 | (done 2026-11-14, TABRION MIG-ORK-2) | tabrion, nodestro-runtime | `tabrion.postgres` 0.1 (`SessionSettings`, `session_configurator`, `ping`), `tabrion.errors` (`classify`, `safe_message`, `ConfigurationError`); PIN-W3 | The extra `postgres` names `tabrion[postgres]>=0.1,<0.2`; a product that installs `orkexa[postgres]` needs a Tabrion of that range (nodestro-runtime pins one since MIG-NOD-3); a new Tabrion minor needs both ranges raised after CI is green against it (RC-4). Merge only in wave W3, after PIN-W2 |
-| ORK-043 | nodestro-runtime | NAL-A2 (MCP guard on `orkexa.net.guard`, web tools) | With the next pin the runtime imports the guard core (`httpcore_module="httpcore2"`, its own `error()`); its MCP guard tests must stay unchanged |
+| ORK-043 | nodestro-runtime | NAL-A2 (MCP guard on `orkexa.net.guard`, web tools) | Since nodestro-runtime #172 the runtime's MCP guard imports the guard core (`httpcore_module="httpcore2"`, its own `error()`); its MCP guard tests stay unchanged (parity test); a change to the guard needs them green |
 | Any change | nodestro-runtime | Orkexa pin (`pyproject.toml`, `e9c2147` since runtime #113) | Changes reach Nodestro only through a coordinated pin cascade; the round-3 audit fixes (orkexa #49) are pinned since runtime #113 |
 
 ## Maintaining this file
