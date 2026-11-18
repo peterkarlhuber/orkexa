@@ -105,6 +105,7 @@ nav:
       - Flows: reference/flow.md
       - Orchestration: reference/orchestration.md
       - Skills: reference/skills.md
+      - MCP client: reference/mcp.md
       - Usage: reference/usage.md
       - Pricing: reference/pricing.md
       - Errors: reference/errors.md
