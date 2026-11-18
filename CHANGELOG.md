@@ -5,6 +5,15 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: `orkexa.mcp`, a Model Context Protocol client (2026-11-18)
+
+* `MCPClient` with `StdioTransport` (child process, minimal environment) and `HttpTransport` (Streamable HTTP, JSON
+  or event-stream answers, loopback only unless `allow_remote=True`, no redirects).
+* `mcp_tools()` offers a server's tools as `MCPTool` objects for `Agent` and `AsyncAgent`, with `include`,
+  `exclude`, `prefix` and an `allow` filter (e.g. only tools with `readOnlyHint`). Results are wrapped in an
+  `<untrusted_data>` frame (`frame_untrusted`) the text cannot close; `isError` results reach the model as error
+  results.
+
 ### Changed: Tabrion 0.2.2 pin (2026-11-15)
 
 * `requirements/tabrion.txt` and the README pin the Tabrion 0.2.2 final commit
