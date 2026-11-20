@@ -4,11 +4,16 @@ Every component is opened relative to the descriptor of its folder with ``O_NOFO
 never followed, wherever it is on the way; folders are opened with ``O_DIRECTORY`` and files with
 ``O_NONBLOCK`` (a FIFO cannot block the open) and ``O_NOCTTY``. On Linux the component is opened with
 ``openat2`` and ``RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS | RESOLVE_NO_XDEV`` when the
-kernel has it (5.6+), which also refuses a bind mount on the same file system; otherwise, and on macOS,
-``openat`` with ``O_NOFOLLOW`` and a comparison of ``st_dev`` with the root's. Each descriptor is checked with
-``fstat`` and the file is read through that same descriptor: no path is resolved twice. On macOS
-``fcntl(F_GETPATH)`` of every opened descriptor must lie below the root's as a second check (case-folded: APFS
-is usually case-insensitive).
+kernel has it (5.6+, probed once per process), which also refuses a bind mount on the same file system;
+otherwise ``openat`` with ``O_NOFOLLOW``, a comparison of ``st_dev`` with the root's and, on Linux, of the
+mount id (``/proc/self/fdinfo``), so a bind mount is refused there too. Each descriptor is checked with
+``fstat`` and the file is read through that same descriptor: no path is resolved twice. The last component
+of a file is looked at with ``fstatat`` first, so a FIFO, socket or device is refused without being opened.
+On macOS ``fcntl(F_GETPATH)`` of every opened descriptor must lie below the root's as a second check
+(case-folded: APFS is usually case-insensitive), and the name the file system stored (``fgetattrlist``) must
+fold to the name asked for; on Linux the same holds on case-insensitive file systems (FAT, exFAT, NTFS,
+casefold folders).
+Only the descriptor of the current folder stays open, so the depth of a path does not use up descriptors.
 """
 
 from __future__ import annotations
@@ -52,23 +57,14 @@ class _OpenHow(ctypes.Structure):
     _fields_ = [("flags", ctypes.c_uint64), ("mode", ctypes.c_uint64), ("resolve", ctypes.c_uint64)]
 
 
-_openat2_state: dict[str, Any] = {"usable": _LINUX, "syscall": None}
+#: ``usable``: ``None`` until probed, then whether ``openat2`` works here. Tests set it to ``False`` to run
+#: the fallback.
+_openat2_state: dict[str, Any] = {"usable": None if _LINUX else False, "syscall": None}
 
 
-def _openat2(dir_fd: int, name: str, flags: int) -> int | None:
-    """``openat2`` of one component, or ``None`` when the kernel (or a seccomp filter) does not offer it."""
-    if not _openat2_state["usable"]:
-        return None
+def _call_openat2(dir_fd: int, name: str, flags: int) -> int:
+    """``openat2`` of one component: a descriptor, or ``-errno``."""
     syscall = _openat2_state["syscall"]
-    if syscall is None:
-        try:
-            libc = ctypes.CDLL(None, use_errno=True)
-            syscall = libc.syscall
-            syscall.restype = ctypes.c_long
-        except (OSError, AttributeError):
-            _openat2_state["usable"] = False
-            return None
-        _openat2_state["syscall"] = syscall
     how = _OpenHow(
         flags, 0, _RESOLVE_BENEATH | _RESOLVE_NO_SYMLINKS | _RESOLVE_NO_MAGICLINKS | _RESOLVE_NO_XDEV
     )
@@ -79,28 +75,64 @@ def _openat2(dir_fd: int, name: str, flags: int) -> int | None:
         ctypes.byref(how),
         ctypes.c_size_t(ctypes.sizeof(how)),
     )
+    return int(result) if result >= 0 else -ctypes.get_errno()
+
+
+def _probe_openat2() -> bool:
+    """Whether this kernel (and its seccomp filter) offers ``openat2``: decided once, on the folder ``/``.
+
+    Later errors of ``openat2`` are errors of the path, never a reason to switch to the fallback.
+    """
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        syscall = libc.syscall
+        syscall.restype = ctypes.c_long
+    except (OSError, AttributeError):
+        return False
+    _openat2_state["syscall"] = syscall
+    fd = os.open("/", _DIRECTORY_FLAGS)
+    try:
+        result = _call_openat2(fd, ".", _DIRECTORY_FLAGS)
+    finally:
+        os.close(fd)
     if result >= 0:
-        return int(result)
-    code = ctypes.get_errno()
-    if code in (errno.ENOSYS, errno.EPERM, errno.E2BIG):  # no openat2 here (old kernel, seccomp)
-        _openat2_state["usable"] = False
+        os.close(result)
+        return True
+    return False  # ENOSYS (before 5.6), EPERM or ENOSYS from seccomp, E2BIG
+
+
+def _openat2(dir_fd: int, name: str, flags: int) -> int | None:
+    """``openat2`` of one component, or ``None`` when the kernel (or a seccomp filter) does not offer it."""
+    usable = _openat2_state["usable"]
+    if usable is None:
+        usable = _openat2_state["usable"] = _probe_openat2()
+    if not usable:
         return None
-    raise OSError(code, os.strerror(code))
+    result = _call_openat2(dir_fd, name, flags)
+    if result >= 0:
+        return result
+    raise OSError(-result, os.strerror(-result))
 
 
 def openat2_available() -> bool:
     """Whether components are opened with ``openat2`` (Linux 5.6+ without a seccomp filter against it)."""
     if not _LINUX:
         return False
-    fd = os.open(".", _DIRECTORY_FLAGS)
-    try:
-        with suppress(OSError):
-            child = _openat2(fd, ".", _DIRECTORY_FLAGS)
-            if child is not None:
-                os.close(child)
-    finally:
-        os.close(fd)
+    if _openat2_state["usable"] is None:
+        _openat2_state["usable"] = _probe_openat2()
     return bool(_openat2_state["usable"])
+
+
+def _mount_id(fd: int) -> int | None:
+    """The mount id of an open descriptor (Linux 3.15+, ``/proc/self/fdinfo``), or ``None``."""
+    try:
+        with open(f"/proc/self/fdinfo/{fd}", "rb") as handle:
+            for line in handle:
+                if line.startswith(b"mnt_id:"):
+                    return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
 
 
 # ---- descriptors -------------------------------------------------------------------------------------------
@@ -207,23 +239,176 @@ def _child(dir_fd: int, name: str, flags: int, shown: str) -> int:
         raise FsError("fs.unreadable", f"Cannot be opened ({exc.strerror})", path=shown) from None
 
 
-def _resolve(dir_fd: int, name: str, flags: int, shown: str) -> tuple[int, str]:
-    """Open ``name`` exactly, or else the one entry whose NFC form is ``name`` (stored NFD, e.g. by macOS)."""
-    try:
-        return _child(dir_fd, name, flags, shown), name
-    except FsError as exc:
-        if exc.code != "fs.not_found" or name.isascii():
-            raise
+#: Most entries read from one folder to resolve a name (NFD fallback, name check); more refuse the path.
+MAX_SCAN = 100_000
+
+
+def names(dir_fd: int, shown: str = "") -> Iterator[str]:
+    """The entry names of an open folder, at most :data:`MAX_SCAN` (then ``fs.too_many_entries``)."""
+    with os.scandir(dir_fd) as entries:
+        for count, item in enumerate(entries, 1):
+            if count > MAX_SCAN:
+                raise FsError(
+                    "fs.too_many_entries",
+                    f"A folder on the way has more than {MAX_SCAN} entries",
+                    path=shown,
+                    reason="entries",
+                )
+            yield item.name
+
+
+def _variant(dir_fd: int, name: str, shown: str) -> str:
+    """The one entry whose NFC form is ``name`` but which is stored otherwise (NFD, e.g. by macOS)."""
     import unicodedata
 
     found = [
-        entry for entry in names(dir_fd) if unicodedata.normalize("NFC", entry) == name and entry != name
+        item for item in names(dir_fd, shown) if unicodedata.normalize("NFC", item) == name and item != name
     ]
     if len(found) > 1:
         raise FsError("fs.ambiguous_name", "Several entries have this name after normalization", path=shown)
     if not found:
         raise FsError("fs.not_found", "No file or folder of this name", path=shown)
-    return _child(dir_fd, found[0], flags, shown), found[0]
+    return found[0]
+
+
+def _resolve(
+    dir_fd: int, name: str, flags: int, shown: str, *, precheck: bool = False
+) -> tuple[int, str, os.stat_result | None]:
+    """Open ``name`` exactly, or else the one entry whose NFC form is ``name``.
+
+    With ``precheck`` the entry is looked at with ``fstatat`` before it is opened (:func:`_precheck`), and
+    that result is returned to be compared with the opened descriptor.
+    """
+    if precheck:
+        candidate = name
+        before = _precheck(dir_fd, name, shown)
+        if before is None and not name.isascii():
+            candidate = _variant(dir_fd, name, shown)
+            before = _precheck(dir_fd, candidate, shown)
+        if before is None:
+            raise FsError("fs.not_found", "No file or folder of this name", path=shown)
+        return _child(dir_fd, candidate, flags, shown), candidate, before
+    try:
+        return _child(dir_fd, name, flags, shown), name, None
+    except FsError as exc:
+        if exc.code != "fs.not_found" or name.isascii():
+            raise
+    candidate = _variant(dir_fd, name, shown)
+    return _child(dir_fd, candidate, flags, shown), candidate, None
+
+
+# ---- the name the file system stored -----------------------------------------------------------------------
+
+#: Magic numbers (``statfs.f_type``) of Linux file systems that compare names without case: FAT, exFAT, NTFS
+#: (ntfs3 and ntfs-3g), HFS+, SMB and CIFS.
+_CASELESS_FILE_SYSTEMS = frozenset(
+    {0x4D44, 0x2011BAB0, 0x7366746E, 0x5346544E, 0x482B, 0x4858, 0xFE534D42, 0xFF534D42, 0x517B, 0x65735546}
+)
+_FS_IOC_GETFLAGS = 0x80086601 if ctypes.sizeof(ctypes.c_long) == 8 else 0x80046601
+_FS_CASEFOLD_FL = 0x40000000
+
+
+class _StatFs(ctypes.Structure):
+    _fields_ = [("f_type", ctypes.c_long), ("rest", ctypes.c_byte * 256)]
+
+
+def _caseless_file_system(fd: int) -> bool:
+    """Whether the (Linux) file system of ``fd`` compares names without case (``fstatfs``)."""
+    function = _libc_function("fstatfs")
+    if function is None:
+        return True  # unknown: check every name
+    data = _StatFs()
+    if function(ctypes.c_int(fd), ctypes.byref(data)) != 0:
+        return True
+    return (data.f_type & 0xFFFFFFFF) in _CASELESS_FILE_SYSTEMS
+
+
+def _casefold_folder(fd: int) -> bool:
+    """Whether a Linux folder has the casefold attribute (ext4, f2fs, tmpfs): names compare without case."""
+    import fcntl
+
+    buffer = bytearray(8)
+    try:
+        fcntl.ioctl(fd, _FS_IOC_GETFLAGS, buffer, True)
+    except OSError:
+        return False
+    return bool(int.from_bytes(buffer[:4], sys.byteorder) & _FS_CASEFOLD_FL)
+
+
+class _AttrList(ctypes.Structure):
+    _fields_ = [
+        ("bitmapcount", ctypes.c_ushort),
+        ("reserved", ctypes.c_uint16),
+        ("commonattr", ctypes.c_uint32),
+        ("volattr", ctypes.c_uint32),
+        ("dirattr", ctypes.c_uint32),
+        ("fileattr", ctypes.c_uint32),
+        ("forkattr", ctypes.c_uint32),
+    ]
+
+
+def _attr_name(fd: int) -> str | None:
+    """The name a macOS file system stored for an open file (``fgetattrlist`` with ``ATTR_CMN_NAME``)."""
+    function = _libc_function("fgetattrlist")
+    if function is None:
+        return None
+    request = _AttrList(5, 0, 0x00000001, 0, 0, 0, 0)  # ATTR_BIT_MAP_COUNT, ATTR_CMN_NAME
+    buffer = ctypes.create_string_buffer(4 + 8 + 1024 * 3 + 8)
+    if function(ctypes.c_int(fd), ctypes.byref(request), buffer, ctypes.sizeof(buffer), ctypes.c_uint(0)):
+        return None
+    raw = buffer.raw
+    offset = int.from_bytes(raw[4:8], sys.byteorder, signed=True)
+    length = int.from_bytes(raw[8:12], sys.byteorder)
+    start = 4 + offset
+    if offset <= 0 or length < 1 or start + length > len(raw):
+        return None
+    return os.fsdecode(raw[start : start + length].split(b"\0", 1)[0])
+
+
+def _scan_name(dir_fd: int, name: str, info: Info, shown: str) -> str | None:
+    """The stored name of the entry of ``dir_fd`` that folds to ``name`` and is the file ``info``."""
+    wanted = fold(name)
+    for entry in names(dir_fd, shown):
+        if fold(entry) != wanted:
+            continue
+        with suppress(OSError):
+            st = os.stat(entry, dir_fd=dir_fd, follow_symlinks=False)
+            if (st.st_dev, st.st_ino) == (info.dev, info.ino):
+                return entry
+    return None
+
+
+def _stored_name(dir_fd: int, fd: int, name: str, info: Info, caseless: bool, shown: str) -> str | None:
+    """The name the file system stored for the entry just opened as ``name``, where it may differ from
+    ``name`` by more than Unicode normalization; ``None`` where names are compared byte for byte."""
+    if _DARWIN:
+        if info.kind != "dir" and info.nlink > 1:
+            return None  # the stored name of a hard link may be another link's (and is refused anyway)
+        stored = _attr_name(fd)
+        return stored if stored is not None else (_scan_name(dir_fd, name, info, shown) or "")
+    if _LINUX and (caseless or _casefold_folder(dir_fd)):
+        return _scan_name(dir_fd, name, info, shown) or ""
+    return None
+
+
+# ---- the walk ----------------------------------------------------------------------------------------------
+
+
+def _precheck(dir_fd: int, name: str, shown: str) -> os.stat_result | None:
+    """``fstatat`` of the last component before it is opened: links and special files are never opened."""
+    try:
+        st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None  # not found under this spelling: the open (or the NFD fallback) decides
+    except OSError as exc:
+        if exc.errno in (errno.EACCES, errno.EPERM):
+            raise FsError("fs.permission", "The operating system denied access", path=shown) from None
+        raise FsError("fs.unreadable", f"Cannot be opened ({exc.strerror})", path=shown) from None
+    if stat.S_ISLNK(st.st_mode):
+        raise FsError("fs.link", "A symbolic link is on the way; links are not followed", path=shown)
+    if not (stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)):
+        raise FsError("fs.not_regular_file", "Not a regular file (a FIFO, socket or device)", path=shown)
+    return st
 
 
 @contextmanager
@@ -241,50 +426,67 @@ def walk(
 
     ``final`` is ``"dir"``, ``"file"`` or ``"any"`` (the last component). ``on_node(index, info, names)`` is
     called for the root (index ``-1``) and every component with the names opened so far; it raises to refuse.
-    Every descriptor is closed when the block ends.
+    A folder's descriptor is closed as soon as the next component is open; the last one when the block ends.
     """
     del allow_cloud
-    opened: list[int] = []
+    current: int | None = None
     try:
-        fd, root_info = _open_root(root, identity)
-        opened.append(fd)
-        root_real = _getpath(fd) if _DARWIN else None
+        current, root_info = _open_root(root, identity)
+        root_real = _getpath(current) if _DARWIN else None
+        checked_mounts = _LINUX and not openat2_available()
+        root_mount = _mount_id(current) if checked_mounts else None
+        if checked_mounts and root_mount is None:
+            raise FsError(
+                "fs.cross_device",
+                "Mounts below the root cannot be checked here (no openat2 and no /proc)",
+                path=shown,
+            )
+        caseless = _LINUX and _caseless_file_system(current)
         on_node(-1, root_info, ())
         info = root_info
         actual: list[str] = []
         for index, name in enumerate(parts):
             last = index == len(parts) - 1
-            flags = (
-                _DIRECTORY_FLAGS
-                if not last or final == "dir"
-                else _FILE_FLAGS
-                if final == "file"
-                else _ANY_FLAGS
-            )
-            fd, stored = _resolve(opened[-1], name, flags, shown)
-            opened.append(fd)
+            directory = not last or final == "dir"
+            flags = _DIRECTORY_FLAGS if directory else _FILE_FLAGS if final == "file" else _ANY_FLAGS
+            fd, stored, before = _resolve(current, name, flags, shown, precheck=not directory)
+            parent, current = current, fd
+            try:
+                info = _info(fd)
+                if before is not None and (before.st_dev, before.st_ino) != (info.dev, info.ino):
+                    raise FsError("fs.unreadable", "The entry changed while it was opened", path=shown)
+                if info.dev != root_info.dev:
+                    raise FsError("fs.cross_device", "The path crosses into another file system", path=shown)
+                if checked_mounts and _mount_id(fd) != root_mount:
+                    raise FsError("fs.cross_device", "The path crosses into another mount", path=shown)
+                if info.kind == "other":
+                    raise FsError(
+                        "fs.not_regular_file", "Not a regular file (a FIFO, socket or device)", path=shown
+                    )
+                if root_real is not None and (info.kind == "dir" or info.nlink == 1):
+                    real = _getpath(fd)
+                    if real is None or not _below(real, root_real):
+                        raise FsError("fs.outside_root", "The opened path is not below the root", path=shown)
+                answered = _stored_name(parent, fd, stored, info, caseless, shown)
+                if answered is not None and fold(answered) != fold(stored):
+                    raise FsError(
+                        "fs.ambiguous_name",
+                        "The file system answered with an entry of another name",
+                        path=shown,
+                    )
+            finally:
+                os.close(parent)
             actual.append(stored)
-            info = _info(fd)
-            if info.dev != root_info.dev:
-                raise FsError("fs.cross_device", "The path crosses into another file system", path=shown)
-            if info.kind == "other":
-                raise FsError(
-                    "fs.not_regular_file", "Not a regular file (a FIFO, socket or device)", path=shown
-                )
-            if root_real is not None and (info.kind == "dir" or info.nlink == 1):
-                real = _getpath(fd)
-                if real is None or not _below(real, root_real):
-                    raise FsError("fs.outside_root", "The opened path is not below the root", path=shown)
             on_node(index, info, tuple(actual))
         if final == "file" and info.kind == "dir":
             raise FsError("fs.is_a_directory", "A file was expected, this is a folder", path=shown)
         if final == "dir" and info.kind != "dir":
             raise FsError("fs.not_a_directory", "A folder was expected", path=shown)
-        yield opened[-1], info
+        yield current, info
     finally:
-        for fd in reversed(opened):
+        if current is not None:
             with suppress(OSError):
-                os.close(fd)
+                os.close(current)
 
 
 def _below(path: str, root: str) -> bool:
@@ -295,31 +497,26 @@ def _below(path: str, root: str) -> bool:
     return len(inner) > len(outer) and inner[: len(outer)] == outer
 
 
-def names(dir_fd: int) -> list[str]:
-    """The entry names of an open folder."""
-    with os.scandir(dir_fd) as entries:
-        return [entry.name for entry in entries]
-
-
-def listing(dir_fd: int, root: str, parts: tuple[str, ...]) -> Iterator[tuple[str, str, int]]:
-    """``(name, kind, size)`` of every entry of an open folder (file, dir, link, other); no link followed."""
+def listing(dir_fd: int, root: str, parts: tuple[str, ...]) -> Iterator[tuple[str, str, int, int]]:
+    """``(name, kind, size, nlink)`` of the entries of an open folder, one at a time; no link followed."""
     del root, parts  # the descriptor names the folder
-    for name in names(dir_fd):
-        try:
-            st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
-        except OSError:
-            continue
-        mode = st.st_mode
-        kind = (
-            "link"
-            if stat.S_ISLNK(mode)
-            else "dir"
-            if stat.S_ISDIR(mode)
-            else "file"
-            if stat.S_ISREG(mode)
-            else "other"
-        )
-        yield name, kind, st.st_size if kind == "file" else 0
+    with os.scandir(dir_fd) as entries:
+        for item in entries:
+            try:
+                st = item.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            mode = st.st_mode
+            kind = (
+                "link"
+                if stat.S_ISLNK(mode)
+                else "dir"
+                if stat.S_ISDIR(mode)
+                else "file"
+                if stat.S_ISREG(mode)
+                else "other"
+            )
+            yield item.name, kind, st.st_size if kind == "file" else 0, st.st_nlink
 
 
 def read(fd: int, limit: int, cancelled: Callable[[], bool], shown: str) -> bytes:
@@ -442,7 +639,9 @@ def rename(
 
     ``renameat2(RENAME_NOREPLACE)`` on Linux, ``renameatx_np(RENAME_EXCL)`` on macOS. Without either (or a
     file system that refuses the flag), a file is hard-linked to the new name (which fails if it exists) and
-    its old name removed; a folder then cannot be renamed (``fs.unsupported_type``).
+    its old name removed, after checking that the old name still is that very file; if anything fails, the
+    new name is removed again, so no second link stays behind. A folder then cannot be renamed
+    (``fs.unsupported_type``).
     """
     del root, parts
     code = _rename_call(src_fd, src, dst_fd, dst)
@@ -466,4 +665,17 @@ def rename(
         raise FsError("fs.exists", "A file or folder of the new name exists already", path=shown) from None
     except OSError as exc:
         raise FsError("fs.permission", f"Cannot be renamed ({exc.strerror})", path=shown) from None
-    os.unlink(src, dir_fd=src_fd)
+    try:
+        old = os.stat(src, dir_fd=src_fd, follow_symlinks=False)
+        new = os.stat(dst, dir_fd=dst_fd, follow_symlinks=False)
+        if (old.st_dev, old.st_ino) != (new.st_dev, new.st_ino):
+            raise FsError("fs.unreadable", "The file changed while it was renamed", path=shown)
+        os.unlink(src, dir_fd=src_fd)
+    except BaseException as exc:
+        with suppress(OSError):
+            os.unlink(dst, dir_fd=dst_fd)
+        if isinstance(exc, FsError):
+            raise
+        if isinstance(exc, OSError):
+            raise FsError("fs.permission", f"Cannot be renamed ({exc.strerror})", path=shown) from None
+        raise

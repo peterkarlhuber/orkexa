@@ -36,23 +36,28 @@ the standard library (``ctypes`` on Windows and for ``openat2``); PDF text extra
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 import os
 from pathlib import Path
 import sys
 import threading
+import time
 from typing import Any, Literal
 
 from ._names import (
     DEFAULT_BLOCKED,
     FS_ERROR_CODES,
+    MAX_DEPTH,
     MAX_NAME_BYTES,
     MAX_PATH_BYTES,
     FsError,
+    Pattern,
+    State,
     allowed_folders,
     display_name,
     fold,
+    home_parents,
     inside,
     is_short_name,
     path_parts,
@@ -70,9 +75,11 @@ else:
 
 __all__ = [
     "DEFAULT_BLOCKED",
+    "DEFAULT_LIST_SECONDS",
     "DEFAULT_MAX_ENTRIES",
     "DEFAULT_MAX_FILE_BYTES",
     "FS_ERROR_CODES",
+    "MAX_DEPTH",
     "MAX_NAME_BYTES",
     "MAX_PATH_BYTES",
     "PDF_SUFFIXES",
@@ -91,8 +98,10 @@ __all__ = [
 
 #: Largest file :meth:`SafeRoot.read_bytes` reads unless the root or the call says otherwise (50 MiB).
 DEFAULT_MAX_FILE_BYTES = 50 * 1024 * 1024
-#: Most entries :meth:`SafeRoot.list` returns for one folder.
+#: Most entries :meth:`SafeRoot.list` reads from one folder (hidden ones included).
 DEFAULT_MAX_ENTRIES = 10_000
+#: Longest time one :meth:`SafeRoot.list` may take, in seconds.
+DEFAULT_LIST_SECONDS = 10.0
 #: File name suffixes :meth:`SafeRoot.extract_text` reads as text (UTF-8, or UTF-16 with a byte order mark).
 TEXT_SUFFIXES = frozenset(
     {
@@ -136,8 +145,10 @@ class TextBudget:
 
     ``max_bytes`` caps the file read (``None``: the root's ``max_file_bytes``); ``max_chars`` the text
     returned; ``max_pages``, ``timeout`` (seconds) and ``max_memory_mb`` the PDF extraction, which runs in a
-    separate process that is killed at the time budget (:func:`orkexa.retrieval.pdf_pages_isolated`; the
-    memory limit is enforced on Linux only).
+    separate process that is killed at the time budget (:func:`orkexa.retrieval.pdf_pages_isolated`). The
+    memory budget is enforced on Linux (``RLIMIT_AS``), macOS (the process is killed when its resident memory
+    passes the budget) and Windows (a job object with a process memory limit); elsewhere a PDF is refused
+    (``fs.unsupported_type``) rather than read without it.
     """
 
     max_bytes: int | None = None
@@ -180,15 +191,40 @@ def _ancestors(path: str) -> list[str]:
         current = parent
 
 
+def _home(home: str | os.PathLike[str] | None) -> str | None:
+    if home is not None:
+        return os.path.realpath(os.fspath(home))
+    try:
+        return os.path.realpath(Path.home())
+    except (RuntimeError, KeyError, OSError):
+        return None
+
+
+def _identities(paths: Iterable[str]) -> set[tuple[int, int]]:
+    return {_identity(item) for item in map(_backend.stat_path, paths) if item is not None}
+
+
 def root_problem(
-    path: str, info: Info | None = None, *, protected: Iterable[str | os.PathLike[str]] = ()
+    path: str,
+    info: Info | None = None,
+    *,
+    protected: Iterable[str | os.PathLike[str]] = (),
+    home: str | os.PathLike[str] | None = None,
+    blocked: Iterable[str] = DEFAULT_BLOCKED,
 ) -> str | None:
     """Why the canonical folder ``path`` cannot be a root (a message), or ``None``.
 
-    Refused: a drive or file-system root, the home folder itself, a system folder (:func:`system_folders`) or
-        a
-    folder inside one (except the temporary and removable-media folders of
-    :data:`~orkexa.fs._names.POSIX_ALLOWED_FOLDERS`), and a ``protected`` folder or a folder inside one.
+    Refused:
+
+    * a drive or file-system root;
+    * the home folder itself or any folder that contains it (``home``, default: the user's home folder), and
+      the folders that hold every user's home folder (``/home``, ``/Users``, ``C:\\Users``);
+    * a system folder (:func:`system_folders`) or a folder inside one, except the temporary and
+      removable-media folders of :data:`~orkexa.fs._names.POSIX_ALLOWED_FOLDERS`;
+    * a folder that the ``blocked`` patterns starting with ``**/`` cover by its absolute path (``~/.ssh``,
+      ``~/Library/Keychains`` or a folder inside one);
+    * a ``protected`` folder or a folder inside one.
+
     Folders are compared by name (component-wise, NFC plus case-folded) and by identity (device and inode, or
     volume and file index), so case, Unicode normalization, 8.3 names and links cannot alias them. ``path``
     must already be canonical (:class:`SafeRoot` does that).
@@ -200,22 +236,25 @@ def root_problem(
     ids = [_identity(item) if item is not None else None for item in chain]
     if info is not None:
         ids[0] = _identity(info)
-    try:
-        home = os.path.realpath(Path.home())
-    except (RuntimeError, KeyError, OSError):
-        home = None
-    if home:
-        home_info = _backend.stat_path(home)
-        if path_parts(home) == parts or (home_info is not None and _identity(home_info) == ids[0]):
+    real_home = _home(home)
+    if real_home and (inside(real_home, path) or ids[0] in _identities(_ancestors(real_home))):
+        if path_parts(real_home) == parts:
             return "The home folder itself cannot be a root; choose a folder inside it"
+        return "A folder that contains the home folder cannot be a root; choose a folder inside it"
+    parents = home_parents()
+    if any(path_parts(parent) == parts for parent in parents) or ids[0] in _identities(parents):
+        return "The folder of all home folders cannot be a root; choose a folder inside your home folder"
+    for pattern in patterns(blocked):
+        if pattern.floating and pattern.covers(parts):
+            return "A blocked folder (credentials, keys, keychains) or a folder inside one cannot be a root"
     for folder in protected:
         text = os.fspath(folder)
         found = _backend.stat_path(text)
-        real = os.path.realpath(text) if found is not None else text
+        real = os.path.realpath(text)
         if inside(path, text) or inside(path, real) or (found is not None and _identity(found) in ids):
             return "A protected folder (or a folder inside one) cannot be a root"
-    allowed = {_identity(item) for item in map(_backend.stat_path, allowed_folders()) if item is not None}
-    system = {_identity(item) for item in map(_backend.stat_path, system_folders()) if item is not None}
+    allowed = _identities(allowed_folders())
+    system = _identities(system_folders())
     for identity in ids:
         if identity in allowed:
             break
@@ -240,11 +279,18 @@ class SafeRoot:
         include: Patterns (:class:`~orkexa.fs._names.Pattern` syntax: ``*``, ``?``, ``**``, anchored at the
             root unless they start with ``**/``) a file must match to be read; empty means every file.
         exclude: Patterns of files and folders that are never read or listed (``fs.excluded``).
-        blocked: Patterns that are refused as ``fs.blocked``; :data:`DEFAULT_BLOCKED` unless replaced.
+        blocked: Patterns that are refused as ``fs.blocked``; :data:`DEFAULT_BLOCKED` unless replaced. A
+            pattern starting with ``**/`` is matched against the absolute path, so it also applies when the
+            root itself lies in or above a blocked folder (``~/.config`` as root still blocks ``gh/...``).
         protected: Folders (the product's data folder ...) that can neither be the root nor be reached below
-            it.
+            it. They are compared by name below the root (also before they exist) and by identity, both looked
+            up again on every call, so a protected folder that is created, deleted or recreated later is
+            still refused.
+        home: The user's home folder, which neither it nor a folder containing it may be the root of (default:
+            the home folder of this process's user).
         max_file_bytes: The size limit of a file (``fs.too_large``).
-        max_entries: The most entries one listing returns (``fs.too_many_entries`` beyond).
+        max_entries: The most entries one listing reads, hidden ones included (``fs.too_many_entries``).
+        max_list_seconds: The longest one listing may take (``fs.too_many_entries``, reason ``timeout``).
         allow_hard_links: Read files with more than one hard link (default: refused with ``fs.hard_link``,
             since a hard link can be the very file of another folder; A-15).
         allow_cloud_files: Read OneDrive cloud placeholders on Windows, which may download them (default:
@@ -262,26 +308,33 @@ class SafeRoot:
         exclude: Iterable[str] = (),
         blocked: Iterable[str] = DEFAULT_BLOCKED,
         protected: Iterable[str | os.PathLike[str]] = (),
+        home: str | os.PathLike[str] | None = None,
         max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
         max_entries: int = DEFAULT_MAX_ENTRIES,
+        max_list_seconds: float = DEFAULT_LIST_SECONDS,
         allow_hard_links: bool = False,
         allow_cloud_files: bool = False,
         expect_identity: tuple[int, int] | None = None,
         writable: bool = False,
     ) -> None:
-        if max_file_bytes < 0 or max_entries < 1:
-            raise ValueError("max_file_bytes must not be negative and max_entries must be positive")
+        if max_file_bytes < 0 or max_entries < 1 or max_list_seconds <= 0:
+            raise ValueError(
+                "max_file_bytes must not be negative, max_entries and max_list_seconds must be positive"
+            )
         text = root_syntax(os.fspath(path))
         protected_paths = [os.fspath(folder) for folder in protected]
+        blocked_patterns = patterns(blocked)
+        blocked_texts = [pattern.text for pattern in blocked_patterns]
+        checks: dict[str, Any] = {"protected": protected_paths, "home": home, "blocked": blocked_texts}
         try:
             canonical, info = _backend.canonical(text)
         except FsError as error:
             # A folder this user may not open (such as /root) is still reported as not grantable.
-            problem = root_problem(os.path.realpath(text), protected=protected_paths)
+            problem = root_problem(os.path.realpath(text), **checks)
             if error.code == "fs.permission" and problem is not None:
                 raise FsError("fs.protected_root", problem) from None
             raise
-        problem = root_problem(canonical, info, protected=protected_paths)
+        problem = root_problem(canonical, info, **checks)
         if problem is not None:
             raise FsError("fs.protected_root", problem)
         if expect_identity is not None and tuple(expect_identity) != _identity(info):
@@ -290,24 +343,35 @@ class SafeRoot:
         self._identity = _identity(info)
         self._include = patterns(include)
         self._exclude = patterns(exclude)
-        self._blocked = patterns(blocked)
-        self._protected: list[tuple[str, tuple[int, int]]] = []
+        self._blocked = blocked_patterns
+        root_parts = path_parts(canonical)
+        # Patterns starting with **/ continue from the absolute path of the root (H2); the others are anchored
+        # at the root.
+        self._blocked_start: list[tuple[Pattern, State]] = [
+            (pattern, pattern.run(root_parts)[0] if pattern.floating else pattern.start())
+            for pattern in blocked_patterns
+        ]
+        self._protected_paths = protected_paths
+        self._protected_rel: list[tuple[str, ...]] = []
+        self._protected_ids: set[tuple[int, int]] = set()
         for folder in protected_paths:
-            try:
-                real, found = _backend.canonical(root_syntax(folder))
-            except FsError:
-                continue  # a protected folder that does not exist cannot be reached either
-            self._protected.append((real, _identity(found)))
-        self._protected_ids = {identity for _, identity in self._protected}
+            for spelling in dict.fromkeys([os.path.abspath(folder), os.path.realpath(folder)]):
+                if inside(spelling, canonical):
+                    self._protected_rel.append(path_parts(spelling)[len(root_parts) :])
+            found = _backend.stat_path(folder)
+            if found is not None:
+                self._protected_ids.add(_identity(found))
         self.max_file_bytes = max_file_bytes
         self.max_entries = max_entries
+        self.max_list_seconds = max_list_seconds
         self.allow_hard_links = allow_hard_links
         self.allow_cloud_files = allow_cloud_files
         self.writable = writable
         self._revoked = threading.Event()
 
     def __repr__(self) -> str:
-        return f"SafeRoot({self._path!r})"
+        # The path names a person's folders: it is not shown (use .path where it is needed).
+        return f"SafeRoot(<redacted>, writable={getattr(self, 'writable', False)})"
 
     @property
     def path(self) -> str:
@@ -322,37 +386,65 @@ class SafeRoot:
     # ---- revocation ----------------------------------------------------------------------------------------
 
     def revoke(self) -> None:
-        """Refuse every later call (``fs.revoked``); a read in progress stops at its next chunk (1 MiB)."""
+        """Refuse every later call (``fs.revoked``); a read, listing or extraction in progress stops too."""
         self._revoked.set()
 
     @property
     def revoked(self) -> bool:
         return self._revoked.is_set()
 
+    def _check_revoked(self, shown: str | None = None) -> None:
+        if self._revoked.is_set():
+            raise FsError("fs.revoked", "The root was revoked", path=shown)
+
     # ---- checks without I/O --------------------------------------------------------------------------------
 
     def check(self, path: str | bytes, *, kind: Literal["file", "dir"] = "file") -> tuple[str, ...]:
         """The components of ``path`` after the name rules and the patterns, without file-system access."""
-        if self._revoked.is_set():
-            raise FsError("fs.revoked", "The root was revoked")
+        self._check_revoked()
         parts = split_relative(path, allow_empty=kind == "dir")
         shown = "/".join(parts)
         folded = tuple(fold(part) for part in parts)
-        if any(pattern.covers(folded) for pattern in self._blocked):
+        if any(pattern.run(folded, state)[1] for pattern, state in self._blocked_start):
             raise FsError("fs.blocked", "This path is blocked", path=shown)
+        if any(folded[: len(rel)] == rel for rel in self._protected_rel):
+            self._protected_ids |= _identities(self._protected_paths)  # remember it, should it move
+            raise FsError("fs.blocked", "This path is inside a protected folder", path=shown)
         if any(pattern.covers(folded) for pattern in self._exclude):
             raise FsError("fs.excluded", "This path is excluded", path=shown)
         if kind == "file" and self._include and not any(pattern.matches(folded) for pattern in self._include):
             raise FsError("fs.excluded", "This file is not included", path=shown)
         return parts
 
-    def _on_node(self, shown: str) -> object:
+    def _states(self, folded: tuple[str, ...]) -> list[tuple[State, bool]]:
+        """What every pattern (blocked, exclude, include) knows after the folder ``folded``."""
+        runs = [pattern.run(folded, state) for pattern, state in self._blocked_start]
+        runs += [pattern.run(folded) for pattern in (*self._exclude, *self._include)]
+        return runs
+
+    def _on_node(self, shown: str) -> Callable[[int, Info, tuple[str, ...]], None]:
+        # Looked up again on every call: a protected folder that was created or recreated since is refused.
+        # Every identity seen is kept, so the folder stays protected after it is moved within the root.
+        self._protected_ids |= _identities(self._protected_paths)
+        protected = set(self._protected_ids)
+
         def check(index: int, info: Info, names: tuple[str, ...]) -> None:
             del index, names
-            if _identity(info) in self._protected_ids:
+            if _identity(info) in protected:
                 raise FsError("fs.blocked", "This path is inside a protected folder", path=shown)
 
         return check
+
+    def _walk(self, parts: tuple[str, ...], shown: str, final: str) -> Any:
+        return _backend.walk(
+            self._path,
+            self._identity,
+            parts,
+            final=final,
+            on_node=self._on_node(shown),
+            shown=shown,
+            allow_cloud=self.allow_cloud_files,
+        )
 
     # ---- operations ----------------------------------------------------------------------------------------
 
@@ -360,16 +452,10 @@ class SafeRoot:
         """Kind and size of one file or folder (links are refused, not reported)."""
         parts = self.check(path, kind="dir")
         shown = "/".join(parts)
-        with _backend.walk(
-            self._path,
-            self._identity,
-            parts,
-            final="any",
-            on_node=self._on_node(shown),  # type: ignore[arg-type]
-            shown=shown,
-            allow_cloud=self.allow_cloud_files,
-        ) as (_, info):
+        with self._walk(parts, shown, "any") as (_, info):
             kind: Kind = "dir" if info.kind == "dir" else "file"
+            if kind == "file" and info.nlink > 1 and not self.allow_hard_links:
+                raise FsError("fs.hard_link", "The file has more than one hard link", path=shown)
             return Entry(
                 name=parts[-1] if parts else "",
                 path=shown,
@@ -382,36 +468,39 @@ class SafeRoot:
 
         Entries that could never be opened are left out: names that break the name rules, blocked and excluded
         paths, and protected folders. Files not matched by ``include`` are left out as well; folders stay,
-        since files below them may match. Links are listed as ``link`` and never followed.
+        since files below them may match. Links are listed as ``link`` and never followed. A file with more
+        than one hard link is listed with size 0 unless ``allow_hard_links``. At most ``max_entries`` entries
+        are read (hidden ones count too) within ``max_list_seconds``; beyond either the listing is refused
+        (``fs.too_many_entries``), and a revoked root stops it.
         """
         parts = self.check(path, kind="dir")
         shown = "/".join(parts)
         found: list[Entry] = []
-        with _backend.walk(
-            self._path,
-            self._identity,
-            parts,
-            final="dir",
-            on_node=self._on_node(shown),  # type: ignore[arg-type]
-            shown=shown,
-            allow_cloud=self.allow_cloud_files,
-        ) as (node, _):
-            for name, kind, size in _backend.listing(node, self._path, parts):
+        deadline = time.monotonic() + self.max_list_seconds
+        with self._walk(parts, shown, "dir") as (node, _):
+            for read, (name, kind, size, links) in enumerate(_backend.listing(node, self._path, parts), 1):
+                self._check_revoked(shown)
+                if read > self.max_entries:
+                    raise FsError(
+                        "fs.too_many_entries",
+                        f"The folder has more than {self.max_entries} entries",
+                        path=shown,
+                        reason="entries",
+                    )
+                if time.monotonic() > deadline:
+                    raise FsError(
+                        "fs.too_many_entries",
+                        f"Listing the folder took longer than {self.max_list_seconds:g} seconds",
+                        path=shown,
+                        reason="timeout",
+                    )
                 child = "/".join([*parts, name])
                 try:
                     self.check(child, kind="dir" if kind == "dir" else "file")
                 except FsError:
                     continue
-                if kind == "dir" and any(
-                    inside(os.path.join(self._path, *parts, name), real) for real, _ in self._protected
-                ):
-                    continue
-                if len(found) >= self.max_entries:
-                    raise FsError(
-                        "fs.too_many_entries",
-                        f"The folder has more than {self.max_entries} entries",
-                        path=shown,
-                    )
+                if kind == "file" and links > 1 and not self.allow_hard_links:
+                    size = 0  # the size of a file that may live elsewhere is not shown (A-15)
                 found.append(Entry(name=name, path=_nfc(child), kind=kind, size=size))  # type: ignore[arg-type]
         keys: dict[str, int] = {}
         for entry in found:
@@ -427,15 +516,7 @@ class SafeRoot:
         limit = self.max_file_bytes if max_bytes is None else min(max_bytes, self.max_file_bytes)
         parts = self.check(path, kind="file")
         shown = "/".join(parts)
-        with _backend.walk(
-            self._path,
-            self._identity,
-            parts,
-            final="file",
-            on_node=self._on_node(shown),  # type: ignore[arg-type]
-            shown=shown,
-            allow_cloud=self.allow_cloud_files,
-        ) as (node, info):
+        with self._walk(parts, shown, "file") as (node, info):
             if info.kind != "file":
                 raise FsError("fs.not_regular_file", "Not a regular file", path=shown)
             if info.nlink > 1 and not self.allow_hard_links:
@@ -457,17 +538,6 @@ class SafeRoot:
         if not self.writable:
             raise FsError("fs.read_only", "This root is read only", path=shown)
 
-    def _walk_folder(self, parts: tuple[str, ...], shown: str) -> Any:
-        return _backend.walk(
-            self._path,
-            self._identity,
-            parts,
-            final="dir",
-            on_node=self._on_node(shown),  # type: ignore[arg-type]
-            shown=shown,
-            allow_cloud=self.allow_cloud_files,
-        )
-
     def create_file(self, path: str | bytes, data: bytes) -> None:
         """Create a new file below the root with ``data``; an existing entry is never replaced or followed.
 
@@ -481,16 +551,20 @@ class SafeRoot:
         self._writable(shown)
         if len(data) > self.max_file_bytes:
             raise FsError("fs.too_large", f"At most {self.max_file_bytes} bytes can be written", path=shown)
-        with self._walk_folder(parts[:-1], shown) as (node, _):
+        with self._walk(parts[:-1], shown, "dir") as (node, _):
             _backend.create(node, self._path, parts[:-1], parts[-1], bytes(data), shown)
 
     def rename(self, source: str | bytes, target: str | bytes) -> None:
         """Rename a file or folder below the root; an existing ``target`` is never replaced.
 
-        Links are not renamed (``fs.link``), nor files with several hard links unless ``allow_hard_links``,
-        nor protected folders. Linux: ``renameat2(RENAME_NOREPLACE)``; macOS: ``renameatx_np(RENAME_EXCL)``,
-        both on the descriptors of the checked folders; Windows: ``MoveFileExW`` without ``REPLACE_EXISTING``
-        below the held folder handles.
+        Refused: links (``fs.link``); files with several hard links unless ``allow_hard_links``; protected
+        folders and the folders above them (``fs.blocked``); a file that could not be read under its old or
+        its new name (blocked, excluded, not included); a folder whose new name would change what the
+        blocked, exclude or include patterns decide for anything below it (``fs.excluded``), so a rename
+        never makes a hidden file readable. Linux: ``renameat2(RENAME_NOREPLACE)``; macOS:
+        ``renameatx_np(RENAME_EXCL)``, both on the descriptors of the checked folders; Windows:
+        ``MoveFileExW`` without ``REPLACE_EXISTING`` below the held folder handles (which pin the folders,
+        not the entry itself: see the guide).
         """
         src = self.check(source, kind="dir")
         dst = self.check(target, kind="dir")
@@ -498,16 +572,26 @@ class SafeRoot:
         self._writable(shown)
         if not src or not dst:
             raise FsError("fs.invalid_path", "The root itself cannot be renamed", path=shown)
+        folded_src = tuple(fold(part) for part in src)
+        if any(rel[: len(folded_src)] == folded_src for rel in self._protected_rel):
+            raise FsError("fs.blocked", "A protected folder or a folder above one is not renamed", path=shown)
         kind = self.stat(source).kind  # refuses links on the way and protected folders, checks the kind
         if kind == "file":
+            self.check(source, kind="file")
             self.check(target, kind="file")
-        with self._walk_folder(src[:-1], shown) as (src_node, _):
+        elif self._states(folded_src) != self._states(tuple(fold(part) for part in dst)):
+            raise FsError(
+                "fs.excluded",
+                "Renaming this folder would change which blocked, include or exclude patterns apply",
+                path=shown,
+            )
+        with self._walk(src[:-1], shown, "dir") as (src_node, _):
             entry_kind, links = _backend.entry(src_node, src[-1], shown, root=self._path, parts=src[:-1])
             if entry_kind == "link":
                 raise FsError("fs.link", "A link is not renamed", path=shown)
             if entry_kind == "file" and links > 1 and not self.allow_hard_links:
                 raise FsError("fs.hard_link", "The file has more than one hard link", path=shown)
-            with self._walk_folder(dst[:-1], "/".join(dst)) as (dst_node, _):
+            with self._walk(dst[:-1], "/".join(dst), "dir") as (dst_node, _):
                 _backend.rename(
                     src_node,
                     src[-1],
@@ -525,10 +609,10 @@ class SafeRoot:
         Text files (:data:`TEXT_SUFFIXES`) are decoded as UTF-8 (or UTF-16 with a byte order mark); a file
         with NUL bytes is binary (``fs.unsupported_type``). PDFs (:data:`PDF_SUFFIXES`) go through
         :func:`orkexa.retrieval.pdf_pages_isolated`: a separate process with a minimal environment, killed at
-        ``budget.timeout``, with ``budget.max_pages``, ``max_chars`` and (Linux) ``max_memory_mb``. Exceeding
-        a budget raises ``fs.too_complex`` with ``reason`` ``pages``, ``chars``, ``timeout``, ``memory``,
-        ``limit`` or ``crash``; an unreadable PDF ``fs.unreadable``. Other suffixes raise
-        ``fs.unsupported_type``.
+        ``budget.timeout``, with ``budget.max_pages``, ``max_chars`` and ``max_memory_mb``. Exceeding a budget
+        raises ``fs.too_complex`` with ``reason`` ``pages``, ``chars``, ``timeout``, ``memory``, ``limit`` or
+        ``crash``; an unreadable PDF ``fs.unreadable``. Other suffixes raise ``fs.unsupported_type``. A root
+        revoked during the extraction raises ``fs.revoked`` instead of returning the text.
         """
         budget = budget or TextBudget()
         parts = self.check(path, kind="file")
@@ -538,9 +622,16 @@ class SafeRoot:
             raise FsError(
                 "fs.unsupported_type", "No text extraction exists for this kind of file", path=shown
             )
+        if suffix in PDF_SUFFIXES and not _memory_budget_enforced():
+            raise FsError(
+                "fs.unsupported_type",
+                "The PDF memory budget cannot be enforced on this operating system",
+                path=shown,
+            )
         data = self.read_bytes(shown, max_bytes=budget.max_bytes)
         if suffix in PDF_SUFFIXES:
             pages = _pdf_pages(data, budget, shown)
+            self._check_revoked(shown)
             return ExtractedText(shown, "pdf", "\n\n".join(pages), len(data), tuple(pages))
         text = _decode(data, shown)
         if len(text) > budget.max_chars:
@@ -550,7 +641,13 @@ class SafeRoot:
                 path=shown,
                 reason="chars",
             )
+        self._check_revoked(shown)
         return ExtractedText(shown, "text", text, len(data))
+
+
+def _memory_budget_enforced() -> bool:
+    """Whether :func:`orkexa.retrieval.pdf_pages_isolated` enforces ``max_memory_mb`` on this system."""
+    return sys.platform.startswith("linux") or sys.platform in ("darwin", "win32")
 
 
 def _nfc(text: str) -> str:

@@ -19,6 +19,9 @@ from ..errors import OrkexaError
 MAX_PATH_BYTES = 4096
 #: Longest single component accepted, in UTF-8 bytes.
 MAX_NAME_BYTES = 255
+#: Most components of a relative path (and of a pattern). Bounds the work of every check and the handles one
+#: walk holds on Windows.
+MAX_DEPTH = 128
 
 FS_ERROR_CODES: dict[str, str] = {
     "fs.invalid_path": "The path breaks a name rule (control character, NUL, ':', '\\', a reserved device "
@@ -36,13 +39,16 @@ FS_ERROR_CODES: dict[str, str] = {
     "fs.not_a_directory": "A folder was expected",
     "fs.is_a_directory": "A file was expected, this is a folder",
     "fs.not_found": "Nothing with this name exists below the root",
-    "fs.ambiguous_name": "Several entries of the folder have this name after Unicode normalization",
+    "fs.ambiguous_name": "Several entries of the folder have this name after Unicode normalization, or the "
+    "file system answered with an entry of another name",
     "fs.blocked": "The path is on the blocklist or inside a protected folder (such as the product's data)",
     "fs.excluded": "The path is excluded by the root's include and exclude patterns",
     "fs.too_large": "The file is larger than the size limit",
-    "fs.too_many_entries": "The folder has more entries than the listing limit",
-    "fs.protected_root": "This folder cannot be a root: a drive or file-system root, the home folder itself, "
-    "a system folder, or a protected folder (or a folder inside one)",
+    "fs.too_many_entries": "The folder has more entries than the listing limit, or listing it took longer "
+    "than the time limit (reason: entries, timeout)",
+    "fs.protected_root": "This folder cannot be a root: a drive or file-system root, the home folder itself "
+    "or a folder that contains it, a folder that holds home folders, a system folder, a blocked folder, or a "
+    "protected folder (or a folder inside one of these)",
     "fs.network_path": "Network paths (UNC shares, also of this computer, network drives) cannot be a root",
     "fs.cloud_file": "A cloud placeholder (OneDrive files on demand); reading it could download it",
     "fs.root_changed": "The root is no longer the folder that was checked (moved, replaced or a link now)",
@@ -175,6 +181,8 @@ def split_relative(path: str | bytes, *, allow_empty: bool = False) -> tuple[str
     if len(text.encode("utf-8")) > MAX_PATH_BYTES:
         raise FsError("fs.invalid_path", f"The path is longer than {MAX_PATH_BYTES} bytes", path=shown)
     parts = tuple(text.split("/"))
+    if len(parts) > MAX_DEPTH:
+        raise FsError("fs.invalid_path", f"The path has more than {MAX_DEPTH} components", path=shown[:256])
     if ".." in parts:
         raise FsError("fs.parent_reference", "The path must not contain '..'", path=text)
     for part in parts:
@@ -184,9 +192,29 @@ def split_relative(path: str | bytes, *, allow_empty: bool = False) -> tuple[str
     return parts
 
 
+#: Unicode Default_Ignorable_Code_Point ranges (DerivedCoreProperties.txt). Some file systems ignore them in
+#: names (HFS+, the casefold of ext4 and f2fs), so ``.s\u200bsh`` may open ``.ssh`` there.
+_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+    (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164),
+    (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
+)  # fmt: skip
+_IGNORABLE = re.compile("[" + "".join(f"\\U{low:08x}-\\U{high:08x}" for low, high in _IGNORABLE_RANGES) + "]")
+#: Letters that case-insensitive file systems (the exFAT and NTFS upcase tables) equate although case folding
+#: does not: dotless i is I there.
+_FOLD_EXTRA = str.maketrans({"\u0131": "i"})
+
+
 def fold(name: str) -> str:
-    """``name`` for comparisons with the blocklist and the patterns: NFC, case-folded, NFC again."""
-    return unicodedata.normalize("NFC", unicodedata.normalize("NFC", name).casefold())
+    """``name`` for comparisons with the blocklist and the patterns.
+
+    NFC, default-ignorable code points removed, case-folded, dotless i as i, NFC again: two names that any
+    supported file system could treat as one fold to the same text (fails closed: the blocklist then covers
+    both).
+    """
+    text = _IGNORABLE.sub("", unicodedata.normalize("NFC", name))
+    return unicodedata.normalize("NFC", text.casefold().translate(_FOLD_EXTRA))
 
 
 def display_name(name: str) -> str:
@@ -197,15 +225,23 @@ def display_name(name: str) -> str:
 # ---- patterns ----------------------------------------------------------------------------------------------
 
 
+State = frozenset[int]
+
+
 class Pattern:
     """A glob over relative paths: ``*`` and ``?`` within one component, ``**`` for any number of components.
 
-    A pattern is anchored at the root unless it starts with ``**/``. Comparison is NFC plus case-folded on
-    every operating system (fails closed on case-insensitive file systems). For exclusions and the blocklist a
-    pattern that matches a folder covers everything below it.
+    A pattern is anchored at the root unless it starts with ``**/`` (:attr:`floating`). Comparison is NFC
+    plus case-folded on every operating system (fails closed on case-insensitive file systems). For exclusions
+    and the blocklist a pattern that matches a folder covers everything below it.
+
+    Matching runs the pattern as a set of positions over the components, one pass from left to right: the
+    work is at most (components of the path) x (components of the pattern) component comparisons, whatever
+    the number of ``**``, so no path can make a check slow. A state (:meth:`start`, :meth:`step`) tells
+    everything the pattern can still decide about the paths below a folder.
     """
 
-    __slots__ = ("parts", "text")
+    __slots__ = ("floating", "parts", "text")
 
     def __init__(self, text: str) -> None:
         if not isinstance(text, str) or not text or len(text) > MAX_PATH_BYTES:
@@ -213,28 +249,66 @@ class Pattern:
         cleaned = unicodedata.normalize("NFC", text).strip("/")
         if not cleaned or "\\" in cleaned or ".." in cleaned.split("/") or "\x00" in cleaned:
             raise ValueError(f"Invalid pattern {text!r}")
+        parts = tuple(fold(part) for part in cleaned.split("/"))
+        if len(parts) > MAX_DEPTH:
+            raise ValueError(f"A pattern has at most {MAX_DEPTH} components")
         self.text = text
-        self.parts = tuple(fold(part) for part in cleaned.split("/"))
+        self.parts = parts
+        self.floating = parts[0] == "**"
 
     def __repr__(self) -> str:
         return f"Pattern({self.text!r})"
 
+    def _closure(self, positions: Iterable[int]) -> State:
+        found = set(positions)
+        pending = list(found)
+        while pending:
+            position = pending.pop()
+            if position < len(self.parts) and self.parts[position] == "**" and position + 1 not in found:
+                found.add(position + 1)
+                pending.append(position + 1)
+        return frozenset(found)
+
+    def start(self) -> State:
+        """The state before the first component."""
+        return self._closure((0,))
+
+    def step(self, state: State, part: str) -> State:
+        """The state after one more (folded) component."""
+        following: set[int] = set()
+        for position in state:
+            if position >= len(self.parts):
+                continue
+            head = self.parts[position]
+            if head == "**":
+                following.add(position)
+            elif fnmatchcase(part, head):
+                following.add(position + 1)
+        return self._closure(following)
+
+    def done(self, state: State) -> bool:
+        """Whether the path read so far matches the whole pattern."""
+        return len(self.parts) in state
+
+    def run(self, parts: Iterable[str], state: State | None = None) -> tuple[State, bool]:
+        """The state after ``parts`` and whether the pattern matched after one of them (it *covers* them)."""
+        current = self.start() if state is None else state
+        covered = False
+        for part in parts:
+            if not current:
+                break
+            current = self.step(current, part)
+            covered = covered or self.done(current)
+        return current, covered
+
     def matches(self, parts: tuple[str, ...]) -> bool:
         """Whether the pattern matches exactly this path (folded components)."""
-        return _match(self.parts, parts)
+        state, _ = self.run(parts)
+        return self.done(state)
 
     def covers(self, parts: tuple[str, ...]) -> bool:
         """Whether the pattern matches this path or one of its folders."""
-        return any(_match(self.parts, parts[:end]) for end in range(1, len(parts) + 1))
-
-
-def _match(pattern: tuple[str, ...], parts: tuple[str, ...]) -> bool:
-    if not pattern:
-        return not parts
-    head = pattern[0]
-    if head == "**":
-        return any(_match(pattern[1:], parts[start:]) for start in range(len(parts) + 1))
-    return bool(parts) and fnmatchcase(parts[0], head) and _match(pattern[1:], parts[1:])
+        return self.run(parts)[1]
 
 
 def patterns(values: Iterable[str]) -> tuple[Pattern, ...]:
@@ -283,6 +357,8 @@ POSIX_SYSTEM_FOLDERS: tuple[str, ...] = (
 POSIX_ALLOWED_FOLDERS: tuple[str, ...] = (
     "/var/home", "/var/mnt", "/var/tmp", "/run/media", "/private/tmp", "/private/var/folders",
 )  # fmt: skip
+#: Folders that hold the home folders of all users: never a root (each user's files are below them).
+POSIX_HOME_PARENTS: tuple[str, ...] = ("/home", "/Users", "/var/home", "/export/home", "/usr/home")
 #: Environment variables that name Windows system folders (on any drive).
 WINDOWS_SYSTEM_ENV: tuple[str, ...] = (
     "SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData",
@@ -299,6 +375,16 @@ def system_folders() -> list[str]:
         named = [os.environ.get(name, "") for name in WINDOWS_SYSTEM_ENV]
         return list(dict.fromkeys([*WINDOWS_SYSTEM_FOLDERS, *(value for value in named if value)]))
     return list(POSIX_SYSTEM_FOLDERS)
+
+
+def home_parents() -> list[str]:
+    """The folders that hold the home folders of all users on this operating system."""
+    if os.name == "nt":
+        drive = os.environ.get("SYSTEMDRIVE", "C:")
+        profile = os.environ.get("USERPROFILE", "").rstrip("\\")
+        named = [os.path.dirname(profile) if profile else "", os.environ.get("PUBLIC", "")]
+        return list(dict.fromkeys([f"{drive}\\Users", *(value for value in named if value)]))
+    return list(POSIX_HOME_PARENTS)
 
 
 def allowed_folders() -> list[str]:

@@ -13,20 +13,24 @@ of them against :class:`orkexa.fs.SafeRoot`; a product runs the portable part ag
     assert not findings, findings
 
 ``check_reader`` sends every name attack (:data:`NAME_ATTACKS`) and every link attack the layout could create
-(:func:`link_attacks`) to ``read`` and reports each one that returned data, returned the planted canary or,
-with ``code_of``, failed with an unexpected code. :func:`swap_race` replaces a file by a link to the outside
-while ``read`` runs, many times. Nothing here needs pytest or imports another Orkexa module.
+(:func:`link_attacks`) to ``read`` and reports each one that returned data, returned the planted canary, or
+failed with anything but a refusal of the expected code; a positive control makes sure ``read`` still returns
+the files inside the root. :func:`swap_race` replaces a file by a link to the outside while ``read`` runs,
+many times, and makes sure the swaps really happened. Nothing here needs pytest; the only Orkexa import is
+:class:`orkexa.fs.FsError`, the default refusal.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+import contextlib
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 
 __all__ = [
     "BLOCKED_CANARY",
@@ -97,7 +101,11 @@ CATALOG: tuple[AttackCase, ...] = (
         "N10-04",
         "Swap race: a file replaced by a link to the outside while it is opened (10,000 times)",
         ["fs.link", "fs.not_found", "fs.root_changed", "fs.unreadable", "fs.permission"],
-        ["test_safe_root.py::test_swap_race_file", "test_safe_root.py::test_swap_race_folder"],
+        [
+            "test_safe_root.py::test_swap_race_file",
+            "test_safe_root.py::test_swap_race_folder",
+            "test_hardening.py::test_l7_swap_race_reports_a_race_that_did_not_run",
+        ],
     ),
     _case(
         "N10-05",
@@ -109,7 +117,11 @@ CATALOG: tuple[AttackCase, ...] = (
         "N10-06",
         "Hard link inside the root to a file outside (same file system)",
         ["fs.hard_link"],
-        ["test_attack_catalog.py::test_link_attacks_are_refused", "test_safe_root.py::test_hard_links"],
+        [
+            "test_attack_catalog.py::test_link_attacks_are_refused",
+            "test_safe_root.py::test_hard_links",
+            "test_hardening.py::test_l4_stat_and_list_keep_the_hard_link_rule",
+        ],
     ),
     _case(
         "N10-07",
@@ -132,7 +144,11 @@ CATALOG: tuple[AttackCase, ...] = (
         "N10-09",
         "FIFO, Unix socket, /dev/zero, /dev/random in the root: no hang, refused",
         ["fs.not_regular_file", "fs.link", "fs.invalid_path", "fs.protected_root"],
-        ["test_safe_root.py::test_special_files", "test_attack_catalog.py::test_name_attacks_are_refused"],
+        [
+            "test_safe_root.py::test_special_files",
+            "test_attack_catalog.py::test_name_attacks_are_refused",
+            "test_hardening.py::test_l3_a_fifo_is_refused_before_it_is_opened",
+        ],
     ),
     _case(
         "N10-10",
@@ -149,6 +165,8 @@ CATALOG: tuple[AttackCase, ...] = (
             "test_safe_root.py::test_blocked_spellings",
             "test_safe_root.py::test_protected_folder_any_spelling",
             "test_safe_root.py::test_patterns_fold_case",
+            "test_hardening.py::test_m3_fold_drops_ignorables_and_dotless_i",
+            "test_hardening.py::test_m3_the_stored_name_must_fold_to_the_name_asked_for",
         ],
     ),
     _case(
@@ -218,13 +236,22 @@ CATALOG: tuple[AttackCase, ...] = (
         "N10-20",
         "Path longer than 4096 bytes, component longer than 255 bytes",
         ["fs.invalid_path"],
-        ["test_attack_catalog.py::test_name_attacks_are_refused"],
+        [
+            "test_attack_catalog.py::test_name_attacks_are_refused",
+            "test_hardening.py::test_h1_pattern_matching_is_linear",
+            "test_hardening.py::test_h1_paths_have_a_depth_limit",
+            "test_hardening.py::test_m4_a_deep_path_holds_two_descriptors",
+        ],
     ),
     _case(
         "N10-21",
         "Grant revoked during a listing or read: the next call is refused, a running read stops",
         ["fs.revoked"],
-        ["test_safe_root.py::test_revoke"],
+        [
+            "test_safe_root.py::test_revoke",
+            "test_hardening.py::test_l5_revoke_stops_a_listing",
+            "test_hardening.py::test_l5_revoke_stops_an_extraction",
+        ],
     ),
     _case(
         "N10-22",
@@ -233,13 +260,20 @@ CATALOG: tuple[AttackCase, ...] = (
         [
             "test_safe_root.py::test_protected_inside_a_wide_root",
             "test_attack_catalog.py::test_name_attacks_are_refused",
+            "test_hardening.py::test_h2_the_blocklist_continues_from_the_root",
+            "test_hardening.py::test_m1_a_protected_folder_created_after_the_grant",
+            "test_hardening.py::test_m1_a_protected_folder_recreated_or_moved",
         ],
     ),
     _case(
         "N10-23",
-        "Root on /, C:\\, ~, a system folder or the data folder: refused when created",
+        "Root on /, C:\\, ~ or above it, a system, blocked or data folder: refused when created",
         ["fs.protected_root"],
-        ["test_safe_root.py::test_roots_that_cannot_be_granted"],
+        [
+            "test_safe_root.py::test_roots_that_cannot_be_granted",
+            "test_hardening.py::test_h2_a_blocked_folder_cannot_be_the_root",
+            "test_hardening.py::test_h2_home_and_the_folders_above_it",
+        ],
     ),
     _case(
         "W06-1",
@@ -257,7 +291,13 @@ CATALOG: tuple[AttackCase, ...] = (
         "W06-3",
         "Create and rename without replacing or following (O_CREAT|O_EXCL, renameat2 RENAME_NOREPLACE)",
         ["fs.exists", "fs.link", "fs.read_only", "fs.hard_link"],
-        ["test_safe_root.py::test_create_file", "test_safe_root.py::test_rename"],
+        [
+            "test_safe_root.py::test_create_file",
+            "test_safe_root.py::test_rename",
+            "test_hardening.py::test_m2_rename_keeps_include_and_exclude",
+            "test_hardening.py::test_m2_rename_keeps_protected_folders_in_place",
+            "test_hardening.py::test_l2_the_rename_fallback_cleans_up",
+        ],
     ),
     _case(
         "W06-4",
@@ -334,6 +374,7 @@ _NAME_ATTACKS: list[tuple[str, str | bytes, list[str]]] = [
     ("N10-19", "sub/\x1b[2Jdeep.txt", ["fs.invalid_path"]),
     ("N10-20", "a" * 256, ["fs.invalid_path"]),
     ("N10-20", "/".join(["a"] * 2049), ["fs.invalid_path"]),
+    ("N10-20", "/".join(["a"] * 129), ["fs.invalid_path"]),
     ("N10-20", "", ["fs.invalid_path"]),
     ("N10-20", "sub//deep.txt", ["fs.invalid_path"]),
     ("N10-20", "./inside.txt", ["fs.invalid_path"]),
@@ -448,16 +489,32 @@ def check_reader(
     read: Callable[[str | bytes], bytes],
     layout: Layout,
     *,
-    code_of: Callable[[BaseException], str | None] | None = None,
+    code_of: Callable[[BaseException], str | None] | None = _default_code,
+    refusal: type[BaseException] | tuple[type[BaseException], ...] | None = None,
     extra: Iterable[tuple[str, str | bytes, frozenset[str]]] = (),
 ) -> list[Finding]:
     """Run every name and link attack against ``read`` (a relative path in, the bytes out).
 
-    An attack passes when ``read`` raises. With ``code_of`` (an exception to its code, e.g. the ``code`` of an
-    :class:`orkexa.fs.FsError` or of a product's tool error) the code must be one of the attack's codes too.
-    ``extra`` adds attacks of the caller. Returns the findings; an empty list means every attack was refused.
+    First a positive control: ``read`` must return the files that do lie inside the root (``inside.txt``,
+    ``sub/deep.txt``), so a reader that refuses everything cannot pass. Then an attack passes when ``read``
+    raises a refusal: an instance of ``refusal`` (default: :class:`orkexa.fs.FsError`) whose code
+    (``code_of``, default: its ``code`` attribute; ``None`` to skip) is one of the attack's codes. Any other
+    exception is a finding too: a crash is not a refusal. ``extra`` adds attacks of the caller. Returns the
+    findings; an empty list means every attack was refused properly.
     """
+    if refusal is None:
+        from ..fs import FsError
+
+        refusal = FsError
     findings: list[Finding] = []
+    for control, expected in (("inside.txt", b"inside"), ("sub/deep.txt", b"deep")):
+        try:
+            got = read(control)
+        except Exception as exc:  # the control must succeed
+            findings.append(Finding("control", control, f"refused a file inside the root ({exc!r})"))
+            continue
+        if got != expected:
+            findings.append(Finding("control", control, "returned other bytes for a file inside the root"))
     attacks = [*NAME_ATTACKS, *link_attacks(layout), *extra]
     absolute = str(layout.secret)
     attacks.append(("N10-02", absolute, frozenset({"fs.absolute_path"})))
@@ -465,7 +522,10 @@ def check_reader(
         shown = path if isinstance(path, str) else repr(path)
         try:
             data = read(path)
-        except Exception as exc:  # every refusal counts; the code is checked when asked for
+        except Exception as exc:  # a refusal of the expected type and code passes, nothing else
+            if not isinstance(exc, refusal):
+                findings.append(Finding(case, shown, f"failed with {type(exc).__name__}, not a refusal"))
+                continue
             if code_of is not None:
                 code = code_of(exc)
                 if code not in codes:
@@ -481,14 +541,23 @@ def check_reader(
 
 
 def swap_race(
-    read: Callable[[str], bytes], layout: Layout, *, iterations: int = 10_000, folder: bool = False
+    read: Callable[[str], bytes],
+    layout: Layout,
+    *,
+    iterations: int = 10_000,
+    folder: bool = False,
+    min_swaps: int = 10,
+    timeout: float = 30.0,
 ) -> list[Finding]:
     """Swap ``root/race`` between a regular file (folder) and a link to the outside while ``read`` runs.
 
     A second thread renames the entries back and forth as fast as it can; ``read`` is called ``iterations``
     times on ``race`` (``race/secret.txt`` with ``folder``). Any read that returns :data:`CANARY` is a
-    finding. The link is a symbolic link, or a junction on Windows for a folder. Returns ``[]`` when the link
-    cannot be made here (check :attr:`Layout.created` first).
+    finding, and so is a run in which fewer than ``min_swaps`` swaps happened (the race was not exercised) or
+    in which ``read`` never returned the regular file (it refused everything); a reader that is done before
+    ``min_swaps`` swaps keeps reading for up to ``timeout`` seconds. The link is a symbolic link, or
+    a junction on Windows for a folder. Returns ``[]`` when the link cannot be made here (check
+    :attr:`Layout.created` first).
     """
     root = layout.root
     real, link = root / "race_real", root / "race_link"
@@ -507,6 +576,7 @@ def swap_race(
         return []
     os.rename(real, root / "race")
     stop = threading.Event()
+    swaps = [0]
 
     def retry(old: Path, new: Path) -> None:
         while True:
@@ -531,10 +601,13 @@ def swap_race(
                 continue
             retry(root / "race_tmp", occupant)
             occupant, spare = spare, occupant
+            swaps[0] += 1
 
     thread = threading.Thread(target=swapper, daemon=True)
     thread.start()
     findings: list[Finding] = []
+    leak = "read the canary outside the root during a swap"
+    inside = 0
     try:
         for _ in range(iterations):
             try:
@@ -542,9 +615,20 @@ def swap_race(
             except Exception:
                 continue
             if CANARY in data:
-                findings.append(Finding("N10-04", target, "read the canary outside the root during a swap"))
+                findings.append(Finding("N10-04", target, leak))
                 break
+            inside += 1
+        deadline = time.monotonic() + timeout
+        while swaps[0] < min_swaps and not findings and thread.is_alive() and time.monotonic() < deadline:
+            # A fast reader may finish before the swapper got going: keep reading until it did.
+            with contextlib.suppress(Exception):
+                if CANARY in read(target):
+                    findings.append(Finding("N10-04", target, leak))
     finally:
         stop.set()
         thread.join(timeout=30)
+    if not findings and swaps[0] < min_swaps:
+        findings.append(Finding("N10-04", target, f"only {swaps[0]} swaps happened; the race did not run"))
+    if not findings and inside == 0:
+        findings.append(Finding("N10-04", target, "the reader never returned the regular file"))
     return findings

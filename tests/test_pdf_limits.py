@@ -185,7 +185,6 @@ def test_a_slow_pdf_is_stopped_at_the_timeout_and_its_process_is_gone(
 
 
 # MUP-ONA T-PDF-4
-@pytest.mark.skipif(not LINUX, reason="the memory limit (RLIMIT_AS) is enforced on Linux only")
 def test_a_flate_bomb_hits_the_memory_limit_and_the_parent_is_unaffected() -> None:
     data = MAKE.flate_bomb()
     error = _too_complex(lambda: pdf_pages_isolated(data, max_memory_mb=256))

@@ -263,9 +263,21 @@ def _open_root(path: str, identity: tuple[int, int], allow_cloud: bool) -> tuple
     return handle, info
 
 
-def _listing(path: str) -> list[os.DirEntry[str]]:
+#: Most entries read from one folder to resolve a name (the NFD fallback); beyond, the path is refused.
+MAX_SCAN = 100_000
+
+
+def _listing(path: str, shown: str = "") -> Iterator[os.DirEntry[str]]:
     with os.scandir(_long(path)) as found:
-        return list(found)
+        for count, item in enumerate(found, 1):
+            if count > MAX_SCAN:
+                raise FsError(
+                    "fs.too_many_entries",
+                    f"A folder on the way has more than {MAX_SCAN} entries",
+                    path=shown,
+                    reason="entries",
+                )
+            yield item
 
 
 def _resolve(base: str, done: list[str], name: str, directory: bool, shown: str) -> tuple[int, str]:
@@ -278,7 +290,7 @@ def _resolve(base: str, done: list[str], name: str, directory: bool, shown: str)
         raise _error(error, shown)
     found = [
         entry.name
-        for entry in _listing(folder)
+        for entry in _listing(folder, shown)
         if unicodedata.normalize("NFC", entry.name) == name and entry.name != name
     ]
     if len(found) > 1:
@@ -358,29 +370,42 @@ def walk(
             _close(handle)
 
 
-def listing(handle: int, root: str, names: tuple[str, ...]) -> Iterator[tuple[str, str, int]]:
-    """``(name, kind, size)`` of the entries of the folder ``root\\names``, which :func:`walk` holds open
-    (``handle``), so the path names that very folder. Links are reported as ``link``, never followed."""
+def listing(handle: int, root: str, names: tuple[str, ...]) -> Iterator[tuple[str, str, int, int]]:
+    """``(name, kind, size, nlink)`` of the entries of the folder ``root\\names``, which :func:`walk` holds
+    open (``handle``), so the path names that very folder; read one at a time. Links are reported as ``link``,
+    never followed."""
     del handle
-    for entry in _listing("\\".join([root, *names])):
+    folder = "\\".join([root, *names])
+    with os.scandir(_long(folder)) as entries:
+        for entry in entries:
+            yield _listed(entry, folder)
+
+
+def _listed(entry: os.DirEntry[str], folder: str) -> tuple[str, str, int, int]:
+    try:
+        st = entry.stat(follow_symlinks=False)
+    except OSError:
+        return entry.name, "other", 0, 1
+    attributes = getattr(st, "st_file_attributes", 0)
+    tag = getattr(st, "st_reparse_tag", 0)
+    if (
+        attributes & _ATTRIBUTE_REPARSE_POINT
+        and reparse_problem(attributes, tag, allow_cloud=True) == "fs.link"
+    ):
+        kind = "link"
+    elif stat.S_ISDIR(st.st_mode):
+        kind = "dir"
+    elif stat.S_ISREG(st.st_mode):
+        kind = "file"
+    else:
+        kind = "other"
+    links = 1
+    if kind == "file":  # DirEntry.stat() has no link count on Windows; os.lstat opens the file for it
         try:
-            st = entry.stat(follow_symlinks=False)
+            links = os.lstat(_long(folder + "\\" + entry.name)).st_nlink
         except OSError:
-            continue
-        attributes = getattr(st, "st_file_attributes", 0)
-        tag = getattr(st, "st_reparse_tag", 0)
-        if (
-            attributes & _ATTRIBUTE_REPARSE_POINT
-            and reparse_problem(attributes, tag, allow_cloud=True) == "fs.link"
-        ):
-            kind = "link"
-        elif stat.S_ISDIR(st.st_mode):
-            kind = "dir"
-        elif stat.S_ISREG(st.st_mode):
-            kind = "file"
-        else:
-            kind = "other"
-        yield entry.name, kind, st.st_size if kind == "file" else 0
+            links = 2  # unknown: treated as a hard link (size hidden)
+    return entry.name, kind, st.st_size if kind == "file" else 0, links
 
 
 def read(handle: int, limit: int, cancelled: Callable[[], bool], shown: str) -> bytes:

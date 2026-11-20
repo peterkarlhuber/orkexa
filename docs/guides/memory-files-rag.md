@@ -50,13 +50,14 @@ for number, text in enumerate(pages, start=1):
 | `max_pages` | 2000 | yes (checked before the page tree is read, and while reading it) | yes |
 | `max_chars` | 5,000,000 | yes, between pages | yes, between pages; the parent also reads at most `max_chars * 4 + 64 KiB` bytes |
 | `timeout` (seconds, wall clock) | 30 | no | yes: `SIGTERM` to the worker's process group, `SIGKILL` 2 seconds later (Windows: terminate, then kill) |
-| `max_memory_mb` | 512 | no | Linux only (`RLIMIT_AS`) |
+| `max_memory_mb` | 512 | no | yes: `RLIMIT_AS` on Linux, a job object with a process memory limit on Windows, a watcher that kills the process group when its resident memory passes the budget (polled every 20 ms) on macOS |
 
 The worker (`python -I -m orkexa._pdf_worker`) gets a minimal environment (`LC_ALL`, `PYTHONIOENCODING`,
 `PYTHONHASHSEED`; on Windows `SYSTEMROOT` instead of `LC_ALL`), so no keys, database URLs, credentials or proxy
 settings reach it; it inherits no file descriptors, runs in an empty private directory that is deleted afterwards,
 and lowers its own limits before it imports pypdf (Linux: memory, CPU time, 16 open files, no file writes; macOS:
-the same without the memory limit; Windows: none). It is not a sandbox: it runs as the same operating-system user
+the same without the memory limit, which the parent enforces instead; Windows: none, the memory limit is the
+parent's job object). It is not a sandbox: it runs as the same operating-system user
 without namespaces, seccomp or network isolation, so a code-execution flaw in pypdf could reach that user's files
 and the network. Starting the interpreter costs about 0.1 to 0.3 seconds per document.
 

@@ -124,9 +124,16 @@ tests.conformance.test_sqlite_conformance::test_a_legacy_copy_keeps_its_content_
 tests.conformance.test_sqlite_conformance::test_the_sqlite_backends_conform[sqlite-index-vec]  # sqlite-vec cannot be loaded here
 tests.conformance.test_sqlite_conformance::test_the_suite_runs_on_a_copy_of_the_legacy_files[sqlite-index-vec]  # sqlite-vec cannot be loaded here
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
-tests.fs.test_extract::test_a_flate_bomb_hits_the_memory_budget  # the memory limit (RLIMIT_AS) of the PDF process is enforced on Linux only
+tests.fs.test_hardening::test_l1_an_openat2_error_never_switches_to_the_fallback  # openat2 is a Linux system call
+tests.fs.test_hardening::test_l1_the_fallback_refuses_when_mounts_cannot_be_checked  # mount ids (/proc/self/fdinfo) are a Linux feature
+tests.fs.test_hardening::test_l2_the_rename_fallback_cleans_up  # the link-and-unlink fallback is the POSIX rename without renameat2
+tests.fs.test_hardening::test_l3_a_fifo_is_refused_before_it_is_opened  # FIFOs are POSIX special files
+tests.fs.test_hardening::test_m3_case_insensitive_file_systems_are_checked_by_scan  # the directory scan is how Linux checks case-insensitive file systems
+tests.fs.test_hardening::test_m3_the_stored_name_must_fold_to_the_name_asked_for  # Windows compares the final path of each handle (test_windows.py)
+tests.fs.test_hardening::test_m4_a_deep_path_holds_two_descriptors  # the descriptor limit (RLIMIT_NOFILE) is a POSIX limit
 tests.fs.test_safe_root::test_linux_magic_links  # /proc magic links exist on Linux only
-tests.fs.test_safe_root::test_linux_mounts_below_the_root  # bind mounts and tmpfs are Linux mounts
+tests.fs.test_safe_root::test_linux_mounts_below_the_root[fallback]  # bind mounts and tmpfs are Linux mounts
+tests.fs.test_safe_root::test_linux_mounts_below_the_root[openat2]  # bind mounts and tmpfs are Linux mounts
 tests.fs.test_safe_root::test_macos_disk_image_below_the_root  # disk images (hdiutil) are a macOS feature
 tests.fs.test_safe_root::test_macos_firmlink_root  # firmlinks and /System/Volumes/Data exist on macOS only
 tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
@@ -344,7 +351,6 @@ tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history
 tests.test_ollama_live::test_a_turn_that_only_thought_is_accepted_in_the_history[True]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_tools_then_structured_answer[False]  # needs ORKEXA_OLLAMA_LIVE_URL
 tests.test_ollama_live::test_tools_then_structured_answer[True]  # needs ORKEXA_OLLAMA_LIVE_URL
-tests.test_pdf_limits::test_a_flate_bomb_hits_the_memory_limit_and_the_parent_is_unaffected  # the memory limit (RLIMIT_AS) is enforced on Linux only
 tests.test_pdf_limits::test_the_child_inherits_no_file_descriptors  # descriptor listing of Linux and macOS
 tests.test_pdf_limits::test_the_child_runs_with_lowered_resource_limits  # RLIMIT_AS is enforced on Linux only
 tests.test_private_storage::test_existing_directories_keep_their_mode  # POSIX permission bits

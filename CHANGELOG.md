@@ -31,6 +31,21 @@ listed here. The development version is `0.2.0.dev0`.
 * `orkexa.testing.pathguard`: the attack catalog (every N-10 case of P0-2 and every W0-6 gap) with
   `build_layout`, `check_reader` and `swap_race`, so products can run it against their own file tools (N-63).
   `tests/fs` runs it on Linux, macOS and Windows; guide: `docs/guides/path-guard.md`.
+* Hardened after the independent review of #109 (2026-11-20), each finding with a regression test in
+  `tests/fs/test_hardening.py`: pattern matching in one linear pass and at most `MAX_DEPTH` (128) components per
+  path (H1); a blocked folder, the home folder or any folder above it, and the folders of all home folders cannot
+  be a root, `**/` blocked patterns continue from the root's absolute path, and `SafeRoot(home=...)` names the
+  user's home (H2); protected folders are matched by name and identity on every call, also when created or
+  recreated later (M1); `rename` keeps include, exclude and blocked decisions and never moves a protected folder
+  (M2); folding drops default-ignorable code points and maps dotless ı, and the stored name of every opened entry
+  must fold to the name asked for on macOS and on case-insensitive Linux file systems (M3); one descriptor per
+  walk on POSIX and listings bounded by `max_entries` and `max_list_seconds` (`DEFAULT_LIST_SECONDS`) before
+  filtering (M4); the PDF memory budget is enforced on macOS (resident-memory watcher) and Windows (job object)
+  as well (M5, also for `orkexa.retrieval.pdf_pages_isolated`); `openat2` is probed once and the fallback checks
+  mount ids (L1, CI job `fs-fallbacks`); the rename fallback cleans up (L2); special files are refused before they
+  are opened (L3); `stat` and `list` keep the hard-link rule (L4); revocation stops listings and extractions
+  (L5); `repr` hides the path (L6); `check_reader` has a positive control and requires real refusals, `swap_race`
+  requires real swaps (L7).
 * No caller yet: Nodestro adopts it in a later step of N-10.
 
 ### Added: `orkexa.mcp`, a Model Context Protocol client (2026-11-18)

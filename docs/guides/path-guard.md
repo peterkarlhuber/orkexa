@@ -27,7 +27,8 @@ except FsError as exc:
 
 Later, `SafeRoot(path, expect_identity=grant_identity)` refuses a folder that was swapped in under the same name
 (`fs.root_changed`). `root.revoke()` refuses every later call and stops a read in progress at its next 1 MiB
-chunk.
+chunk, a listing at its next entry and an extraction before it returns its text. `repr(root)` does not show
+the path (it names a person's folders); `root.path` does.
 
 ## How a path is checked
 
@@ -38,16 +39,21 @@ chunk.
     * `\`, `:` (alternate data streams such as `file.txt:secret`), NUL and control characters, empty and `.`
       components, reserved device names (`CON`, `NUL.txt`, `COM1`, `LPT¹`), a trailing dot or space, 8.3 short
       names (`PROGRA~1`, `SECRET~1.TXT`), look-alike separators (fullwidth solidus, division slash, fraction
-      slash), invalid UTF-8 (overlong encodings), more than 255 bytes per component or 4096 in all
-      (`fs.invalid_path`).
+      slash), invalid UTF-8 (overlong encodings), more than 255 bytes per component, 4096 in all or more than
+      `MAX_DEPTH` (128) components (`fs.invalid_path`).
 
     Nothing is decoded: `%2e%2e%2f` is a file name, not `../`. The Windows rules hold on Linux and macOS too, so a
     path never means a different file, or a device, on another system.
 2. **Blocklist and patterns.** `blocked` (default `DEFAULT_BLOCKED`: `.ssh`, `.gnupg`, `.aws`, `.kube`,
    `.netrc`, `Library/Keychains`, the Windows credential folders and more) raises `fs.blocked`; `exclude` and
    `include` raise `fs.excluded`. Patterns use `*`, `?` and `**`, are anchored at the root unless they start
-   with `**/`, and compare NFC plus case-folded on every system, so `.SSH`, `LIBRARY/KEYCHAINS`, `.ſsh` and the
-   NFD spelling of a name are blocked as well. A pattern that matches a folder covers everything below it.
+   with `**/`, and compare folded on every system (NFC, default-ignorable code points such as zero-width
+   spaces removed, case-folded, dotless ı as i), so `.SSH`, `LIBRARY/KEYCHAINS`, `.ſsh`, `.s\u200bsh` and the
+   NFD spelling of a name are blocked as well. A pattern that matches a folder covers everything below it. A
+   blocked pattern that starts with `**/` is matched against the absolute path of the root plus the relative
+   path, so `~/.config` as a root still blocks `gh/hosts.yml`. Patterns are matched in one pass as a set of
+   positions (at most path components × pattern components comparisons, whatever the number of `**`), and a
+   path has at most 128 components, so no path can make a check slow.
 3. **The root, again.** Every call reopens the root and checks that it is the folder that was granted: the
    same identity (device and inode; volume serial number and file index on Windows) and, on macOS and Windows,
    the same final path. A root renamed and replaced by a link or another folder raises `fs.root_changed`.
@@ -56,7 +62,7 @@ chunk.
 
 | System | How a component is opened | What is refused |
 |---|---|---|
-| Linux | `openat2(dirfd, name, RESOLVE_BENEATH \| RESOLVE_NO_SYMLINKS \| RESOLVE_NO_MAGICLINKS \| RESOLVE_NO_XDEV)` on kernels 5.6+, otherwise `openat(dirfd, name, O_NOFOLLOW)`; folders with `O_DIRECTORY`, files with `O_NONBLOCK \| O_NOCTTY` | symbolic links anywhere on the way (`fs.link`), magic links (`/proc/self/fd/N`), bind mounts and other file systems (`fs.cross_device`) |
+| Linux | `openat2(dirfd, name, RESOLVE_BENEATH \| RESOLVE_NO_SYMLINKS \| RESOLVE_NO_MAGICLINKS \| RESOLVE_NO_XDEV)` when the kernel offers it (5.6+; probed once per process, a later error of one path never switches to the fallback); otherwise `openat(dirfd, name, O_NOFOLLOW)` plus the device (`st_dev`) and the mount id (`/proc/self/fdinfo`) of every descriptor, which must be the root's (without `/proc` every path is refused). Folders with `O_DIRECTORY`, files with `O_NONBLOCK \| O_NOCTTY` | symbolic links anywhere on the way (`fs.link`), magic links (`/proc/self/fd/N`), bind mounts (also of the same file system) and other file systems (`fs.cross_device`) |
 | macOS | `openat(dirfd, name, O_NOFOLLOW)`, then `fcntl(F_GETPATH)` of every descriptor must lie below the root's (case-folded) | links, other volumes (`st_dev`), a path outside the root (`fs.outside_root`) |
 | Windows | `CreateFileW("\\?\<root>\<a>\<b>", FILE_FLAG_OPEN_REPARSE_POINT \| FILE_FLAG_BACKUP_SEMANTICS)` per component, share mode without `FILE_SHARE_DELETE`; `GetFinalPathNameByHandleW` of every handle must be the root plus exactly the names asked for | symbolic links, junctions, volume mount points and other reparse points (`fs.link`), cloud placeholders (`fs.cloud_file`), a final path elsewhere (`fs.outside_root`) |
 
@@ -69,15 +75,33 @@ on its own, and why the final path of each handle is the binding check. `\\?\` t
 
 Links are never followed, also links that stay inside the root; a listing shows them as `kind="link"`.
 
+On POSIX only the descriptor of the current folder stays open (the parent's is closed once the next component is
+open), so a deep path does not use up descriptors. The last component of a file is looked at with `fstatat`
+first: a FIFO, socket or device is refused without ever being opened, and the opened descriptor must be the entry
+that was looked at.
+
+**The name the file system answered with.** On case-insensitive file systems a name can open an entry whose
+stored name differs by more than the folding above (HFS+ ignores some code points; the upcase tables of exFAT and
+NTFS and the casefold of ext4 differ from Unicode case folding). So the stored name of every opened entry must
+fold to the name asked for, or the path is refused (`fs.ambiguous_name`): Windows compares the final path of
+each handle; macOS reads the stored name of the descriptor (`fgetattrlist`, `ATTR_CMN_NAME`); Linux scans the
+folder for the entry with that identity on FAT, exFAT, NTFS, HFS+, SMB and CIFS file systems and in folders
+with the casefold attribute (`fstatfs`, `FS_IOC_GETFLAGS`). Case differences alone are fine.
+
 ## Files that are refused
 
 * **Special files**: FIFOs, sockets and devices (`fs.not_regular_file`), without blocking on a FIFO.
 * **Hard links** (decision A-15): a file with `st_nlink > 1` (Windows `nNumberOfLinks`) is refused with
-  `fs.hard_link`, because it may be the very file of another folder and no path shows that. `allow_hard_links=True`
-  opts in per root (for example a backup folder). Folders are not affected.
+  `fs.hard_link`, because it may be the very file of another folder and no path shows that; `stat` refuses it too
+  and `list` shows it with size 0. `allow_hard_links=True` opts in per root (for example a backup folder).
+  Folders are not affected.
 * **Size**: a file above `max_file_bytes` (default 50 MiB) is refused from its size alone, before a byte is read
   (`fs.too_large`, "The file has N bytes; at most M bytes can be read"); a file that grows while it is read is
   cut off at the limit and refused too.
+* **Listings** read at most `max_entries` entries (default 10,000; hidden and excluded ones count too) within
+  `max_list_seconds` (default 10), entry by entry; beyond either, `fs.too_many_entries` with `reason`
+  `entries` or `timeout`. Finding a name stored in another Unicode form (below) reads at most 100,000 entries
+  of a folder.
 
 ## Unicode and case
 
@@ -93,13 +117,22 @@ controls and zero-width characters stay readable (P0-2 decision) and `Entry.disp
 
 `SafeRoot` refuses, with `fs.protected_root`:
 
-* a file-system or drive root (`/`, `C:\`) and the home folder itself;
+* a file-system or drive root (`/`, `C:\`);
+* the home folder itself and every folder that contains it (`home=`, default: the home folder of the process's
+  user), and the folders that hold all users' home folders (`/home`, `/Users`, `/var/home`, `C:\Users` and the
+  parent of `%USERPROFILE%`);
+* a folder that a blocked pattern starting with `**/` covers by its absolute path (`~/.ssh`,
+  `~/Library/Keychains` or a folder inside one);
 * a system folder or a folder inside one: the list of nodestro-api's `output_folder.py` (`/bin`, `/etc`,
   `/usr`, `/var`, `/System`, `/Library`, `/private` ... with the exceptions `/var/home`, `/var/mnt`,
   `/var/tmp`, `/run/media`, `/private/tmp`, `/private/var/folders`) plus `/root`, and on Windows the folders
   that `SystemRoot`, `windir`, `ProgramFiles`, `ProgramFiles(x86)`, `ProgramW6432` and `ProgramData` name
   (`C:\Windows`, `C:\Program Files`, `C:\Program Files (x86)`, `C:\ProgramData` when they are not set);
 * a `protected` folder (the product's data folder) or a folder inside one.
+
+Below a root, protected folders are refused by name (folded, also before they exist: a missing protected folder
+is refused, not skipped) and by identity. Both are looked up on every call, and every identity seen is kept, so a
+protected folder created, deleted and recreated, or moved within the root after the grant is still refused.
 
 Folders are compared component by component (never by string prefix), NFC plus case-folded, and by identity, so
 `/library`, a firmlink detour (`/System/Volumes/Data/...`) or a link to the data folder is refused too. A root
@@ -133,19 +166,27 @@ folder. Neither ever replaces an existing entry (`fs.exists`) or follows a link:
 
 * POSIX: `openat(dirfd, name, O_CREAT | O_EXCL | O_NOFOLLOW)` in the checked folder; `renameat2(RENAME_NOREPLACE)`
   on Linux and `renameatx_np(RENAME_EXCL)` on macOS between the checked folders' descriptors. Without either (old
-  kernels or file systems), a file is hard-linked to the new name, which fails if it exists, and unlinked.
+  kernels or file systems), a file is hard-linked to the new name, which fails if it exists, the old name is
+  checked to still be that file and unlinked; if anything fails the new name is removed again (`FsError`, never a
+  second link left behind). A folder cannot be renamed then (`fs.unsupported_type`).
 * Windows: `CREATE_NEW` below the held folder handles, then the final path of the new handle;
   `MoveFileExW` without `MOVEFILE_REPLACE_EXISTING` and without `MOVEFILE_COPY_ALLOWED`.
 
-Links, protected folders and files with several hard links are not renamed. A root is read only by default
-(`fs.read_only`).
+Links, protected folders, the folders above a protected folder and files with several hard links are not
+renamed. A rename never changes what may be read: a file must pass the blocklist and the patterns under its old
+and its new name (so a file outside `include` cannot be moved into it), and a folder may only get a name under
+which every blocked, exclude and include pattern decides the same for everything below it (the pattern states
+after both names are compared), else `fs.excluded`. A root is read only by default (`fs.read_only`).
 
 ## Text extraction (PS-1)
 
 `extract_text(path, budget=TextBudget(...))` reads a text file (`TEXT_SUFFIXES`: UTF-8, or UTF-16 with a byte
 order mark; NUL bytes mean binary, `fs.unsupported_type`) or a PDF through the guard. PDFs go through
 `orkexa.retrieval.pdf_pages_isolated`: a separate interpreter with a minimal environment that is killed at
-`budget.timeout`, with `max_pages`, `max_chars` and, on Linux, `max_memory_mb`. A budget hit raises
+`budget.timeout`, with `max_pages`, `max_chars` and `max_memory_mb`. The memory budget is `RLIMIT_AS` on Linux,
+a job object with a process memory limit on Windows, and on macOS (which ignores `RLIMIT_AS`) a watcher that
+kills the process within about 20 ms of its resident memory passing the budget; on any other system a PDF is
+refused (`fs.unsupported_type`) rather than read without it. A budget hit raises
 `fs.too_complex` with `reason` `pages`, `chars`, `timeout`, `memory`, `limit` or `crash`; a PDF bomb (a page
 that keeps the parser busy) ends within the time budget plus a few seconds of process start and kill. Office
 formats are not part of Orkexa (Nodestro's runtime has its own DOCX and XLSX readers).
@@ -170,9 +211,14 @@ runs the portable part against its own tools:
 from orkexa.testing import pathguard
 
 layout = pathguard.build_layout(tmp_path)  # root/, outside/ with a canary, links where possible
-assert pathguard.check_reader(my_read_tool, layout) == []
+assert pathguard.check_reader(my_read_tool, layout, refusal=MyToolError) == []
 assert pathguard.swap_race(my_read_tool, layout, iterations=10_000) == []
 ```
+
+`check_reader` first checks a positive control (the files inside the root must be returned), then requires every
+attack to be refused with the expected type (`refusal`, default `FsError`) and code (`code_of`, default the
+`code` attribute); a crash is a finding. `swap_race` reports a run in which fewer than `min_swaps` swaps happened
+or the reader never returned the regular file, so a race that did not run cannot pass.
 
 ## Remaining risks
 
@@ -183,9 +229,16 @@ assert pathguard.swap_race(my_read_tool, layout, iterations=10_000) == []
   what a name means.
 * **Windows renames** go through `MoveFileExW` with a path below held folder handles: the source entry itself is
   not pinned, so a concurrent swap inside the root can rename a different entry of the same folder (never one
-  outside, never through a link).
+  outside, never through a link). Kept as documented (review L8).
+* **Linux without `openat2` and without `/proc`**: the fallback cannot see same-file-system bind mounts, so it
+  refuses every path (`fs.cross_device`) rather than guess.
+* **macOS memory budget** is polled every 20 ms: a PDF that allocates very fast can exceed it briefly before
+  the process is killed.
+* **Protected folders** moved within the root are recognized by identity only once the guard has seen them
+  (any call after they were created).
 * **Hard links opted in** (`allow_hard_links=True`) may expose a file that also lives elsewhere; that is the
   operator's choice.
 * **Bidirectional and zero-width characters** are readable; showing names escaped (`Entry.display`) is the
   caller's job.
-* An independent review (G-5) is due before the guard protects real user data (N-10 acceptance).
+* The independent review of #109 is fixed (each finding has a regression test in `tests/fs/test_hardening.py`);
+  a follow-up review and G-5 are due before the guard protects real user data (N-10 acceptance, ORK-045).

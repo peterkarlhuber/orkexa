@@ -29,6 +29,8 @@ LINUX = sys.platform.startswith("linux")
 DARWIN = sys.platform == "darwin"
 WINDOWS = sys.platform == "win32"
 POSIX = os.name == "posix"
+#: tests/fs/conftest.py: the POSIX fallbacks (no openat2, no renameat2) are forced in this run.
+FALLBACKS = os.environ.get("ORKEXA_TEST_FS_FALLBACKS") == "1" and POSIX
 
 
 def _code(call: object) -> str:
@@ -143,22 +145,43 @@ def _privileged(command: list[str]) -> list[str] | None:
 
 
 @pytest.mark.skipif(not LINUX, reason="bind mounts and tmpfs are Linux mounts")
-def test_linux_mounts_below_the_root(layout: pathguard.Layout) -> None:
+@pytest.mark.parametrize("openat2", [True, False], ids=["openat2", "fallback"])
+def test_linux_mounts_below_the_root(
+    layout: pathguard.Layout, openat2: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N10-07, review L1: refused by openat2 (RESOLVE_NO_XDEV) and by the fallback's mount-id check alike.
+
+    The bind-mounted folder has its own canary with a single link, so ``fs.hard_link`` cannot be what refuses
+    it (the layout's ``outside/secret.txt`` has a second link, ``root/hard``).
+    """
+    from orkexa.fs import _posix
+
     mount = _privileged(["mount"])
     if mount is None:
         pytest.skip("mounting needs root or passwordless sudo")
     umount = _privileged(["umount"])
     assert umount is not None
+    if openat2 and not _posix.openat2_available():
+        pytest.skip("this kernel has no openat2")
+    if not openat2:
+        monkeypatch.setitem(_posix._openat2_state, "usable", False)
+    elsewhere = layout.base / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "secret.txt").write_bytes(CANARY)
+    assert os.stat(elsewhere / "secret.txt").st_nlink == 1
     bind, tmpfs = layout.root / "bind", layout.root / "tmpfs"
     bind.mkdir()
     tmpfs.mkdir()
-    subprocess.run([*mount, "--bind", str(layout.outside), str(bind)], check=True)
+    subprocess.run([*mount, "--bind", str(elsewhere), str(bind)], check=True)
     try:
         subprocess.run([*mount, "-t", "tmpfs", "-o", "size=1m", "tmpfs", str(tmpfs)], check=True)
         try:
             root = SafeRoot(layout.root)
+            assert (layout.root / "bind" / "secret.txt").read_bytes() == CANARY  # the mount is there
             assert _code(lambda: root.read_bytes("bind/secret.txt")) == "fs.cross_device"
+            assert _code(lambda: root.list("bind")) == "fs.cross_device"
             assert _code(lambda: root.list("tmpfs")) == "fs.cross_device"
+            assert root.read_bytes("inside.txt") == b"inside"
         finally:
             subprocess.run([*umount, str(tmpfs)], check=True)
     finally:
@@ -289,15 +312,6 @@ def test_blocked_spellings(tmp_path: Path) -> None:
     assert SafeRoot(folder, blocked=[]).read_bytes("Straße/x.txt") == b"street"
 
 
-def _case_insensitive(folder: Path) -> bool:
-    probe = folder / "CaseProbe"
-    probe.write_bytes(b"")
-    try:
-        return (folder / "caseprobe").exists()
-    finally:
-        probe.unlink()
-
-
 def test_protected_folder_any_spelling(tmp_path: Path) -> None:
     home = tmp_path / "home"
     data = home / "AppData"
@@ -305,9 +319,9 @@ def test_protected_folder_any_spelling(tmp_path: Path) -> None:
     (data / "vault.db").write_bytes(CANARY)
     root = SafeRoot(home, protected=[data])
     assert _code(lambda: root.read_bytes("AppData/vault.db")) == "fs.blocked"
-    expected = "fs.blocked" if _case_insensitive(home) else "fs.not_found"
-    assert _code(lambda: root.read_bytes("APPDATA/vault.db")) == expected
-    assert _code(lambda: root.list("appdata")) == expected
+    # Protected folders are compared by name too (folded), so every spelling is refused on every system.
+    assert _code(lambda: root.read_bytes("APPDATA/vault.db")) == "fs.blocked"
+    assert _code(lambda: root.list("appdata")) == "fs.blocked"
     assert [entry.name for entry in root.list("")] == []  # not listed either
     if not WINDOWS:
         os.symlink(data, home / "alias")
@@ -590,13 +604,18 @@ def test_rename(layout: pathguard.Layout) -> None:
     assert root.read_bytes("sub/moved.txt") == b"inside"
     assert _code(lambda: root.rename("sub/moved.txt", "sub/deep.txt")) == "fs.exists"
     assert (layout.root / "sub" / "deep.txt").read_bytes() == b"deep"  # never replaced
-    root.rename("sub", "renamed")
-    assert root.read_bytes("renamed/deep.txt") == b"deep"
+    if FALLBACKS:  # without renameat2 a folder cannot be renamed without the risk of replacing one
+        assert _code(lambda: root.rename("sub", "renamed")) == "fs.unsupported_type"
+        folder = "sub"
+    else:
+        root.rename("sub", "renamed")
+        folder = "renamed"
+    assert root.read_bytes(f"{folder}/deep.txt") == b"deep"
     assert _code(lambda: root.rename("link_file", "x")) == "fs.link"
     assert _code(lambda: root.rename("link_dir/secret.txt", "stolen.txt")) == "fs.link"
     assert _code(lambda: root.rename("hard", "x")) == "fs.hard_link"
-    assert _code(lambda: root.rename("renamed/deep.txt", "../deep.txt")) == "fs.parent_reference"
-    assert _code(lambda: root.rename("renamed/deep.txt", ".ssh/deep.txt")) == "fs.blocked"
+    assert _code(lambda: root.rename(f"{folder}/deep.txt", "../deep.txt")) == "fs.parent_reference"
+    assert _code(lambda: root.rename(f"{folder}/deep.txt", ".ssh/deep.txt")) == "fs.blocked"
     assert _code(lambda: root.rename("", "x")) == "fs.invalid_path"
     assert layout.secret.read_bytes() == CANARY
 

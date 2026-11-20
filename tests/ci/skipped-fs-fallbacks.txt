@@ -1,0 +1,15 @@
+# Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
+# Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
+# Job ci.yml/fs-fallbacks: tests/fs with ORKEXA_TEST_FS_FALLBACKS=1 (no openat2, no renameat2) on Linux.
+
+tests.fs.test_hardening::test_l1_an_openat2_error_never_switches_to_the_fallback  # this kernel has no openat2
+tests.fs.test_safe_root::test_linux_mounts_below_the_root[openat2]  # this kernel has no openat2
+tests.fs.test_safe_root::test_macos_disk_image_below_the_root  # disk images (hdiutil) are a macOS feature
+tests.fs.test_safe_root::test_macos_firmlink_root  # firmlinks and /System/Volumes/Data exist on macOS only
+tests.fs.test_windows::test_alternate_data_stream  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_junction_and_folder_link  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_junction_to_another_volume  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_network_drive  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_short_names  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_trailing_dot_file  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_without_administrator_rights  # needs NTFS and the Win32 API (Windows only)

@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import shutil
-import sys
 import time
 from types import ModuleType
 
@@ -14,7 +13,6 @@ import pytest
 from orkexa.fs import FsError, SafeRoot, TextBudget
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "pdf"
-LINUX = sys.platform.startswith("linux")
 
 
 def _generator() -> ModuleType:
@@ -124,9 +122,6 @@ def test_a_deeply_nested_pdf_ends_within_the_budget(folder: Path, make: ModuleTy
     assert time.monotonic() - started <= 5 + 5
 
 
-@pytest.mark.skipif(
-    not LINUX, reason="the memory limit (RLIMIT_AS) of the PDF process is enforced on Linux only"
-)
 def test_a_flate_bomb_hits_the_memory_budget(folder: Path, make: ModuleType) -> None:
     (folder / "bomb.pdf").write_bytes(make.flate_bomb())
     error = _code(lambda: SafeRoot(folder).extract_text("bomb.pdf", budget=TextBudget(max_memory_mb=256)))
