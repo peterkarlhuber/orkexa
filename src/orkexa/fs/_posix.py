@@ -33,6 +33,7 @@ _ANY_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | _NOCTTY | _CLOEXEC
 _DARWIN = sys.platform == "darwin"
 _LINUX = sys.platform.startswith("linux")
 _F_GETPATH = 50  # macOS <sys/fcntl.h>
+_MAXPATHLEN = 1024  # macOS <sys/param.h>, the size F_GETPATH writes (with the NUL)
 #: What opening a link with O_NOFOLLOW answers: ELOOP (Linux, macOS), EMLINK (FreeBSD), EFTYPE (some BSDs),
 #: and ENOTDIR with O_DIRECTORY (macOS); the entry itself tells which it was.
 _LINK_ERRORS = frozenset(
@@ -119,7 +120,7 @@ def _getpath(fd: int) -> str | None:
         return None
     import fcntl
 
-    raw = fcntl.fcntl(fd, _F_GETPATH, b"\0" * 1025)
+    raw = fcntl.fcntl(fd, _F_GETPATH, b"\0" * _MAXPATHLEN)  # Python allows at most 1024 bytes here
     return os.fsdecode(raw.split(b"\0", 1)[0])
 
 

@@ -272,8 +272,15 @@ class SafeRoot:
         if max_file_bytes < 0 or max_entries < 1:
             raise ValueError("max_file_bytes must not be negative and max_entries must be positive")
         text = root_syntax(os.fspath(path))
-        canonical, info = _backend.canonical(text)
         protected_paths = [os.fspath(folder) for folder in protected]
+        try:
+            canonical, info = _backend.canonical(text)
+        except FsError as error:
+            # A folder this user may not open (such as /root) is still reported as not grantable.
+            problem = root_problem(os.path.realpath(text), protected=protected_paths)
+            if error.code == "fs.permission" and problem is not None:
+                raise FsError("fs.protected_root", problem) from None
+            raise
         problem = root_problem(canonical, info, protected=protected_paths)
         if problem is not None:
             raise FsError("fs.protected_root", problem)

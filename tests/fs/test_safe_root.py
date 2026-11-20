@@ -244,7 +244,9 @@ def _sparse(path: Path, size: int) -> None:
     if WINDOWS:
         subprocess.run(["fsutil", "sparse", "setflag", str(path)], check=True, capture_output=True)
     with open(path, "r+b") as handle:
-        handle.truncate(size)
+        # Not truncate(): on Windows the C runtime extends a file by writing zeros, which fills the disk.
+        handle.seek(size - 1)
+        handle.write(b"\0")
 
 
 def test_large_and_sparse_files(tmp_path: Path) -> None:
