@@ -5,6 +5,49 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: `orkexa.fs`, a path guard for granted folders (Nodestro N-10, 2026-11-20)
+
+* `SafeRoot` reads files below one folder and refuses everything that could lead outside it, on Linux, macOS and
+  Windows (design P0-2, spike W0-6). Relative paths only, NFC-normalized, with the same name rules on every
+  system (`..`, absolute, drive, UNC and device paths, `:`, `\`, reserved device names, trailing dots and spaces,
+  8.3 names, look-alike separators, control characters, length limits). Components are opened one by one through
+  descriptors that never follow a link: `openat2` with `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
+  RESOLVE_NO_MAGICLINKS | RESOLVE_NO_XDEV` on Linux (fallback `openat` with `O_NOFOLLOW`), `openat` with
+  `O_NOFOLLOW` plus `F_GETPATH` on macOS, and handles with `FILE_FLAG_OPEN_REPARSE_POINT` and no
+  `FILE_SHARE_DELETE` plus `GetFinalPathNameByHandleW` on Windows. Files are read through the checked descriptor.
+* Refused: links, junctions and mount points anywhere on the way, mounts below the root, FIFOs, sockets and
+  devices, files above `max_file_bytes`, hard links unless `allow_hard_links` (A-15), OneDrive placeholders unless
+  `allow_cloud_files`, `DEFAULT_BLOCKED` credential folders (NFC plus case-folded), include and exclude patterns,
+  and `protected` folders (compared by identity). The root is reopened and its identity checked on every call
+  (`expect_identity`, `revoke()`).
+* Roots that cannot be granted (`fs.protected_root`): drive and file-system roots, the home folder itself, the
+  system folders of nodestro-api's `output_folder.py` (plus `/root`) and the `protected` folders; network paths
+  (UNC, also of this computer, mapped network drives) raise `fs.network_path`.
+* `create_file` and `rename` (with `writable=True`) never replace or follow (`O_CREAT | O_EXCL | O_NOFOLLOW`,
+  `renameat2(RENAME_NOREPLACE)`, `renameatx_np(RENAME_EXCL)`, `CREATE_NEW`, `MoveFileExW` without replacing).
+* `extract_text` reads text files and PDFs within a page, character, time and memory budget
+  (`pdf_pages_isolated`; closes PS-1 for folder files): `fs.too_complex` with the budget as `reason`.
+* Every refusal is an `FsError` (a `PermissionError`) with a stable code from `FS_ERROR_CODES`.
+* `orkexa.testing.pathguard`: the attack catalog (every N-10 case of P0-2 and every W0-6 gap) with
+  `build_layout`, `check_reader` and `swap_race`, so products can run it against their own file tools (N-63).
+  `tests/fs` runs it on Linux, macOS and Windows; guide: `docs/guides/path-guard.md`.
+* Hardened after the independent review of #109 (2026-11-20), each finding with a regression test in
+  `tests/fs/test_hardening.py`: pattern matching in one linear pass and at most `MAX_DEPTH` (128) components per
+  path (H1); a blocked folder, the home folder or any folder above it, and the folders of all home folders cannot
+  be a root, `**/` blocked patterns continue from the root's absolute path, and `SafeRoot(home=...)` names the
+  user's home (H2); protected folders are matched by name and identity on every call, also when created or
+  recreated later (M1); `rename` keeps include, exclude and blocked decisions and never moves a protected folder
+  (M2); folding drops default-ignorable code points and maps dotless ı, and the stored name of every opened entry
+  must fold to the name asked for on macOS and on case-insensitive Linux file systems (M3); one descriptor per
+  walk on POSIX and listings bounded by `max_entries` and `max_list_seconds` (`DEFAULT_LIST_SECONDS`) before
+  filtering (M4); the PDF memory budget is enforced on macOS (resident-memory watcher) and Windows (job object)
+  as well (M5, also for `orkexa.retrieval.pdf_pages_isolated`); `openat2` is probed once and the fallback checks
+  mount ids (L1, CI job `fs-fallbacks`); the rename fallback cleans up (L2); special files are refused before they
+  are opened (L3); `stat` and `list` keep the hard-link rule (L4); revocation stops listings and extractions
+  (L5); `repr` hides the path (L6); `check_reader` has a positive control and requires real refusals, `swap_race`
+  requires real swaps (L7).
+* No caller yet: Nodestro adopts it in a later step of N-10.
+
 ### Added: `orkexa.mcp`, a Model Context Protocol client (2026-11-18)
 
 * `MCPClient` with `StdioTransport` (child process, minimal environment) and `HttpTransport` (Streamable HTTP, JSON

@@ -270,6 +270,27 @@ jobs:
           name: dist
           path: dist/
 
+  # Review L1 of orkexa.fs: tests/fs on the POSIX fallbacks (no openat2, no renameat2), which older kernels and
+  # seccomp filters leave; the bind-mount test runs here too (sudo), so the mount-id check of the fallback is
+  # proven, not only openat2's RESOLVE_NO_XDEV.
+  fs-fallbacks:
+    name: fs fallbacks (no openat2, no renameat2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements/tabrion.txt -e ".[dev]"
+      - run: pytest tests/fs -rs --junitxml=junit-fs-fallbacks.xml
+        env:
+          ORKEXA_TEST_FS_FALLBACKS: "1"
+      - run: python scripts/check_skips.py junit-fs-fallbacks.xml tests/ci/skipped-fs-fallbacks.txt
+
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 15

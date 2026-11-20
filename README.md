@@ -155,7 +155,7 @@ until you declare it (`capabilities={"tools": "supported"}`). The full matrix is
 | | |
 |---|---|
 | Getting started | [Installation](docs/getting-started/installation.md) · [Quickstart](docs/getting-started/quickstart.md) · [Providers and capabilities](docs/getting-started/providers.md) |
-| Guides | [Tools and structured output](docs/guides/tools-and-structured-output.md) · [Streaming, hooks and errors](docs/guides/streaming-hooks-errors.md) · [History](docs/guides/history.md) · [Memory, files and RAG](docs/guides/memory-files-rag.md) · [Local models, embeddings and retrieval modes](docs/guides/local-models.md) · [Usage and budgets](docs/guides/usage-and-budgets.md) · [Pricing engine](docs/guides/pricing.md) · [Multi-agent](docs/guides/multi-agent.md) · [Flows](docs/guides/flows.md) · [Orchestration](docs/guides/orchestration.md) |
+| Guides | [Tools and structured output](docs/guides/tools-and-structured-output.md) · [Streaming, hooks and errors](docs/guides/streaming-hooks-errors.md) · [History](docs/guides/history.md) · [Memory, files and RAG](docs/guides/memory-files-rag.md) · [Local models, embeddings and retrieval modes](docs/guides/local-models.md) · [Usage and budgets](docs/guides/usage-and-budgets.md) · [Pricing engine](docs/guides/pricing.md) · [Multi-agent](docs/guides/multi-agent.md) · [Flows](docs/guides/flows.md) · [Orchestration](docs/guides/orchestration.md) · [Path guard](docs/guides/path-guard.md) |
 | Operations | [Security](docs/guides/security.md) · [Data protection and AI regulation](docs/compliance/index.md) · [Troubleshooting and FAQ](docs/troubleshooting.md) |
 | Capabilities | [Feature matrix](docs/feature-matrix.md) |
 | Internals | [Architecture and ADRs](docs/architecture/target-architecture.md) · [Changelog](CHANGELOG.md) |
@@ -172,6 +172,17 @@ default, failing closed without Docker. `SubprocessSandbox` is **not** a securit
 boundary and, like `AutoApprover`, an explicit unsafe opt-in; see the
 [security guide](docs/guides/security.md). Report
 vulnerabilities as described in [SECURITY.md](SECURITY.md).
+
+### Path guard (`orkexa.fs`)
+
+`SafeRoot` gives tools read access to the files below one granted folder and refuses everything that could lead
+outside it, on Linux, macOS and Windows: `..`, absolute, UNC and device paths, links and junctions anywhere on
+the way (components are opened one by one with `openat`/`O_NOFOLLOW` or reparse-point-aware handles, and read
+through the descriptor that was checked), hard links, mounts, FIFOs and devices, alternate data streams,
+reserved device names, 8.3 names, blocked credential folders and the product's own data folder. System folders
+and the data folder cannot be granted. `extract_text` reads text files and PDFs within page, time and memory
+budgets. See the [path guard guide](docs/guides/path-guard.md); `orkexa.testing.pathguard` is its attack catalog
+for conformance tests.
 
 Orkexa is a library, not a certified product. It provides technical controls that help
 integrators meet obligations under the GDPR, the EU AI Act or ISO/IEC 42001; whether a

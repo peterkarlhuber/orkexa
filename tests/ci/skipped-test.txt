@@ -6,6 +6,15 @@
 tests.anthropic.test_dynamic_sandbox::test_docker_sandbox_end_to_end  # needs Docker and the image from docker/sandbox.Dockerfile
 tests.anthropic.test_live::test_text_tool_and_structured_output  # needs ANTHROPIC_API_KEY
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
+tests.fs.test_safe_root::test_macos_disk_image_below_the_root  # disk images (hdiutil) are a macOS feature
+tests.fs.test_safe_root::test_macos_firmlink_root  # firmlinks and /System/Volumes/Data exist on macOS only
+tests.fs.test_windows::test_alternate_data_stream  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_junction_and_folder_link  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_junction_to_another_volume  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_network_drive  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_short_names  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_trailing_dot_file  # needs NTFS and the Win32 API (Windows only)
+tests.fs.test_windows::test_without_administrator_rights  # needs NTFS and the Win32 API (Windows only)
 tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_published_description_uses_only_absolute_urls  # packaging test; run with: pytest -m packaging

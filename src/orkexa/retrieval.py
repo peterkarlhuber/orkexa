@@ -360,7 +360,7 @@ class PdfLimits:
 
     ``max_pages`` and ``max_chars`` are checked between pages by both functions; ``timeout`` (seconds, wall
     clock) and ``max_memory_mb`` only by :func:`pdf_pages_isolated`, which enforces them on a separate
-    process (the memory limit on Linux only). Exceeding one raises :class:`RetrievalError`
+    process (the memory limit on Linux, macOS and Windows). Exceeding one raises :class:`RetrievalError`
     (``document.too_complex``) with ``reason`` ``pages``, ``chars``, ``timeout`` or ``memory``.
     """
 
@@ -439,9 +439,11 @@ def pdf_pages_isolated(
     ``crash``; a PDF that pypdf cannot read raises ``ValueError``.
 
     Remaining limits, by design: the child runs as the same operating-system user, so a code-execution flaw
-    in pypdf could still reach that user's files and the network (no namespaces, seccomp or containers);
-    macOS does not enforce the memory limit (CPU, open-file and file-size limits apply); Windows has no
-    resource limits or process groups (the time budget still applies, the child is killed). Starting the
+    in pypdf could still reach that user's files and the network (no namespaces, seccomp or containers).
+    The memory limit is ``RLIMIT_AS`` on Linux, a job object with a process memory limit on Windows, and on
+    macOS (which does not enforce ``RLIMIT_AS``) a watcher that kills the child within about 20 ms of its
+    resident memory passing the budget; CPU, open-file and file-size limits apply on POSIX only, and Windows
+    has no process groups (the time budget still applies, the child is killed). Starting the
     interpreter costs roughly 0.1-0.3 seconds per document. Needs ``pypdf`` (``pip install "orkexa[pdf]"``).
     """
     from ._pdf_launch import run_worker
@@ -454,6 +456,8 @@ def pdf_pages_isolated(
         max_pages=limits.max_pages,
         max_chars=limits.max_chars,
     )
+    if run.memory_exceeded:
+        raise _too_complex("memory", f"The PDF needs more than {limits.max_memory_mb} MB of memory")
     if run.timed_out:
         raise _too_complex("timeout", f"Extracting the PDF took longer than {limits.timeout:g} seconds")
     if run.output_exceeded:

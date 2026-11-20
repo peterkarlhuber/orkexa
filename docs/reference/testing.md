@@ -199,3 +199,40 @@ checks this), so a host can use it without Orkexa's other dependencies. It comes
 ::: orkexa.testing.sqlcheck.check_statement
 
 ::: orkexa.testing.sqlcheck.Finding
+
+## The path-guard attack catalog
+
+`orkexa.testing.pathguard` holds the attack catalog of the path guard ([`orkexa.fs`](fs.md), Nodestro plan
+N-10): every N-10 case of the P0-2 catalog and every gap of the W0-6 spike, with the platforms where it can occur
+and the codes that refuse it. It needs no pytest and imports no other Orkexa module, so a product can check its
+own file tools against it (conformance, N-63):
+
+```python
+from orkexa.testing import pathguard
+
+
+def test_my_read_tool_refuses_every_attack(tmp_path):
+    layout = pathguard.build_layout(tmp_path)
+    read = lambda path: my_read_tool(root=layout.root, path=path)
+    assert pathguard.check_reader(read, layout) == []
+    assert pathguard.swap_race(read, layout, iterations=10_000) == []
+```
+
+`check_reader` passes when every attack raises; with `code_of` it also checks the error code (for
+`orkexa.fs.FsError`, `lambda exc: getattr(exc, "code", None)`).
+
+::: orkexa.testing.pathguard.CATALOG
+
+::: orkexa.testing.pathguard.AttackCase
+
+::: orkexa.testing.pathguard.NAME_ATTACKS
+
+::: orkexa.testing.pathguard.build_layout
+
+::: orkexa.testing.pathguard.Layout
+
+::: orkexa.testing.pathguard.check_reader
+
+::: orkexa.testing.pathguard.swap_race
+
+::: orkexa.testing.pathguard.Finding
