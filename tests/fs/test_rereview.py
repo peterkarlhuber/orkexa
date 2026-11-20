@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import uuid
 
 import pytest
@@ -135,9 +136,34 @@ def test_n5_no_pdf_when_memory_cannot_be_measured(tmp_path: Path, monkeypatch: p
 def test_n5_a_worker_whose_memory_cannot_be_measured_is_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
     me = os.getpid()
     monkeypatch.setattr(_pdf_launch, "_memory_meter", lambda: lambda pid: 1 if pid == me else None)
+    # The worker waits for its input, so it still runs when the watcher gives up measuring it.
+    monkeypatch.setattr(_pdf_launch, "_write_input", lambda stream, payload: None)
+    started = time.monotonic()
     with pytest.raises(RetrievalError) as raised:
         pdf_pages_isolated(b"%PDF-1.4\n", max_memory_mb=64, timeout=20)
     assert raised.value.reason == "unenforced"
+    assert time.monotonic() - started < 10  # stopped by the watcher, not by the time budget
+
+
+def test_n5_a_worker_that_just_ended_is_not_reported_unmeasured() -> None:
+    """A finished worker cannot be measured either; that is no reason to discard its result (macOS CI)."""
+    import threading
+
+    done = threading.Event()
+    calls: list[str] = []
+
+    def exceeded() -> None:
+        calls.append("exceeded")
+
+    def unmeasured() -> None:
+        calls.append("unmeasured")
+
+    threading.Timer(0.1, done.set).start()  # the run ends while the meter fails
+    _pdf_launch._watch_memory(4242, 1 << 30, done, exceeded, unmeasured, lambda pid: None)
+    assert calls == []
+    done.clear()  # a run that does not end: the watcher gives up and stops it
+    _pdf_launch._watch_memory(4242, 1 << 30, done, exceeded, unmeasured, lambda pid: None)
+    assert calls == ["unmeasured"]
 
 
 def test_n5_the_watcher_stops_a_worker_over_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:

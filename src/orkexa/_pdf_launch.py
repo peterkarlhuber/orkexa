@@ -109,6 +109,7 @@ def _write_input(stream: IO[bytes], payload: bytes) -> None:
 # ---- the memory budget outside Linux -----------------------------------------------------------------------
 
 MEMORY_POLL_SECONDS = 0.02
+UNMEASURED_GRACE_SECONDS = 0.5
 
 
 class MemoryBudgetUnavailable(RuntimeError):
@@ -149,16 +150,24 @@ def _memory_meter() -> Any:
 
 
 def _watch_memory(
-    pid: int, limit: int, done: threading.Event, exceeded: Any, unmeasured: Any, meter: Any, alive: Any
+    pid: int, limit: int, done: threading.Event, exceeded: Any, unmeasured: Any, meter: Any
 ) -> None:
     """Kill the worker once ``meter(pid)`` passes ``limit`` bytes, or once it cannot be measured while it
-    still runs (``alive()``): it never runs on without its budget."""
+    still runs: it never runs on without its budget.
+
+    A worker that just ended cannot be measured either (and until the parent has reaped it, ``poll()``
+    cannot tell, because the parent's ``wait()`` holds the lock), so a failed measurement is only final
+    when, after :data:`UNMEASURED_GRACE_SECONDS`, the run has not ended and the meter still fails.
+    """
     while not done.wait(MEMORY_POLL_SECONDS):
         used = meter(pid)
         if used is None:
-            if alive():
+            if done.wait(UNMEASURED_GRACE_SECONDS):
+                return
+            used = meter(pid)
+            if used is None:
                 unmeasured()
-            return
+                return
         if used > limit:
             exceeded()
             return
@@ -355,7 +364,6 @@ def run_worker(
                     too_much_memory,
                     memory_unmeasured,
                     meter,
-                    lambda: process.poll() is None,
                 ),
                 daemon=True,
             )
