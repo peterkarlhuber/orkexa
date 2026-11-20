@@ -357,7 +357,8 @@ def test_l3_a_fifo_is_refused_before_it_is_opened(tmp_path: Path, monkeypatch: p
     real = _posix._child
 
     def child(dir_fd: int, name: str, flags: int, shown: str) -> int:
-        opened.append(name)
+        if not flags & getattr(os, "O_PATH", 0):  # an O_PATH descriptor opens nothing (N7)
+            opened.append(name)
         return real(dir_fd, name, flags, shown)
 
     monkeypatch.setattr(_posix, "_child", child)

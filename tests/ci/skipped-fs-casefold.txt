@@ -1,0 +1,4 @@
+# Skipped tests expected in this CI job (MUP-ONA A0, checked by scripts/check_skips.py).
+# Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
+# Job ci.yml/fs-fallbacks, step "M3 and N7 on an ext4 casefold folder": the stored-name tests (-k m3) with
+# ORKEXA_TEST_CASEFOLD_DIR set, on Linux with openat2. Every selected test must run: none is expected to skip.

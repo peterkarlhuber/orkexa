@@ -62,7 +62,7 @@ the path (it names a person's folders); `root.path` does.
 
 | System | How a component is opened | What is refused |
 |---|---|---|
-| Linux | `openat2(dirfd, name, RESOLVE_BENEATH \| RESOLVE_NO_SYMLINKS \| RESOLVE_NO_MAGICLINKS \| RESOLVE_NO_XDEV)` when the kernel offers it (5.6+; probed once per process, a later error of one path never switches to the fallback); otherwise `openat(dirfd, name, O_NOFOLLOW)` plus the device (`st_dev`) and the mount id (`/proc/self/fdinfo`) of every descriptor, which must be the root's (without `/proc` every path is refused). Folders with `O_DIRECTORY`, files with `O_NONBLOCK \| O_NOCTTY` | symbolic links anywhere on the way (`fs.link`), magic links (`/proc/self/fd/N`), bind mounts (also of the same file system) and other file systems (`fs.cross_device`) |
+| Linux | `openat2(dirfd, name, RESOLVE_BENEATH \| RESOLVE_NO_SYMLINKS \| RESOLVE_NO_MAGICLINKS \| RESOLVE_NO_XDEV)` when the kernel offers it (5.6+; probed once per process, a later error of one path never switches to the fallback); otherwise `openat(dirfd, name, O_NOFOLLOW)` plus the device (`st_dev`) and the mount id (`/proc/self/fdinfo`) of every descriptor, which must be the root's (without `/proc` every path is refused). Folders with `O_DIRECTORY`; the last component of a file with `O_PATH` first, reopened through `/proc/self/fd` with `O_NONBLOCK \| O_NOCTTY` only once it is a regular file | symbolic links anywhere on the way (`fs.link`), magic links (`/proc/self/fd/N`), bind mounts (also of the same file system) and other file systems (`fs.cross_device`) |
 | macOS | `openat(dirfd, name, O_NOFOLLOW)`, then `fcntl(F_GETPATH)` of every descriptor must lie below the root's (case-folded) | links, other volumes (`st_dev`), a path outside the root (`fs.outside_root`) |
 | Windows | `CreateFileW("\\?\<root>\<a>\<b>", FILE_FLAG_OPEN_REPARSE_POINT \| FILE_FLAG_BACKUP_SEMANTICS)` per component, share mode without `FILE_SHARE_DELETE`; `GetFinalPathNameByHandleW` of every handle must be the root plus exactly the names asked for | symbolic links, junctions, volume mount points and other reparse points (`fs.link`), cloud placeholders (`fs.cloud_file`), a final path elsewhere (`fs.outside_root`) |
 
@@ -76,17 +76,24 @@ on its own, and why the final path of each handle is the binding check. `\\?\` t
 Links are never followed, also links that stay inside the root; a listing shows them as `kind="link"`.
 
 On POSIX only the descriptor of the current folder stays open (the parent's is closed once the next component is
-open), so a deep path does not use up descriptors. The last component of a file is looked at with `fstatat`
-first: a FIFO, socket or device is refused without ever being opened, and the opened descriptor must be the entry
-that was looked at.
+open), so a deep path does not use up descriptors. On Linux the last component of a file is opened with `O_PATH`,
+which opens nothing (no FIFO, socket or device driver is touched), and reopened through `/proc/self/fd` only once
+`fstat` of that descriptor shows a regular file or a folder; the reopen names that very inode, so no swap can
+come in between (review N7). On macOS and on Linux without `/proc`, the last component is looked at with
+`fstatat` first and opened with `O_NONBLOCK | O_NOCTTY`, and the opened descriptor must be the entry that was
+looked at; there a special file swapped in between the two calls is opened (without blocking) before it is
+refused.
 
 **The name the file system answered with.** On case-insensitive file systems a name can open an entry whose
 stored name differs by more than the folding above (HFS+ ignores some code points; the upcase tables of exFAT and
 NTFS and the casefold of ext4 differ from Unicode case folding). So the stored name of every opened entry must
 fold to the name asked for, or the path is refused (`fs.ambiguous_name`): Windows compares the final path of
 each handle; macOS reads the stored name of the descriptor (`fgetattrlist`, `ATTR_CMN_NAME`); Linux scans the
-folder for the entry with that identity on FAT, exFAT, NTFS, HFS+, SMB and CIFS file systems and in folders
-with the casefold attribute (`fstatfs`, `FS_IOC_GETFLAGS`). Case differences alone are fine.
+folder for the entry with that identity on every file system that is not known to compare names byte for byte
+(only ext2/3/4, Btrfs, XFS, tmpfs, F2FS, overlayfs, ramfs, bcachefs, squashfs, EROFS, NILFS and ReiserFS are;
+so FAT, exFAT, NTFS, HFS+, SMB, NFS, 9p, FUSE and virtiofs, ISO 9660, ZFS and unknown ones are scanned) and in
+folders with the casefold attribute (`fstatfs`, `FS_IOC_GETFLAGS`). Case differences alone are fine. CI checks
+this on a real ext4 casefold folder (a loop-mounted image in the `fs-fallbacks` job).
 
 ## Files that are refused
 
@@ -119,10 +126,15 @@ controls and zero-width characters stay readable (P0-2 decision) and `Entry.disp
 
 * a file-system or drive root (`/`, `C:\`);
 * the home folder itself and every folder that contains it (`home=`, default: the home folder of the process's
-  user), and the folders that hold all users' home folders (`/home`, `/Users`, `/var/home`, `C:\Users` and the
-  parent of `%USERPROFILE%`);
+  user), the folders that hold all users' home folders (`/home`, `/Users`, `/var/home`, `/export/home`,
+  `/usr/home`, `C:\Users`, the parent of `%USERPROFILE%` and `%PUBLIC%`), and every folder directly inside them:
+  any user's home folder (`/home/bob`, `/Users/Shared`, `C:\Users\Public`), also when the process runs as another
+  user (a service account) whose home is elsewhere (review N1). A folder *inside* a home folder can be granted;
 * a folder that a blocked pattern starting with `**/` covers by its absolute path (`~/.ssh`,
-  `~/Library/Keychains` or a folder inside one);
+  `~/Library/Keychains` or a folder inside one): by its canonical path, by the path as it was given, and by
+  every path its links lead through as they are resolved one at a time, so a `~/.ssh` that is a link to
+  `/vault/keys`, or a harmless-looking link to `~/.ssh`, is refused (review N2). A folder granted under its own
+  name only (`/vault/keys` itself) cannot be recognized;
 * a system folder or a folder inside one: the list of nodestro-api's `output_folder.py` (`/bin`, `/etc`,
   `/usr`, `/var`, `/System`, `/Library`, `/private` ... with the exceptions `/var/home`, `/var/mnt`,
   `/var/tmp`, `/run/media`, `/private/tmp`, `/private/var/folders`) plus `/root`, and on Windows the folders
@@ -131,8 +143,12 @@ controls and zero-width characters stay readable (P0-2 decision) and `Entry.disp
 * a `protected` folder (the product's data folder) or a folder inside one.
 
 Below a root, protected folders are refused by name (folded, also before they exist: a missing protected folder
-is refused, not skipped) and by identity. Both are looked up on every call, and every identity seen is kept, so a
-protected folder created, deleted and recreated, or moved within the root after the grant is still refused.
+is refused, not skipped) and by identity. Identities are learned when the root is created (for protected folders
+that exist then) and again on every call, and every identity seen is kept ("never forget"), so a protected folder
+created, deleted and recreated, or moved within the root after the grant is still refused once any call has seen
+it. Two consequences, both documented rather than changed (review N4): a protected folder that is created after
+the grant and moved within the root before any call has seen it is reachable under its new name; and a folder
+that later gets the inode number of a deleted protected folder is refused (fails closed, availability only).
 
 Folders are compared component by component (never by string prefix), NFC plus case-folded, and by identity, so
 `/library`, a firmlink detour (`/System/Volumes/Data/...`) or a link to the data folder is refused too. A root
@@ -173,7 +189,8 @@ folder. Neither ever replaces an existing entry (`fs.exists`) or follows a link:
   `MoveFileExW` without `MOVEFILE_REPLACE_EXISTING` and without `MOVEFILE_COPY_ALLOWED`.
 
 Links, protected folders, the folders above a protected folder and files with several hard links are not
-renamed. A rename never changes what may be read: a file must pass the blocklist and the patterns under its old
+renamed, and nothing is renamed *to* a protected folder or a folder above one, also while the protected folder
+does not exist yet (review N3), so nothing can be planted where the product will create its data folder. A rename never changes what may be read: a file must pass the blocklist and the patterns under its old
 and its new name (so a file outside `include` cannot be moved into it), and a folder may only get a name under
 which every blocked, exclude and include pattern decides the same for everything below it (the pattern states
 after both names are compared), else `fs.excluded`. A root is read only by default (`fs.read_only`).
@@ -185,8 +202,13 @@ order mark; NUL bytes mean binary, `fs.unsupported_type`) or a PDF through the g
 `orkexa.retrieval.pdf_pages_isolated`: a separate interpreter with a minimal environment that is killed at
 `budget.timeout`, with `max_pages`, `max_chars` and `max_memory_mb`. The memory budget is `RLIMIT_AS` on Linux,
 a job object with a process memory limit on Windows, and on macOS (which ignores `RLIMIT_AS`) a watcher that
-kills the process within about 20 ms of its resident memory passing the budget; on any other system a PDF is
-refused (`fs.unsupported_type`) rather than read without it. A budget hit raises
+kills the process within about 20 ms of its physical footprint (`proc_pid_rusage`: resident plus compressed and
+swapped-out memory, review N5) passing the budget. Where the budget cannot be enforced, a PDF is refused
+(`fs.unsupported_type`) rather than read without it: on any other system, on macOS when the footprint of a
+process cannot be measured (also when it stops being measurable while the worker runs: the worker is killed),
+and on Windows when the job object cannot be created or the worker cannot be put into it (review N6; directly,
+`pdf_pages_isolated` raises `RetrievalError` with `reason` `unenforced`). The same worker launcher, with the same
+memory budget on Linux, macOS and Windows, runs `orkexa.web.fetch.html_to_text_isolated`. A budget hit raises
 `fs.too_complex` with `reason` `pages`, `chars`, `timeout`, `memory`, `limit` or `crash`; a PDF bomb (a page
 that keeps the parser busy) ends within the time budget plus a few seconds of process start and kill. Office
 formats are not part of Orkexa (Nodestro's runtime has its own DOCX and XLSX readers).
@@ -234,11 +256,18 @@ or the reader never returned the regular file, so a race that did not run cannot
   refuses every path (`fs.cross_device`) rather than guess.
 * **macOS memory budget** is polled every 20 ms: a PDF that allocates very fast can exceed it briefly before
   the process is killed.
-* **Protected folders** moved within the root are recognized by identity only once the guard has seen them
-  (any call after they were created).
+* **Special files on macOS** (and Linux without `/proc`): without `O_PATH`, a FIFO or device swapped in between
+  `fstatat` and the open is opened (non-blocking, no controlling terminal) before it is refused. Creating a
+  device node needs root.
+* **Protected folders** are recognized by identity once the guard has seen them (at the grant, or any call
+  after they were created): one created after the grant and moved within the root before any call is reachable
+  under its new name (review N4, documented).
+* **A blocked folder granted under its own name** (the target of a `~/.ssh` link, given directly) is not
+  recognized; only names on the way to the root are.
 * **Hard links opted in** (`allow_hard_links=True`) may expose a file that also lives elsewhere; that is the
   operator's choice.
 * **Bidirectional and zero-width characters** are readable; showing names escaped (`Entry.display`) is the
   caller's job.
-* The independent review of #109 is fixed (each finding has a regression test in `tests/fs/test_hardening.py`);
-  a follow-up review and G-5 are due before the guard protects real user data (N-10 acceptance, ORK-045).
+* The independent review of #109 is fixed (each finding has a regression test in `tests/fs/test_hardening.py`),
+  and so is its re-review (N1-N3, N5-N7 fixed, N4 documented; `tests/fs/test_rereview.py`); G-5 is due before
+  the guard protects real user data (N-10 acceptance, ORK-045).

@@ -290,6 +290,24 @@ jobs:
         env:
           ORKEXA_TEST_FS_FALLBACKS: "1"
       - run: python scripts/check_skips.py junit-fs-fallbacks.xml tests/ci/skipped-fs-fallbacks.txt
+      # Review N7: the stored-name check (M3) on a real case-insensitive folder. An ext4 image with the casefold
+      # feature is loop-mounted and one empty folder gets the casefold attribute (chattr +F); the tests run with
+      # the normal paths (openat2, O_PATH) and none of them may skip.
+      - name: Mount an ext4 casefold folder
+        run: |
+          truncate -s 64M "$RUNNER_TEMP/casefold.img"
+          mkfs.ext4 -q -O casefold -E encoding=utf8 "$RUNNER_TEMP/casefold.img"
+          sudo mkdir -p /mnt/casefold
+          sudo mount -o loop "$RUNNER_TEMP/casefold.img" /mnt/casefold
+          sudo mkdir /mnt/casefold/names
+          sudo chattr +F /mnt/casefold/names
+          sudo chown "$(id -u):$(id -g)" /mnt/casefold/names
+          lsattr -d /mnt/casefold/names
+      - name: M3 and N7 on an ext4 casefold folder
+        run: pytest tests/fs -k m3 -v -rs --junitxml=junit-fs-casefold.xml
+        env:
+          ORKEXA_TEST_CASEFOLD_DIR: /mnt/casefold/names
+      - run: python scripts/check_skips.py junit-fs-casefold.xml tests/ci/skipped-fs-casefold.txt
 
   docs:
     runs-on: ubuntu-latest

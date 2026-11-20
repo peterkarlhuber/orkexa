@@ -8,11 +8,13 @@ kernel has it (5.6+, probed once per process), which also refuses a bind mount o
 otherwise ``openat`` with ``O_NOFOLLOW``, a comparison of ``st_dev`` with the root's and, on Linux, of the
 mount id (``/proc/self/fdinfo``), so a bind mount is refused there too. Each descriptor is checked with
 ``fstat`` and the file is read through that same descriptor: no path is resolved twice. The last component
-of a file is looked at with ``fstatat`` first, so a FIFO, socket or device is refused without being opened.
+of a file is opened with ``O_PATH`` on Linux (which opens nothing) and reopened through ``/proc/self/fd``
+only once ``fstat`` shows a regular file or a folder; elsewhere (macOS, Linux without ``/proc``) it is looked
+at with ``fstatat`` first. Either way a FIFO, socket or device is refused without being opened.
 On macOS ``fcntl(F_GETPATH)`` of every opened descriptor must lie below the root's as a second check
 (case-folded: APFS is usually case-insensitive), and the name the file system stored (``fgetattrlist``) must
-fold to the name asked for; on Linux the same holds on case-insensitive file systems (FAT, exFAT, NTFS,
-casefold folders).
+fold to the name asked for; on Linux the same holds on every file system not known to compare names byte for
+byte (FAT, exFAT, NTFS, SMB, NFS, 9p, FUSE, ISO 9660, ZFS ...) and in casefold folders.
 Only the descriptor of the current folder stays open, so the depth of a path does not use up descriptors.
 """
 
@@ -27,7 +29,7 @@ import stat
 import sys
 from typing import Any
 
-from ._names import FsError, fold, path_parts
+from ._names import FsError, caseless_file_system_type, fold, path_parts
 from ._types import Info
 
 _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
@@ -133,6 +135,59 @@ def _mount_id(fd: int) -> int | None:
     except (OSError, ValueError, IndexError):
         return None
     return None
+
+
+# ---- O_PATH (Linux): the last component is looked at before anything opens it ------------------------------
+
+_PATH_FLAGS = getattr(os, "O_PATH", 0) | os.O_NOFOLLOW | _CLOEXEC
+#: ``usable``: ``None`` until probed, then whether a descriptor opened with ``O_PATH`` can be reopened
+#: through ``/proc/self/fd`` (Linux with ``/proc``). Tests set it to ``False`` for the ``fstatat`` precheck.
+_reopen_state: dict[str, bool | None] = {"usable": None if _LINUX and hasattr(os, "O_PATH") else False}
+
+
+def _probe_reopen() -> bool:
+    try:
+        fd = os.open("/", _PATH_FLAGS)
+    except OSError:
+        return False
+    try:
+        again = os.open(f"/proc/self/fd/{fd}", os.O_RDONLY | _CLOEXEC)
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+    os.close(again)
+    return True
+
+
+def reopen_available() -> bool:
+    """Whether the last component is opened with ``O_PATH`` first and reopened only once it is a regular
+    file or a folder (Linux with ``/proc``); elsewhere ``fstatat`` looks at it before it is opened."""
+    if _reopen_state["usable"] is None:
+        _reopen_state["usable"] = _probe_reopen()
+    return bool(_reopen_state["usable"])
+
+
+def _reopen(path_fd: int, flags: int, shown: str) -> tuple[int, os.stat_result]:
+    """Open the file an ``O_PATH`` descriptor names, once ``fstat`` shows a regular file or a folder.
+
+    An ``O_PATH`` descriptor opens nothing: no FIFO, socket or device driver is touched by it. The reopen goes
+    through ``/proc/self/fd``, which names that very inode, so no name is resolved again (review N7).
+    """
+    try:
+        before = os.fstat(path_fd)
+        if stat.S_ISLNK(before.st_mode):
+            raise FsError("fs.link", "A symbolic link is on the way; links are not followed", path=shown)
+        if not (stat.S_ISREG(before.st_mode) or stat.S_ISDIR(before.st_mode)):
+            raise FsError("fs.not_regular_file", "Not a regular file (a FIFO, socket or device)", path=shown)
+        try:
+            return os.open(f"/proc/self/fd/{path_fd}", flags & ~os.O_NOFOLLOW), before
+        except OSError as exc:
+            if exc.errno in (errno.EACCES, errno.EPERM):
+                raise FsError("fs.permission", "The operating system denied access", path=shown) from None
+            raise FsError("fs.unreadable", f"Cannot be opened ({exc.strerror})", path=shown) from None
+    finally:
+        os.close(path_fd)
 
 
 # ---- descriptors -------------------------------------------------------------------------------------------
@@ -299,11 +354,6 @@ def _resolve(
 
 # ---- the name the file system stored -----------------------------------------------------------------------
 
-#: Magic numbers (``statfs.f_type``) of Linux file systems that compare names without case: FAT, exFAT, NTFS
-#: (ntfs3 and ntfs-3g), HFS+, SMB and CIFS.
-_CASELESS_FILE_SYSTEMS = frozenset(
-    {0x4D44, 0x2011BAB0, 0x7366746E, 0x5346544E, 0x482B, 0x4858, 0xFE534D42, 0xFF534D42, 0x517B, 0x65735546}
-)
 _FS_IOC_GETFLAGS = 0x80086601 if ctypes.sizeof(ctypes.c_long) == 8 else 0x80046601
 _FS_CASEFOLD_FL = 0x40000000
 
@@ -313,14 +363,15 @@ class _StatFs(ctypes.Structure):
 
 
 def _caseless_file_system(fd: int) -> bool:
-    """Whether the (Linux) file system of ``fd`` compares names without case (``fstatfs``)."""
+    """Whether the (Linux) file system of ``fd`` may compare names without case (``fstatfs``): every file
+    system not known to compare them byte for byte (``caseless_file_system_type`` in ``_names``)."""
     function = _libc_function("fstatfs")
     if function is None:
         return True  # unknown: check every name
     data = _StatFs()
     if function(ctypes.c_int(fd), ctypes.byref(data)) != 0:
         return True
-    return (data.f_type & 0xFFFFFFFF) in _CASELESS_FILE_SYSTEMS
+    return caseless_file_system_type(data.f_type)
 
 
 def _casefold_folder(fd: int) -> bool:
@@ -449,7 +500,12 @@ def walk(
             last = index == len(parts) - 1
             directory = not last or final == "dir"
             flags = _DIRECTORY_FLAGS if directory else _FILE_FLAGS if final == "file" else _ANY_FLAGS
-            fd, stored, before = _resolve(current, name, flags, shown, precheck=not directory)
+            before: os.stat_result | None
+            if not directory and reopen_available():
+                path_fd, stored, _ = _resolve(current, name, _PATH_FLAGS, shown)
+                fd, before = _reopen(path_fd, flags, shown)
+            else:
+                fd, stored, before = _resolve(current, name, flags, shown, precheck=not directory)
             parent, current = current, fd
             try:
                 info = _info(fd)

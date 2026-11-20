@@ -95,16 +95,20 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
 
 ### ORK-045 · Independent review of the path guard (`orkexa.fs`)
 
-- **Priority:** P2 Medium · **Status:** First review done, G-5 open · **Refs:** [Path guard](guides/path-guard.md),
+- **Priority:** P2 Medium · **Status:** Review and re-review done, G-5 open · **Refs:** [Path guard](guides/path-guard.md),
   `src/orkexa/fs/`, `tests/fs/`, `orkexa.testing.pathguard`, Nodestro plan N-10 (P0-2, W0-6, A-5, A-15, G-5)
 - **What:** `SafeRoot` is new and has no caller yet. Its attack catalog (every N-10 case of P0-2 and every W0-6
   gap) runs on Linux, macOS and Windows in CI. The independent review of #109 (2026-11-20: 2 High, 5 Medium,
   8 Low) is fixed in the same PR, each finding with a regression test (`tests/fs/test_hardening.py`), and the
-  POSIX fallbacks run as their own CI job (`fs-fallbacks`). Remaining risks are listed in the guide: roots *on*
+  POSIX fallbacks run as their own CI job (`fs-fallbacks`). The re-review (merged #109 as 6fdea4e: N1-N7) is
+  fixed in a follow-up PR (`tests/fs/test_rereview.py`; N4 documented), and `fs-fallbacks` also runs the
+  stored-name tests on a loop-mounted ext4 casefold folder. Remaining risks are listed in the guide: roots *on*
   NFS or SMB mounts on Linux and macOS are treated as local; Windows `rename` pins the folders, not the source
-  entry (L8, kept); an opted-in hard link may expose a file that lives elsewhere; the macOS memory budget is
-  polled.
-- **Next step:** A follow-up review of the fixes, then G-5 before productive activation (N-10 acceptance). Nodestro adopts it in N-10 (runtime `folders`, tools `list_folder`, `read_file`,
+  entry (L8, kept); a protected folder created after the grant and moved before any call (N4); a blocked
+  folder granted under its own name (the target of a link); a special file swapped in on macOS between
+  `fstatat` and the open; an opted-in hard link may expose a file that lives elsewhere; the macOS memory budget
+  is polled.
+- **Next step:** G-5 before productive activation (N-10 acceptance). Nodestro adopts it in N-10 (runtime `folders`, tools `list_folder`, `read_file`,
   `search_files`) and moves nodestro-api's `output_folder.py` system-folder list onto `orkexa.fs.system_folders`
   (N-11), and runs `orkexa.testing.pathguard` against its tools (N-63).
 

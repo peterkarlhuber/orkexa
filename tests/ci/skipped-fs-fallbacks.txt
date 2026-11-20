@@ -3,6 +3,7 @@
 # Job ci.yml/fs-fallbacks: tests/fs with ORKEXA_TEST_FS_FALLBACKS=1 (no openat2, no renameat2) on Linux.
 
 tests.fs.test_hardening::test_l1_an_openat2_error_never_switches_to_the_fallback  # this kernel has no openat2
+tests.fs.test_rereview::test_m3_n7_a_real_casefold_folder_is_checked_by_its_stored_names  # needs an ext4 casefold folder (ORKEXA_TEST_CASEFOLD_DIR, CI job fs-fallbacks)
 tests.fs.test_safe_root::test_linux_mounts_below_the_root[openat2]  # this kernel has no openat2
 tests.fs.test_safe_root::test_macos_disk_image_below_the_root  # disk images (hdiutil) are a macOS feature
 tests.fs.test_safe_root::test_macos_firmlink_root  # firmlinks and /System/Volumes/Data exist on macOS only
