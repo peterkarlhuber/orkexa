@@ -15,8 +15,11 @@ platform, so that
 * its output is bounded: the parent reads at most ``max_chars * 4 + 64 KiB`` bytes;
 * its memory is bounded by ``max_memory_mb``: on Linux by ``RLIMIT_AS`` (set by the worker itself), on Windows
   by a job object with a process memory limit (allocations beyond it fail), on macOS, which does not enforce
-  ``RLIMIT_AS``, by a watcher thread that reads the child's resident memory (``proc_pidinfo``) every 20 ms
-  and kills its process group when it passes the budget.
+  ``RLIMIT_AS``, by a watcher thread that reads the child's physical footprint (``proc_pid_rusage``, which
+  also counts compressed and swapped-out memory) every 20 ms and kills its process group when it passes the
+  budget. Where the budget cannot be enforced (the job object cannot be created or assigned, the footprint
+  cannot be measured) the worker is not run or is killed: :class:`MemoryBudgetUnavailable`, or
+  ``WorkerRun.memory_unmeasured``. It never runs without its memory budget.
 
 This is not a general sandbox: the child runs as the same operating-system user, without namespaces, seccomp
 or network isolation (see the security notes of :func:`~orkexa.retrieval.pdf_pages_isolated`).
@@ -55,6 +58,7 @@ class WorkerRun:
     output_exceeded: bool = False
     pid: int = 0
     memory_exceeded: bool = False
+    memory_unmeasured: bool = False
 
 
 def child_environment() -> dict[str, str]:
@@ -105,31 +109,66 @@ def _write_input(stream: IO[bytes], payload: bytes) -> None:
 # ---- the memory budget outside Linux -----------------------------------------------------------------------
 
 MEMORY_POLL_SECONDS = 0.02
+UNMEASURED_GRACE_SECONDS = 0.5
 
 
-def _resident_bytes_darwin(pid: int) -> int | None:
-    """The resident memory of a macOS process (``proc_pidinfo`` with ``PROC_PIDTASKINFO``), or ``None``."""
+class MemoryBudgetUnavailable(RuntimeError):
+    """The memory budget cannot be enforced here, so the worker is not run (review N5, N6).
+
+    Raised before the worker runs (macOS: the memory of a process cannot be measured; Windows: the job
+    object cannot be created or the worker cannot be put into it). Callers turn it into their typed error.
+    """
+
+
+def _footprint_darwin(pid: int) -> int | None:
+    """The physical footprint of a macOS process (``proc_pid_rusage``, ``ri_phys_footprint``), or ``None``.
+
+    The footprint is what the kernel charges a process for (what Activity Monitor shows as its memory):
+    unlike the resident size, it includes memory that was compressed or swapped out, so a worker cannot
+    escape the budget by letting the system compress its pages.
+    """
     import ctypes
     import ctypes.util
 
     try:
         libproc = ctypes.CDLL(ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib", use_errno=True)
-    except OSError:
+        function = libproc.proc_pid_rusage
+    except (OSError, AttributeError):
         return None
-    buffer = (ctypes.c_uint64 * 12)()  # struct proc_taskinfo: virtual size, resident size, ...
-    size = libproc.proc_pidinfo(
-        ctypes.c_int(pid), ctypes.c_int(4), ctypes.c_uint64(0), buffer, ctypes.c_int(ctypes.sizeof(buffer))
-    )
-    if size < 16:
+    # struct rusage_info_v0: ri_uuid[16], then uint64 user and system time, idle and interrupt wakeups,
+    # pageins, wired size, resident size, phys_footprint, ... (index 9 counting the uuid as two).
+    buffer = (ctypes.c_uint64 * 32)()
+    if function(ctypes.c_int(pid), ctypes.c_int(0), buffer) != 0:
         return None
-    return int(buffer[1])
+    return int(buffer[9])
 
 
-def _watch_memory(pid: int, limit: int, done: threading.Event, exceeded: Any) -> None:
-    """Kill the child's process group once its resident memory passes ``limit`` bytes (macOS)."""
+def _memory_meter() -> Any:
+    """How the memory of a worker is measured where no operating-system limit enforces the budget: on macOS
+    (which does not enforce ``RLIMIT_AS``) its physical footprint; ``None`` where a limit does it."""
+    return _footprint_darwin if sys.platform == "darwin" else None
+
+
+def _watch_memory(
+    pid: int, limit: int, done: threading.Event, exceeded: Any, unmeasured: Any, meter: Any
+) -> None:
+    """Kill the worker once ``meter(pid)`` passes ``limit`` bytes, or once it cannot be measured while it
+    still runs: it never runs on without its budget.
+
+    A worker that just ended cannot be measured either (and until the parent has reaped it, ``poll()``
+    cannot tell, because the parent's ``wait()`` holds the lock), so a failed measurement is only final
+    when, after :data:`UNMEASURED_GRACE_SECONDS`, the run has not ended and the meter still fails.
+    """
     while not done.wait(MEMORY_POLL_SECONDS):
-        resident = _resident_bytes_darwin(pid)
-        if resident is not None and resident > limit:
+        used = meter(pid)
+        if used is None:
+            if done.wait(UNMEASURED_GRACE_SECONDS):
+                return
+            used = meter(pid)
+            if used is None:
+                unmeasured()
+                return
+        if used > limit:
             exceeded()
             return
 
@@ -239,7 +278,19 @@ def run_worker(
     workdir = tempfile.mkdtemp(prefix="orkexa-pdf-")  # mode 0700, empty
     posix = os.name == "posix"
     memory_limit = max_memory_mb << 20
-    job = _WindowsJob(memory_limit) if sys.platform == "win32" else None
+    meter = _memory_meter()
+    if meter is not None and meter(os.getpid()) is None:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise MemoryBudgetUnavailable("The memory of the worker process cannot be measured on this system")
+    job = None
+    if sys.platform == "win32":
+        try:
+            job = _WindowsJob(memory_limit)
+        except OSError as exc:
+            shutil.rmtree(workdir, ignore_errors=True)
+            raise MemoryBudgetUnavailable(
+                f"The worker's memory limit (a job object) cannot be set: {exc}"
+            ) from None
     process = subprocess.Popen(
         [sys.executable, "-I", "-m", worker_module, module_directory or _pypdf_directory()],
         stdin=subprocess.PIPE,
@@ -252,14 +303,20 @@ def run_worker(
     )
     if job is not None:
         try:
-            job.assign(int(process._handle))  # type: ignore[attr-defined]
-        except OSError:
+            job.assign(int(getattr(process, "_handle", 0)))
+        except OSError as exc:
             process.kill()
             process.wait()
             job.close()
-            raise
+            for stream in (process.stdin, process.stdout, process.stderr):
+                with contextlib.suppress(OSError):
+                    stream.close()
+            shutil.rmtree(workdir, ignore_errors=True)
+            raise MemoryBudgetUnavailable(
+                f"The worker cannot be put into its memory-limited job object: {exc}"
+            ) from None
     stopped = threading.Lock()
-    state = {"output_exceeded": False, "memory_exceeded": False}
+    state = {"output_exceeded": False, "memory_exceeded": False, "memory_unmeasured": False}
 
     def stop(*, hard: bool = False) -> None:
         with stopped:
@@ -281,6 +338,10 @@ def run_worker(
         state["memory_exceeded"] = True
         stop(hard=True)
 
+    def memory_unmeasured() -> None:
+        state["memory_unmeasured"] = True
+        stop(hard=True)
+
     stdout: list[bytes] = []
     stderr: list[bytes] = []
     assert process.stdin is not None and process.stdout is not None and process.stderr is not None
@@ -292,11 +353,18 @@ def run_worker(
         ),
     ]
     finished = threading.Event()
-    if sys.platform == "darwin":
+    if meter is not None:
         threads.append(
             threading.Thread(
                 target=_watch_memory,
-                args=(process.pid, memory_limit, finished, too_much_memory),
+                args=(
+                    process.pid,
+                    memory_limit,
+                    finished,
+                    too_much_memory,
+                    memory_unmeasured,
+                    meter,
+                ),
                 daemon=True,
             )
         )
@@ -342,6 +410,7 @@ def run_worker(
         not timed_out
         and not state["output_exceeded"]
         and not state["memory_exceeded"]
+        and not state["memory_unmeasured"]
         and process.returncode in (0, 3)
     ):
         try:
@@ -356,4 +425,5 @@ def run_worker(
         output_exceeded=bool(state["output_exceeded"]),
         pid=process.pid,
         memory_exceeded=bool(state["memory_exceeded"]),
+        memory_unmeasured=bool(state["memory_unmeasured"]),
     )

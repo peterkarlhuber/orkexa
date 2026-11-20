@@ -387,6 +387,25 @@ def home_parents() -> list[str]:
     return list(POSIX_HOME_PARENTS)
 
 
+#: Magic numbers (``statfs.f_type``) of Linux file systems that always compare names byte for byte, apart from
+#: folders with the casefold attribute (checked separately): ext2/3/4, Btrfs, XFS, tmpfs, F2FS, overlayfs,
+#: ramfs, bcachefs, squashfs, EROFS, NILFS and ReiserFS. Every other file system (FAT, exFAT, NTFS, HFS+,
+#: SMB, NFS, 9p, FUSE and virtiofs, ISO 9660, ZFS with ``casesensitivity``, JFS, unknown ones) is treated as
+#: possibly case-insensitive: the stored name of each opened entry is checked (review N7).
+CASE_SENSITIVE_FILE_SYSTEMS = frozenset(
+    {
+        0xEF53, 0x9123683E, 0x58465342, 0x01021994, 0xF2F52010, 0x794C7630, 0x858458F6, 0xCA451A4E,
+        0x73717368, 0xE0F5E1E2, 0x3434, 0x52654973,
+    }
+)  # fmt: skip
+
+
+def caseless_file_system_type(f_type: int) -> bool:
+    """Whether names on a Linux file system of this ``statfs.f_type`` may compare without case (conservative:
+    ``True`` unless the type is in :data:`CASE_SENSITIVE_FILE_SYSTEMS`)."""
+    return (f_type & 0xFFFFFFFF) not in CASE_SENSITIVE_FILE_SYSTEMS
+
+
 def allowed_folders() -> list[str]:
     """Folders inside a system folder that may still hold a root (temporary folders, removable media)."""
     return [] if os.name == "nt" else list(POSIX_ALLOWED_FOLDERS)

@@ -436,26 +436,36 @@ def pdf_pages_isolated(
     after ``timeout`` seconds its process group gets ``SIGTERM`` and two seconds later ``SIGKILL``. Exceeding
     a budget, running out of memory, a crash or an oversized output raise :class:`RetrievalError`
     (``document.too_complex``) with ``reason`` ``timeout``, ``memory``, ``pages``, ``chars``, ``limit`` or
-    ``crash``; a PDF that pypdf cannot read raises ``ValueError``.
+    ``crash``; a PDF that pypdf cannot read raises ``ValueError``. Where the memory budget cannot be enforced
+    (Windows: the job object cannot be created or assigned; macOS: the worker's memory cannot be measured)
+    the PDF is not extracted: ``reason`` ``unenforced``.
 
     Remaining limits, by design: the child runs as the same operating-system user, so a code-execution flaw
     in pypdf could still reach that user's files and the network (no namespaces, seccomp or containers).
     The memory limit is ``RLIMIT_AS`` on Linux, a job object with a process memory limit on Windows, and on
     macOS (which does not enforce ``RLIMIT_AS``) a watcher that kills the child within about 20 ms of its
-    resident memory passing the budget; CPU, open-file and file-size limits apply on POSIX only, and Windows
+    physical footprint (``proc_pid_rusage``: resident, compressed and swapped-out memory) passing the
+    budget; CPU, open-file and file-size limits apply on POSIX only, and Windows
     has no process groups (the time budget still applies, the child is killed). Starting the
     interpreter costs roughly 0.1-0.3 seconds per document. Needs ``pypdf`` (``pip install "orkexa[pdf]"``).
     """
-    from ._pdf_launch import run_worker
+    from ._pdf_launch import MemoryBudgetUnavailable, run_worker
 
     limits = PdfLimits(max_pages=max_pages, max_chars=max_chars, timeout=timeout, max_memory_mb=max_memory_mb)
-    run = run_worker(
-        data,
-        timeout=limits.timeout,
-        max_memory_mb=limits.max_memory_mb,
-        max_pages=limits.max_pages,
-        max_chars=limits.max_chars,
-    )
+    try:
+        run = run_worker(
+            data,
+            timeout=limits.timeout,
+            max_memory_mb=limits.max_memory_mb,
+            max_pages=limits.max_pages,
+            max_chars=limits.max_chars,
+        )
+    except MemoryBudgetUnavailable as exc:
+        raise _too_complex("unenforced", f"No PDF is extracted without its memory budget: {exc}") from None
+    if run.memory_unmeasured:
+        raise _too_complex(
+            "unenforced", "No PDF is extracted without its memory budget: the memory could not be measured"
+        )
     if run.memory_exceeded:
         raise _too_complex("memory", f"The PDF needs more than {limits.max_memory_mb} MB of memory")
     if run.timed_out:

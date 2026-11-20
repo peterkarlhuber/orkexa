@@ -148,6 +148,7 @@ CATALOG: tuple[AttackCase, ...] = (
             "test_safe_root.py::test_special_files",
             "test_attack_catalog.py::test_name_attacks_are_refused",
             "test_hardening.py::test_l3_a_fifo_is_refused_before_it_is_opened",
+            "test_rereview.py::test_n7_a_special_file_swapped_in_after_the_check_is_never_opened",
         ],
     ),
     _case(
@@ -167,6 +168,8 @@ CATALOG: tuple[AttackCase, ...] = (
             "test_safe_root.py::test_patterns_fold_case",
             "test_hardening.py::test_m3_fold_drops_ignorables_and_dotless_i",
             "test_hardening.py::test_m3_the_stored_name_must_fold_to_the_name_asked_for",
+            "test_rereview.py::test_n7_file_systems_not_known_to_be_case_sensitive_are_checked",
+            "test_rereview.py::test_m3_n7_a_real_casefold_folder_is_checked_by_its_stored_names",
         ],
     ),
     _case(
@@ -263,16 +266,20 @@ CATALOG: tuple[AttackCase, ...] = (
             "test_hardening.py::test_h2_the_blocklist_continues_from_the_root",
             "test_hardening.py::test_m1_a_protected_folder_created_after_the_grant",
             "test_hardening.py::test_m1_a_protected_folder_recreated_or_moved",
+            "test_rereview.py::test_n3_nothing_is_renamed_to_where_a_protected_folder_will_be",
+            "test_rereview.py::test_n4_a_protected_folder_that_exists_at_the_grant_stays_protected_when_moved",
         ],
     ),
     _case(
         "N10-23",
-        "Root on /, C:\\, ~ or above it, a system, blocked or data folder: refused when created",
+        "Root on /, C:\\, ~ or above it, any user's home, a system, blocked (also via a link) or data folder",
         ["fs.protected_root"],
         [
             "test_safe_root.py::test_roots_that_cannot_be_granted",
             "test_hardening.py::test_h2_a_blocked_folder_cannot_be_the_root",
             "test_hardening.py::test_h2_home_and_the_folders_above_it",
+            "test_rereview.py::test_n1_every_users_home_folder_is_refused",
+            "test_rereview.py::test_n2_a_blocked_folder_given_through_its_link_is_refused",
         ],
     ),
     _case(

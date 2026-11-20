@@ -36,6 +36,8 @@ tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_rea
 tests.fs.test_hardening::test_l1_an_openat2_error_never_switches_to_the_fallback  # openat2 is a Linux system call
 tests.fs.test_hardening::test_l1_the_fallback_refuses_when_mounts_cannot_be_checked  # mount ids (/proc/self/fdinfo) are a Linux feature
 tests.fs.test_hardening::test_m3_case_insensitive_file_systems_are_checked_by_scan  # the directory scan is how Linux checks case-insensitive file systems
+tests.fs.test_rereview::test_m3_n7_a_real_casefold_folder_is_checked_by_its_stored_names  # needs an ext4 casefold folder (ORKEXA_TEST_CASEFOLD_DIR, CI job fs-fallbacks)
+tests.fs.test_rereview::test_n7_a_special_file_swapped_in_after_the_check_is_never_opened  # O_PATH and /proc/self/fd are Linux features
 tests.fs.test_safe_root::test_linux_magic_links  # /proc magic links exist on Linux only
 tests.fs.test_safe_root::test_linux_mounts_below_the_root[fallback]  # bind mounts and tmpfs are Linux mounts
 tests.fs.test_safe_root::test_linux_mounts_below_the_root[openat2]  # bind mounts and tmpfs are Linux mounts

@@ -2,7 +2,8 @@
 
 The fallbacks are what an older kernel or a seccomp filter leaves: no ``openat2`` (components are opened with
 ``openat`` and ``O_NOFOLLOW`` and checked by device and mount id) and no ``renameat2`` or ``renameatx_np`` (a
-file is renamed by a hard link and an unlink; a folder cannot be renamed).
+file is renamed by a hard link and an unlink; a folder cannot be renamed); and no reopening through
+``/proc/self/fd`` (the last component is looked at with ``fstatat`` before it is opened).
 """
 
 from __future__ import annotations
@@ -23,5 +24,6 @@ def _posix_fallbacks(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
         if sys.platform.startswith("linux"):
             monkeypatch.setitem(_posix._openat2_state, "usable", False)
+            monkeypatch.setitem(_posix._reopen_state, "usable", False)
         monkeypatch.setattr(_posix, "_rename_call", lambda *args: None)
     yield

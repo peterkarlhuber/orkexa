@@ -27,8 +27,9 @@ How it holds (details in ``docs/guides/path-guard.md``):
   than one hard link is refused unless ``allow_hard_links`` (A-15). Mounts below the root are refused.
 * **Blocklist and protected folders.** :data:`DEFAULT_BLOCKED` (``.ssh``, keychains, credentials ...) is
   compared NFC plus case-folded; ``protected`` folders (the product's data folder) are compared by identity,
-  so no spelling reaches them. A system folder, a drive or file-system root, the home folder itself, a
-  protected folder and any folder inside one cannot be a root at all (``fs.protected_root``).
+  so no spelling reaches them. A system folder, a drive or file-system root, the home folder itself, any
+  user's home folder, a blocked folder (also given through a link), a protected folder and any folder inside
+  one cannot be a root at all (``fs.protected_root``).
 
 Every refusal is an :class:`FsError` with a stable ``code`` (:data:`FS_ERROR_CODES`). This module uses only
 the standard library (``ctypes`` on Windows and for ``openat2``); PDF text extraction needs ``orkexa[pdf]``.
@@ -40,6 +41,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 import os
 from pathlib import Path
+from stat import S_ISLNK
 import sys
 import threading
 import time
@@ -146,9 +148,9 @@ class TextBudget:
     ``max_bytes`` caps the file read (``None``: the root's ``max_file_bytes``); ``max_chars`` the text
     returned; ``max_pages``, ``timeout`` (seconds) and ``max_memory_mb`` the PDF extraction, which runs in a
     separate process that is killed at the time budget (:func:`orkexa.retrieval.pdf_pages_isolated`). The
-    memory budget is enforced on Linux (``RLIMIT_AS``), macOS (the process is killed when its resident memory
-    passes the budget) and Windows (a job object with a process memory limit); elsewhere a PDF is refused
-    (``fs.unsupported_type``) rather than read without it.
+    memory budget is enforced on Linux (``RLIMIT_AS``), macOS (the process is killed when its physical
+    footprint passes the budget) and Windows (a job object with a process memory limit); where it cannot be
+    enforced a PDF is refused (``fs.unsupported_type``) rather than read without it.
     """
 
     max_bytes: int | None = None
@@ -200,6 +202,50 @@ def _home(home: str | os.PathLike[str] | None) -> str | None:
         return None
 
 
+def _first_link(path: str) -> tuple[str, tuple[str, ...]] | None:
+    """The first component of ``path`` (absolute) that is a link or junction, and the names after it."""
+    parts = Path(path).parts
+    current = parts[0] if parts else path
+    for index, name in enumerate(parts[1:], 1):
+        current = os.path.join(current, name)
+        if _is_link(current):
+            return current, tuple(parts[index + 1 :])
+    return None
+
+
+def _is_link(path: str) -> bool:
+    """A symbolic link, or on Windows a junction (mount point reparse point)."""
+    try:
+        found = os.lstat(path)
+    except OSError:
+        return False
+    return S_ISLNK(found.st_mode) or getattr(found, "st_reparse_tag", 0) in (0xA0000003, 0xA000000C)
+
+
+def _link_spellings(path: str) -> list[str]:
+    """``path`` as given (absolute) and every path it turns into as its links are resolved one at a time.
+
+    ``~/.ssh`` that is a link to ``/vault/keys`` yields ``~/.ssh`` and ``/vault/keys``; a link to ``~/.ssh``
+    yields its own name and ``~/.ssh``. Used to apply blocked names to every spelling of a root (review N2).
+    """
+    current = os.path.abspath(path)
+    found = [current]
+    for _ in range(40):  # the link limit of Linux
+        link = _first_link(current)
+        if link is None:
+            break
+        head, rest = link
+        try:
+            target = os.readlink(head)
+        except (OSError, ValueError):
+            break
+        if target.startswith("\\\\?\\"):
+            target = target[4:]
+        current = os.path.normpath(os.path.join(os.path.dirname(head), target, *rest))
+        found.append(current)
+    return found
+
+
 def _identities(paths: Iterable[str]) -> set[tuple[int, int]]:
     return {_identity(item) for item in map(_backend.stat_path, paths) if item is not None}
 
@@ -211,18 +257,21 @@ def root_problem(
     protected: Iterable[str | os.PathLike[str]] = (),
     home: str | os.PathLike[str] | None = None,
     blocked: Iterable[str] = DEFAULT_BLOCKED,
+    given: str | os.PathLike[str] | None = None,
 ) -> str | None:
     """Why the canonical folder ``path`` cannot be a root (a message), or ``None``.
 
     Refused:
 
     * a drive or file-system root;
-    * the home folder itself or any folder that contains it (``home``, default: the user's home folder), and
-      the folders that hold every user's home folder (``/home``, ``/Users``, ``C:\\Users``);
+    * the home folder itself or any folder that contains it (``home``, default: the user's home folder), the
+      folders that hold every user's home folder (``/home``, ``/Users``, ``C:\\Users``) and every folder
+      directly inside them (any user's home folder, ``/home/bob``, ``C:\\Users\\Public``);
     * a system folder (:func:`system_folders`) or a folder inside one, except the temporary and
       removable-media folders of :data:`~orkexa.fs._names.POSIX_ALLOWED_FOLDERS`;
     * a folder that the ``blocked`` patterns starting with ``**/`` cover by its absolute path (``~/.ssh``,
-      ``~/Library/Keychains`` or a folder inside one);
+      ``~/Library/Keychains`` or a folder inside one), by the canonical path and, with ``given``, by the path
+      as it was given and every path its links lead through (a ``~/.ssh`` that is a link elsewhere);
     * a ``protected`` folder or a folder inside one.
 
     Folders are compared by name (component-wise, NFC plus case-folded) and by identity (device and inode, or
@@ -242,10 +291,31 @@ def root_problem(
             return "The home folder itself cannot be a root; choose a folder inside it"
         return "A folder that contains the home folder cannot be a root; choose a folder inside it"
     parents = home_parents()
-    if any(path_parts(parent) == parts for parent in parents) or ids[0] in _identities(parents):
+    parent_ids = _identities(parents)
+    if any(path_parts(parent) == parts for parent in parents) or ids[0] in parent_ids:
         return "The folder of all home folders cannot be a root; choose a folder inside your home folder"
+    # Every folder directly inside them is some user's home (N1); a parent inside another one (%PUBLIC% in
+    # C:\Users) is itself such a home, whose own folders (Documents ...) may be granted.
+    outer = [
+        parent
+        for parent in parents
+        if not any(inside(parent, other) and path_parts(parent) != path_parts(other) for other in parents)
+    ]
+    if any(path_parts(parent) == parts[:-1] for parent in outer) or (
+        len(ids) > 1 and ids[1] in _identities(outer)
+    ):
+        return "A user's home folder cannot be a root; choose a folder inside it"
+    spellings = [parts]
+    if given:
+        walked = _link_spellings(os.fspath(given))
+        # The walk reads the links again, after the root was resolved: a link flipped in between would let
+        # the names of one chain vouch for another folder. The chain must end at the folder that was resolved.
+        end = _backend.stat_path(walked[-1])
+        if ids[0] is not None and (end is None or _identity(end) != ids[0]):
+            return "The links on the way to the root changed while it was checked"
+        spellings += [path_parts(item) for item in walked]
     for pattern in patterns(blocked):
-        if pattern.floating and pattern.covers(parts):
+        if pattern.floating and any(pattern.covers(spelling) for spelling in spellings):
             return "A blocked folder (credentials, keys, keychains) or a folder inside one cannot be a root"
     for folder in protected:
         text = os.fspath(folder)
@@ -287,7 +357,8 @@ class SafeRoot:
             up again on every call, so a protected folder that is created, deleted or recreated later is
             still refused.
         home: The user's home folder, which neither it nor a folder containing it may be the root of (default:
-            the home folder of this process's user).
+            the home folder of this process's user). Every other user's home folder (any folder directly in
+            ``/home``, ``/Users``, ``C:\\Users`` ...) is refused as well.
         max_file_bytes: The size limit of a file (``fs.too_large``).
         max_entries: The most entries one listing reads, hidden ones included (``fs.too_many_entries``).
         max_list_seconds: The longest one listing may take (``fs.too_many_entries``, reason ``timeout``).
@@ -325,7 +396,9 @@ class SafeRoot:
         protected_paths = [os.fspath(folder) for folder in protected]
         blocked_patterns = patterns(blocked)
         blocked_texts = [pattern.text for pattern in blocked_patterns]
-        checks: dict[str, Any] = {"protected": protected_paths, "home": home, "blocked": blocked_texts}
+        checks: dict[str, Any] = {
+            "protected": protected_paths, "home": home, "blocked": blocked_texts, "given": text
+        }  # fmt: skip
         try:
             canonical, info = _backend.canonical(text)
         except FsError as error:
@@ -558,7 +631,8 @@ class SafeRoot:
         """Rename a file or folder below the root; an existing ``target`` is never replaced.
 
         Refused: links (``fs.link``); files with several hard links unless ``allow_hard_links``; protected
-        folders and the folders above them (``fs.blocked``); a file that could not be read under its old or
+        folders and the folders above them, as source or as target, also before they exist (``fs.blocked``);
+        a file that could not be read under its old or
         its new name (blocked, excluded, not included); a folder whose new name would change what the
         blocked, exclude or include patterns decide for anything below it (``fs.excluded``), so a rename
         never makes a hidden file readable. Linux: ``renameat2(RENAME_NOREPLACE)``; macOS:
@@ -573,13 +647,19 @@ class SafeRoot:
         if not src or not dst:
             raise FsError("fs.invalid_path", "The root itself cannot be renamed", path=shown)
         folded_src = tuple(fold(part) for part in src)
+        folded_dst = tuple(fold(part) for part in dst)
         if any(rel[: len(folded_src)] == folded_src for rel in self._protected_rel):
             raise FsError("fs.blocked", "A protected folder or a folder above one is not renamed", path=shown)
+        if any(rel[: len(folded_dst)] == folded_dst for rel in self._protected_rel):
+            # Also while the protected folder does not exist yet: nothing is planted where it will be (N3).
+            raise FsError(
+                "fs.blocked", "Nothing is renamed to a protected folder or a folder above one", path=shown
+            )
         kind = self.stat(source).kind  # refuses links on the way and protected folders, checks the kind
         if kind == "file":
             self.check(source, kind="file")
             self.check(target, kind="file")
-        elif self._states(folded_src) != self._states(tuple(fold(part) for part in dst)):
+        elif self._states(folded_src) != self._states(folded_dst):
             raise FsError(
                 "fs.excluded",
                 "Renaming this folder would change which blocked, include or exclude patterns apply",
@@ -646,8 +726,14 @@ class SafeRoot:
 
 
 def _memory_budget_enforced() -> bool:
-    """Whether :func:`orkexa.retrieval.pdf_pages_isolated` enforces ``max_memory_mb`` on this system."""
-    return sys.platform.startswith("linux") or sys.platform in ("darwin", "win32")
+    """Whether :func:`orkexa.retrieval.pdf_pages_isolated` enforces ``max_memory_mb`` on this system (on
+    macOS only where the memory of a process can be measured)."""
+    if sys.platform == "darwin":
+        from .._pdf_launch import _memory_meter
+
+        meter = _memory_meter()
+        return meter is None or meter(os.getpid()) is not None
+    return sys.platform.startswith("linux") or sys.platform == "win32"
 
 
 def _nfc(text: str) -> str:
@@ -678,6 +764,8 @@ def _pdf_pages(data: bytes, budget: TextBudget, shown: str) -> list[str]:
             max_chars=budget.max_chars,
         )
     except RetrievalError as exc:
+        if exc.reason == "unenforced":
+            raise FsError("fs.unsupported_type", str(exc), path=shown) from exc
         raise FsError("fs.too_complex", str(exc), path=shown, reason=exc.reason) from exc
     except ImportError:
         raise FsError(

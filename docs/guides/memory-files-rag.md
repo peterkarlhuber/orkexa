@@ -40,7 +40,8 @@ from orkexa.retrieval import RetrievalError, pdf_pages_isolated
 try:
     pages = pdf_pages_isolated(data, timeout=30, max_memory_mb=512, max_pages=2000, max_chars=5_000_000)
 except RetrievalError as exc:  # exc.code == "document.too_complex"
-    print(exc.reason)  # "timeout", "memory", "pages", "chars", "limit" (pypdf's own limit) or "crash"
+    print(exc.reason)  # "timeout", "memory", "pages", "chars", "limit" (pypdf's own limit), "crash"
+    # or "unenforced" (the memory budget cannot be enforced here, so the PDF was not extracted)
 for number, text in enumerate(pages, start=1):
     index.add(text, source="report.pdf", title=f"Report, p. {number}", metadata={"page": str(number)})
 ```
@@ -50,7 +51,7 @@ for number, text in enumerate(pages, start=1):
 | `max_pages` | 2000 | yes (checked before the page tree is read, and while reading it) | yes |
 | `max_chars` | 5,000,000 | yes, between pages | yes, between pages; the parent also reads at most `max_chars * 4 + 64 KiB` bytes |
 | `timeout` (seconds, wall clock) | 30 | no | yes: `SIGTERM` to the worker's process group, `SIGKILL` 2 seconds later (Windows: terminate, then kill) |
-| `max_memory_mb` | 512 | no | yes: `RLIMIT_AS` on Linux, a job object with a process memory limit on Windows, a watcher that kills the process group when its resident memory passes the budget (polled every 20 ms) on macOS |
+| `max_memory_mb` | 512 | no | yes: `RLIMIT_AS` on Linux, a job object with a process memory limit on Windows, a watcher that kills the process group when its physical footprint (`proc_pid_rusage`) passes the budget (polled every 20 ms) on macOS; where none of these can be set up, `reason="unenforced"` and nothing runs |
 
 The worker (`python -I -m orkexa._pdf_worker`) gets a minimal environment (`LC_ALL`, `PYTHONIOENCODING`,
 `PYTHONHASHSEED`; on Windows `SYSTEMROOT` instead of `LC_ALL`), so no keys, database URLs, credentials or proxy

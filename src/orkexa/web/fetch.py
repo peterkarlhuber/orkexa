@@ -310,23 +310,31 @@ def html_to_text_isolated(
     """:func:`html_to_text` in a separate process that is stopped at ``timeout`` seconds (wall clock).
 
     The process is started like the PDF worker (:func:`orkexa.retrieval.pdf_pages_isolated`): a new
-    interpreter with a minimal environment, an empty working directory, lowered CPU, file and (on Linux)
-    memory limits. Hostile markup can therefore not keep a thread of the caller busy or exhaust its memory.
-    Raises :class:`FetchError` (``fetch.unreadable``) when the time or memory budget is exceeded or parsing
-    fails.
+    interpreter with a minimal environment, an empty working directory, lowered CPU and file limits, and the
+    memory budget ``max_memory_mb`` on Linux (``RLIMIT_AS``), Windows (a job object) and macOS (a watcher of
+    the physical footprint). Hostile markup can therefore not keep a thread of the caller busy or exhaust its
+    memory. Raises :class:`FetchError` (``fetch.unreadable``) when the time or memory budget is exceeded,
+    when the memory budget cannot be enforced (the page is then not parsed) or parsing fails.
     """
-    from .._pdf_launch import run_worker
+    from .._pdf_launch import MemoryBudgetUnavailable, run_worker
 
-    run = run_worker(
-        markup.encode("utf-8", errors="replace"),
-        timeout=timeout,
-        max_memory_mb=max_memory_mb,
-        max_pages=1,
-        max_chars=MAX_HTML_CHARS,
-        worker_module="orkexa.web._html_worker",
-        extra_header={"url": url},
-        module_directory=_module_directory("trafilatura"),
-    )
+    try:
+        run = run_worker(
+            markup.encode("utf-8", errors="replace"),
+            timeout=timeout,
+            max_memory_mb=max_memory_mb,
+            max_pages=1,
+            max_chars=MAX_HTML_CHARS,
+            worker_module="orkexa.web._html_worker",
+            extra_header={"url": url},
+            module_directory=_module_directory("trafilatura"),
+        )
+    except MemoryBudgetUnavailable as exc:
+        raise FetchError("fetch.unreadable", f"No page is read without its memory budget: {exc}") from None
+    if run.memory_unmeasured:
+        raise FetchError("fetch.unreadable", "The page is not read without its memory budget")
+    if run.memory_exceeded:
+        raise FetchError("fetch.unreadable", "The page cannot be read: it needs more memory than allowed")
     if run.timed_out:
         raise FetchError("fetch.unreadable", f"Reading the page took longer than {timeout:g} seconds")
     result = run.result
