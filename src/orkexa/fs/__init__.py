@@ -307,7 +307,13 @@ def root_problem(
         return "A user's home folder cannot be a root; choose a folder inside it"
     spellings = [parts]
     if given:
-        spellings += [path_parts(item) for item in _link_spellings(os.fspath(given))]
+        walked = _link_spellings(os.fspath(given))
+        # The walk reads the links again, after the root was resolved: a link flipped in between would let
+        # the names of one chain vouch for another folder. The chain must end at the folder that was resolved.
+        end = _backend.stat_path(walked[-1])
+        if ids[0] is not None and (end is None or _identity(end) != ids[0]):
+            return "The links on the way to the root changed while it was checked"
+        spellings += [path_parts(item) for item in walked]
     for pattern in patterns(blocked):
         if pattern.floating and any(pattern.covers(spelling) for spelling in spellings):
             return "A blocked folder (credentials, keys, keychains) or a folder inside one cannot be a root"

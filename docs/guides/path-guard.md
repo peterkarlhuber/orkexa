@@ -79,7 +79,8 @@ On POSIX only the descriptor of the current folder stays open (the parent's is c
 open), so a deep path does not use up descriptors. On Linux the last component of a file is opened with `O_PATH`,
 which opens nothing (no FIFO, socket or device driver is touched), and reopened through `/proc/self/fd` only once
 `fstat` of that descriptor shows a regular file or a folder; the reopen names that very inode, so no swap can
-come in between (review N7). On macOS and on Linux without `/proc`, the last component is looked at with
+come in between (review N7). This is used only when `/proc` is the real procfs (`statfs` magic), checked once
+per process. On macOS and on Linux without `/proc`, the last component is looked at with
 `fstatat` first and opened with `O_NONBLOCK | O_NOCTTY`, and the opened descriptor must be the entry that was
 looked at; there a special file swapped in between the two calls is opened (without blocking) before it is
 refused.
@@ -133,8 +134,10 @@ controls and zero-width characters stay readable (P0-2 decision) and `Entry.disp
 * a folder that a blocked pattern starting with `**/` covers by its absolute path (`~/.ssh`,
   `~/Library/Keychains` or a folder inside one): by its canonical path, by the path as it was given, and by
   every path its links lead through as they are resolved one at a time, so a `~/.ssh` that is a link to
-  `/vault/keys`, or a harmless-looking link to `~/.ssh`, is refused (review N2). A folder granted under its own
-  name only (`/vault/keys` itself) cannot be recognized;
+  `/vault/keys`, or a harmless-looking link to `~/.ssh`, is refused (review N2). The chain of links must end at
+  the very folder that was resolved (same identity), so a link flipped between resolving the root and reading
+  its names is refused too. A folder granted under its own name only (`/vault/keys` itself) cannot be
+  recognized;
 * a system folder or a folder inside one: the list of nodestro-api's `output_folder.py` (`/bin`, `/etc`,
   `/usr`, `/var`, `/System`, `/Library`, `/private` ... with the exceptions `/var/home`, `/var/mnt`,
   `/var/tmp`, `/run/media`, `/private/tmp`, `/private/var/folders`) plus `/root`, and on Windows the folders

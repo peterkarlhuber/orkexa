@@ -141,11 +141,26 @@ def _mount_id(fd: int) -> int | None:
 
 _PATH_FLAGS = getattr(os, "O_PATH", 0) | os.O_NOFOLLOW | _CLOEXEC
 #: ``usable``: ``None`` until probed, then whether a descriptor opened with ``O_PATH`` can be reopened
-#: through ``/proc/self/fd`` (Linux with ``/proc``). Tests set it to ``False`` for the ``fstatat`` precheck.
+#: through ``/proc/self/fd`` (Linux, procfs on ``/proc``). Tests set it to ``False`` for the precheck.
 _reopen_state: dict[str, bool | None] = {"usable": None if _LINUX and hasattr(os, "O_PATH") else False}
 
 
+_PROC_SUPER_MAGIC = 0x9FA0
+
+
 def _probe_reopen() -> bool:
+    """Whether ``/proc/self/fd`` is the real procfs and reopens an ``O_PATH`` descriptor (decided once)."""
+    if not hasattr(os, "O_PATH"):
+        return False
+    try:
+        proc = os.open("/proc/self/fd", os.O_RDONLY | os.O_DIRECTORY | _CLOEXEC)
+    except OSError:
+        return False
+    try:
+        if _fs_type(proc) != _PROC_SUPER_MAGIC:
+            return False  # something else mounted on /proc: its "fd" entries could be anything
+    finally:
+        os.close(proc)
     try:
         fd = os.open("/", _PATH_FLAGS)
     except OSError:
@@ -365,13 +380,19 @@ class _StatFs(ctypes.Structure):
 def _caseless_file_system(fd: int) -> bool:
     """Whether the (Linux) file system of ``fd`` may compare names without case (``fstatfs``): every file
     system not known to compare them byte for byte (``caseless_file_system_type`` in ``_names``)."""
+    f_type = _fs_type(fd)
+    return True if f_type is None else caseless_file_system_type(f_type)  # unknown: check every name
+
+
+def _fs_type(fd: int) -> int | None:
+    """``statfs.f_type`` of the (Linux) file system of ``fd``, or ``None``."""
     function = _libc_function("fstatfs")
     if function is None:
-        return True  # unknown: check every name
+        return None
     data = _StatFs()
     if function(ctypes.c_int(fd), ctypes.byref(data)) != 0:
-        return True
-    return caseless_file_system_type(data.f_type)
+        return None
+    return int(data.f_type) & 0xFFFFFFFF
 
 
 def _casefold_folder(fd: int) -> bool:

@@ -74,6 +74,34 @@ def test_n2_a_blocked_folder_given_through_its_link_is_refused(tmp_path: Path) -
     assert root_problem(os.path.realpath(keys), home=home, given=str(home / ".ssh")) is not None
 
 
+def test_n2_a_link_flipped_while_the_root_is_checked_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The race of the re-check: the root was resolved through ``~/.ssh`` to the vault, then the link was
+    flipped to a harmless folder before its names were read. The names must belong to the folder resolved."""
+    home = tmp_path / "home" / "ada"
+    home.mkdir(parents=True)
+    vault = tmp_path / "vault"
+    harmless = tmp_path / "harmless"
+    vault.mkdir()
+    harmless.mkdir()
+    _link(harmless, home / "innocent")  # what the name check sees ...
+    real = fs._backend.canonical
+    monkeypatch.setattr(fs._backend, "canonical", lambda text: real(str(vault)))  # ... and what was resolved
+    assert _code(lambda: SafeRoot(home / "innocent", home=home)) == "fs.protected_root"
+    monkeypatch.undo()
+    assert SafeRoot(home / "innocent", home=home).path.endswith("harmless")  # without the flip: granted
+
+
+@pytest.mark.skipif(WINDOWS, reason="/proc and O_PATH are POSIX (Linux) features")
+def test_n7_the_reopen_needs_the_real_procfs(monkeypatch: pytest.MonkeyPatch) -> None:
+    from orkexa.fs import _posix
+
+    assert _posix._probe_reopen() is LINUX
+    monkeypatch.setattr(_posix, "_fs_type", lambda fd: 0x01021994)  # a tmpfs mounted on /proc
+    assert _posix._probe_reopen() is False
+
+
 # ---- N3 renaming onto a protected folder that does not exist yet ------------------------------------------
 
 

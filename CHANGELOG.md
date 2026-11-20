@@ -49,16 +49,17 @@ listed here. The development version is `0.2.0.dev0`.
 * Hardened after the re-review of #109, each fix with a regression test in `tests/fs/test_rereview.py`: every
   folder directly inside a folder of home folders (any user's home, `/home/bob`, `C:\Users\Public`) cannot be a
   root (N1); `**/` blocked patterns also apply to the root as given and to every path its links lead through, so
-  a `~/.ssh` that is a link elsewhere is refused (N2; `root_problem(given=...)`); nothing is renamed to a
+  a `~/.ssh` that is a link elsewhere is refused, and the chain must end at the folder that was resolved, so a
+  link flipped meanwhile is refused too (N2; `root_problem(given=...)`); nothing is renamed to a
   protected folder or a folder above one, also before it exists (N3); protected identities learned at the grant
   and the case of a folder moved before any call are documented (N4); the macOS PDF memory watcher reads the
   physical footprint (`proc_pid_rusage`) and the worker never runs unmeasured (N5); a Windows job object that
   cannot be created or assigned is a `RetrievalError` with `reason` `unenforced` (`FetchError` for
   `html_to_text_isolated`, which now has the memory budget on macOS and Windows too), and `SafeRoot` refuses the
   PDF (`fs.unsupported_type`) (N6); on Linux the last component of a file is opened with `O_PATH` and reopened
-  only once it is a regular file, every file system not known to be case-sensitive (9p, virtiofs, ISO 9660, ZFS,
-  NFS, unknown) gets the stored-name check, and CI runs the stored-name tests on a real ext4 casefold folder
-  (N7).
+  (through `/proc/self/fd`, only when `/proc` is procfs) only once it is a regular file, every file system not
+  known to be case-sensitive (9p, virtiofs, ISO 9660, ZFS, NFS, unknown) gets the stored-name check, and CI
+  runs the stored-name tests on a real ext4 casefold folder (N7).
 * No caller yet: Nodestro adopts it in a later step of N-10.
 
 ### Added: `orkexa.mcp`, a Model Context Protocol client (2026-11-18)
