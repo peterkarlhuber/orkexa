@@ -7,6 +7,7 @@
       "core without extras",
       "dependency audit",
       "docs",
+      "fs fallbacks (no openat2, no renameat2)",
       "pg-a (Python 3.11)",
       "pg-a (Python 3.14)",
       "pg-b (Python 3.11)",
