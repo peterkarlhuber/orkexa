@@ -44,7 +44,7 @@ Two events carry a model's reasoning while it streams, in the order the provider
 | `on_event(event)` | neutral events: `TextDelta`, `ReasoningDelta`, `ReasoningStatus`, `ToolCallStarted`, `ToolCallDelta`, `ResponseCompleted`, `UsageReported`, `TurnCompleted`, `TurnFailed` |
 | `on_request(args)` | the native request arguments |
 | `on_response(response)` | the native SDK response |
-| `before_tool(call)` | `None`/`True` runs the call, a string/`False` denies it (the reason goes back to the model) |
+| `before_tool(call)` | `None`/`True` runs the call; a `Denial` or `False` denies it (see [Denying a call](#denying-a-call)) |
 | `after_tool(call, content, is_error)` | the result sent back |
 
 `AsyncAgent` accepts coroutine functions for every hook.
@@ -55,6 +55,16 @@ when `on_response` or the hooks of the final `ResponseCompleted` event raise, it
 reaches `agent.usage` and the usage tracker (and counts against a budget). The
 history is committed just before `TurnCompleted` is emitted, so an exception from
 that last event leaves the completed turn in the history.
+
+### Denying a call
+
+Return `Denial(model_text=..., code=...)` from `before_tool` to deny a call. The model sees only `model_text`
+(default `"Tool call denied."`); `code` is for your own logs and is never sent. Write `model_text` yourself and keep
+human input such as an approver's comment out of it: whatever is in it becomes part of the model's context.
+
+Returning a plain string still works but is deprecated (`DeprecationWarning`): its text reaches the model as
+`"Tool call denied: <reason>"` for now. A later release sends only `"Tool call denied."` for a string, so move to
+`Denial` (ORK-044).
 
 ### Pausing a turn at a tool call
 

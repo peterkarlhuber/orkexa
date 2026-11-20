@@ -96,6 +96,9 @@ if state.paused:
   the driver again with that state runs only the waiting members, with the `ref` they
   waited with, and asks the model nothing until they ended. `DelegationEnded("rejected")`,
   `"expired"` or `"cancelled"` reports a member that ended without a result.
+* **Member text is data:** a member's result and error (including the reason of a
+  `DelegationEnded`) reach the orchestrator only inside an `<untrusted_data source="team member <id>">`
+  frame, like an MCP result. Keep human comments out of `DelegationEnded` reasons if the model must not see them.
 * **Skill recommendations:** a `Member` can list the skills its agents have (`skills`). The
   orchestrator may name up to 8 of them in a `Delegate` or an `Assignment`. `item.skills`
   holds the names the member has, and `item.ignored_skills` holds the rest, which are ignored.

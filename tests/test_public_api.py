@@ -37,6 +37,7 @@ PUBLIC = {
         "Criterion",
         "CriterionResult",
         "DataResidencyError",
+        "Denial",
         "Effort",
         "EphemeralMemory",
         "Evaluation",

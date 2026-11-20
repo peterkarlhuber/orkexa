@@ -37,6 +37,7 @@ from .core.capabilities import ModelCapabilities, ModelLimits, Support
 from .core.checkpoint import CheckpointClaims, TurnCheckpoint, WaitingCall
 from .core.conversion import HistoryConversionWarning
 from .core.reasoning import ReasoningStream, ReasoningText
+from .core.runtime import Denial
 from .core.types import (
     Effort,
     LimitHandled,
@@ -147,6 +148,7 @@ __all__ = [
     "Criterion",
     "CriterionResult",
     "DataResidencyError",
+    "Denial",
     "Effort",
     "EphemeralMemory",
     "Evaluation",

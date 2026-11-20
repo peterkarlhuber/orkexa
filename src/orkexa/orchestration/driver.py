@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from .._aio import gather_or_cancel
+from ..core.framing import frame_untrusted
 from ..dynamic.errors import BudgetExceededError
 from .protocol import (
     AnyDecision,
@@ -126,10 +127,17 @@ def _member_line(member: Member) -> str:
     return "\n".join(parts)
 
 
+def _member_text(text: str, member: str) -> str:
+    """A team member's result or error in the decision prompt: framed like any third-party text, because a
+    member may have read web pages, files or MCP results (Locria Phase 0R, L-4)."""
+    return frame_untrusted(text, f"team member {member}")
+
+
 def _outcome_text(outcome: Outcome) -> str:
     if outcome.status == "succeeded":
-        return f"result:\n{(outcome.result or '')[:RESULT_PREVIEW_CHARS]}"
-    return f"{outcome.status}: {outcome.error or outcome.status}"
+        return "result:\n" + _member_text((outcome.result or "")[:RESULT_PREVIEW_CHARS], outcome.member)
+    reason = _member_text(outcome.error, outcome.member) if outcome.error else outcome.status
+    return f"{outcome.status}: {reason}"
 
 
 def _assignment_text(member: str, task: str, values: dict[str, Any]) -> str:
@@ -172,9 +180,10 @@ def decision_prompt(state: OrchestrationState, pool: Pool, limits: Orchestration
                     _outcome_text(step.outcomes[0])
                     if step.outcomes
                     else (
-                        f"failed: {step.error}"
+                        "failed: " + _member_text(step.error, decision.member)
                         if step.error is not None
-                        else f"result:\n{(step.result or '')[:RESULT_PREVIEW_CHARS]}"
+                        else "result:\n"
+                        + _member_text((step.result or "")[:RESULT_PREVIEW_CHARS], decision.member)
                     )
                 )
                 shown = _assignment_text(decision.member, decision.task, decision.values)

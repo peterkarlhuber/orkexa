@@ -9,3 +9,5 @@
 ::: orkexa.AsyncClaudeAgent
 
 ::: orkexa.ToolCall
+
+::: orkexa.Denial
