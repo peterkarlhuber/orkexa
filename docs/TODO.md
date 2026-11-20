@@ -11,7 +11,7 @@
 |---|---|
 | P0 Critical | 0 |
 | P1 High | 0 |
-| P2 Medium | 5 |
+| P2 Medium | 6 |
 | P3 Low | 12 |
 | P4 Optional | 8 |
 
@@ -92,6 +92,19 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
 - **Next step:** Review it before `fetch_web_page` is enabled in a server profile (nodestro-runtime keeps it behind
   `NODESTRO_WEB_TOOLS_SERVER` until then). It is part of the D1 brief P-Web (nodestro-studio
   `docs/security/nal/p-web.md`, ST-064), prepared and not commissioned.
+
+### ORK-045 · Independent review of the path guard (`orkexa.fs`)
+
+- **Priority:** P2 Medium · **Status:** Needs external review · **Refs:** [Path guard](guides/path-guard.md),
+  `src/orkexa/fs/`, `tests/fs/`, `orkexa.testing.pathguard`, Nodestro plan N-10 (P0-2, W0-6, A-5, A-15, G-5)
+- **What:** `SafeRoot` is new and has no caller yet. Its attack catalog (every N-10 case of P0-2 and every W0-6
+  gap) runs on Linux, macOS and Windows in CI; there is no independent review yet. Remaining risks are listed in
+  the guide: roots *on* NFS or SMB mounts on Linux and macOS are treated as local; Windows `rename` pins the
+  folders, not the source entry; an opted-in hard link may expose a file that lives elsewhere.
+- **Next step:** Review before Nodestro enables folder grants (N-10 acceptance: internal review, then G-5 before
+  productive activation). Nodestro adopts it in N-10 (runtime `folders`, tools `list_folder`, `read_file`,
+  `search_files`) and moves nodestro-api's `output_folder.py` system-folder list onto `orkexa.fs.system_folders`
+  (N-11), and runs `orkexa.testing.pathguard` against its tools (N-63).
 
 ## Bugs and reliability
 
@@ -331,6 +344,7 @@ retrieval logic; new retrieval work (for example an ANN index) is planned here, 
 
 | This repo item | Other repo | Other item | Relation |
 |---|---|---|---|
+| ORK-045 | nodestro-runtime, nodestro-api | N-10 (`folders`, file tools), N-11 (folder browser), N-63 (conformance) | Nodestro builds folder grants on `orkexa.fs.SafeRoot`, reuses `system_folders()` for `output_folder.py` and runs `orkexa.testing.pathguard` against its tools; until then nothing calls `orkexa.fs` |
 | ORK-003 | nodestro-runtime | Local Docker Ollama URL (non-loopback) | A loopback default needs the runtime's opt-in first |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
 | ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows) | The managed server lives here; runtime and desktop rerun their tests |

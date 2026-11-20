@@ -168,7 +168,9 @@ markers = [
 [tool.coverage.run]
 source = ["orkexa"]
 # The PDF worker and probe run in child processes (tests/test_pdf_limits.py), outside coverage measurement.
-omit = ["*/dynamic/_sandbox_runner.py", "*/dynamic/docker/__main__.py", "*/_pdf_worker.py", "*/_pdf_probe.py", "*/web/_html_worker.py"]
+# orkexa.fs._windows is Windows-only (ctypes kernel32); coverage is measured on Linux, and tests/fs/test_windows.py
+# runs it on the Windows runners (platforms.yml).
+omit = ["*/dynamic/_sandbox_runner.py", "*/dynamic/docker/__main__.py", "*/_pdf_worker.py", "*/_pdf_probe.py", "*/web/_html_worker.py", "*/fs/_windows.py"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -250,6 +252,8 @@ source_modules = [
     "orkexa.files.**",
     "orkexa.flow",
     "orkexa.flow.**",
+    "orkexa.fs",
+    "orkexa.fs.**",
     "orkexa.local",
     "orkexa.local.**",
     "orkexa.mcp",
@@ -319,6 +323,8 @@ source_modules = [
     "orkexa.files.**",
     "orkexa.flow",
     "orkexa.flow.**",
+    "orkexa.fs",
+    "orkexa.fs.**",
     "orkexa.local",
     "orkexa.local.**",
     "orkexa.mcp",
@@ -406,6 +412,8 @@ forbidden_modules = [
     "orkexa.files.**",
     "orkexa.flow",
     "orkexa.flow.**",
+    "orkexa.fs",
+    "orkexa.fs.**",
     "orkexa.local",
     "orkexa.local.**",
     "orkexa.mcp",
@@ -434,6 +442,8 @@ forbidden_modules = [
     "orkexa.testing.conformance.**",
     "orkexa.testing.fakes",
     "orkexa.testing.fakes.**",
+    "orkexa.testing.pathguard",
+    "orkexa.testing.pathguard.**",
 ]
 
 # QA-16 (AC-1, edge list K-33 of the Tabrion plan): Orkexa never imports Axentra, Nodestro or a Studio. Tabrion is an
@@ -501,6 +511,8 @@ source_modules = [
     "orkexa.files.**",
     "orkexa.flow",
     "orkexa.flow.**",
+    "orkexa.fs",
+    "orkexa.fs.**",
     "orkexa.local",
     "orkexa.local.**",
     "orkexa.mcp",

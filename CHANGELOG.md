@@ -5,6 +5,34 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: `orkexa.fs`, a path guard for granted folders (Nodestro N-10, 2026-11-20)
+
+* `SafeRoot` reads files below one folder and refuses everything that could lead outside it, on Linux, macOS and
+  Windows (design P0-2, spike W0-6). Relative paths only, NFC-normalized, with the same name rules on every
+  system (`..`, absolute, drive, UNC and device paths, `:`, `\`, reserved device names, trailing dots and spaces,
+  8.3 names, look-alike separators, control characters, length limits). Components are opened one by one through
+  descriptors that never follow a link: `openat2` with `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
+  RESOLVE_NO_MAGICLINKS | RESOLVE_NO_XDEV` on Linux (fallback `openat` with `O_NOFOLLOW`), `openat` with
+  `O_NOFOLLOW` plus `F_GETPATH` on macOS, and handles with `FILE_FLAG_OPEN_REPARSE_POINT` and no
+  `FILE_SHARE_DELETE` plus `GetFinalPathNameByHandleW` on Windows. Files are read through the checked descriptor.
+* Refused: links, junctions and mount points anywhere on the way, mounts below the root, FIFOs, sockets and
+  devices, files above `max_file_bytes`, hard links unless `allow_hard_links` (A-15), OneDrive placeholders unless
+  `allow_cloud_files`, `DEFAULT_BLOCKED` credential folders (NFC plus case-folded), include and exclude patterns,
+  and `protected` folders (compared by identity). The root is reopened and its identity checked on every call
+  (`expect_identity`, `revoke()`).
+* Roots that cannot be granted (`fs.protected_root`): drive and file-system roots, the home folder itself, the
+  system folders of nodestro-api's `output_folder.py` (plus `/root`) and the `protected` folders; network paths
+  (UNC, also of this computer, mapped network drives) raise `fs.network_path`.
+* `create_file` and `rename` (with `writable=True`) never replace or follow (`O_CREAT | O_EXCL | O_NOFOLLOW`,
+  `renameat2(RENAME_NOREPLACE)`, `renameatx_np(RENAME_EXCL)`, `CREATE_NEW`, `MoveFileExW` without replacing).
+* `extract_text` reads text files and PDFs within a page, character, time and memory budget
+  (`pdf_pages_isolated`; closes PS-1 for folder files): `fs.too_complex` with the budget as `reason`.
+* Every refusal is an `FsError` (a `PermissionError`) with a stable code from `FS_ERROR_CODES`.
+* `orkexa.testing.pathguard`: the attack catalog (every N-10 case of P0-2 and every W0-6 gap) with
+  `build_layout`, `check_reader` and `swap_race`, so products can run it against their own file tools (N-63).
+  `tests/fs` runs it on Linux, macOS and Windows; guide: `docs/guides/path-guard.md`.
+* No caller yet: Nodestro adopts it in a later step of N-10.
+
 ### Added: `orkexa.mcp`, a Model Context Protocol client (2026-11-18)
 
 * `MCPClient` with `StdioTransport` (child process, minimal environment) and `HttpTransport` (Streamable HTTP, JSON

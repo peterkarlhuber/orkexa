@@ -48,6 +48,11 @@ tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secu
 tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteIndex]  # POSIX permission bits
 tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteMemory]  # POSIX permission bits
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
+tests.fs.test_extract::test_a_flate_bomb_hits_the_memory_budget  # the memory limit (RLIMIT_AS) of the PDF process is enforced on Linux only
+tests.fs.test_safe_root::test_linux_magic_links  # /proc magic links exist on Linux only
+tests.fs.test_safe_root::test_linux_mounts_below_the_root  # bind mounts and tmpfs are Linux mounts
+tests.fs.test_safe_root::test_macos_disk_image_below_the_root  # disk images (hdiutil) are a macOS feature
+tests.fs.test_safe_root::test_macos_firmlink_root  # firmlinks and /System/Volumes/Data exist on macOS only
 tests.packaging.test_artifacts::test_artifacts_contain_no_junk_or_secrets  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_orkexa_wheel_holds_only_the_package  # packaging test; run with: pytest -m packaging
 tests.packaging.test_artifacts::test_published_description_uses_only_absolute_urls  # packaging test; run with: pytest -m packaging
