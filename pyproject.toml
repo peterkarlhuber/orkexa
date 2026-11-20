@@ -65,8 +65,9 @@ web = [
 # NAL-A2: the DDGS metasearch adapter (orkexa.web.DDGSSearch). Never a default; primp ships wheels for the six
 # desktop platforms.
 web-ddgs = ["ddgs>=9.16,<10"]
-# MUP-ONA B5: the SQL rule engine orkexa.testing.sqlcheck (PostgreSQL's parser; the range nodestro-runtime uses).
-sqlcheck = ["pglast>=7,<9"]
+# The SQL rule engine orkexa.testing.sqlcheck needs pglast (PostgreSQL's parser, GPL-3.0-or-later). It is a test
+# tool, so pglast is only a development dependency (dev, below) and no public extra of this proprietary package names
+# it (Locria Phase 0R, W0-4); a host that wants the engine installs "pglast>=7,<9" itself.
 # MUP-ONA B5: the PostgreSQL backend orkexa.backends.postgres. Only the driver: no "binary" (libpq comes from the
 # system or the product chooses psycopg[binary]) and no "pool" (PsycopgSource keeps a small pool of its own).
 # TABRION MIG-ORK-2: PsycopgSource's session settings and ping and the safe error texts of verify_schema use

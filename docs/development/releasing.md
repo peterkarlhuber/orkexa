@@ -56,29 +56,23 @@ published, and it cannot upload anything until the one-time setup below is done.
 
     Pushing a tag publishes nothing: `release.yml` starts only when a GitHub release
     is published, its tag check expects `vX.Y.Z` and so refuses an `orkexa-v` tag, and
-    its upload job needs the protected `pypi` environment.
-* **No PyPI.** No release is uploaded to PyPI. The steps below stay documented for the
-  case that the owner decides otherwise; the workflow's tag check then has to accept
-  the `orkexa-v` scheme first.
+    it uploads nothing to a package index.
+* **No PyPI.** No release is uploaded to PyPI, and `release.yml` has no upload job (removed
+  2026-11-20, Locria Phase 0R W0-4). Publishing on an index would need an owner decision
+  and a new job; consumers install orkexa by the commit in the studio lock.
 
 ## One-time setup (manual)
 
-These steps change settings of the GitHub repository and of PyPI accounts, so they are
-done by the repository owner by hand:
+These steps change settings of the GitHub repository, so they are done by the repository
+owner by hand:
 
-1. **PyPI projects and trusted publishers.** On [pypi.org](https://pypi.org), add a
-   *pending trusted publisher* for the project `orkexa`, with owner `peterkarlhuber`,
-   repository `orkexa`, workflow `release.yml` and environment `pypi`. No API token is stored anywhere.
-2. **GitHub environment.** In the repository settings, create the environment `pypi`,
-   and restrict it to tags matching `v*` with required reviewers, so that every upload
-   needs an explicit approval.
-3. **Repository security settings.** Enable private vulnerability reporting (referenced
+1. **Repository security settings.** Enable private vulnerability reporting (referenced
    by `SECURITY.md`), Dependabot alerts and security updates, and protect the default
    branch (required CI checks, no force pushes).
-4. **Optional:** upload `assets/branding/social-preview.png` as the repository's social
+2. **Optional:** upload `assets/branding/social-preview.png` as the repository's social
    preview. (The GitHub Actions in the workflows are already pinned to commit SHAs;
    Dependabot keeps the pins up to date.)
-5. **Optional documentation site:** the docs build in CI, but are not deployed. To
+3. **Optional documentation site:** the docs build in CI, but are not deployed. To
    publish them, enable GitHub Pages and add a deployment job (for example
    `mkdocs gh-deploy` or the `actions/deploy-pages` flow) after reviewing what the site
    exposes.
@@ -101,10 +95,10 @@ done by the repository owner by hand:
 5. Create a tag and a GitHub release for it (the workflow still expects `vX.Y.Z`,
    not the `orkexa-vX.Y.Z` scheme above; see "Versioning and releases"). Publishing the release starts
    the workflow, which checks that the tag matches the version, builds and checks the
-   distribution, runs the packaging tests, creates build provenance attestations, and,
-   after the `pypi` environment is approved, uploads `orkexa` through trusted
-   publishing.
-6. Verify the release in a clean environment: `pip install "orkexa[all]==X.Y.Z"`.
+   distribution, runs the packaging tests, creates build provenance attestations and
+   keeps the distribution as the workflow artifact `release-dist`. Nothing is uploaded.
+6. Verify the release in a clean environment: install the wheel from `release-dist`
+   with the studio lock (`pip install -r platform/internal.txt <wheel>`).
 
 ## Upkeep
 

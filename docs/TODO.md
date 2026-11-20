@@ -12,7 +12,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 4 |
-| P3 Low | 13 |
+| P3 Low | 12 |
 | P4 Optional | 8 |
 
 **Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
@@ -98,17 +98,6 @@ None known.
 None known.
 
 ## Features and enhancements
-
-### ORK-008 · First public release to PyPI
-
-- **Priority:** P3 Low · **Status:** Needs decision · **Refs:** [Releasing](development/releasing.md)
-- **What:** The release workflow is ready, but the one-time owner setup is not done or not confirmed: PyPI trusted
-  publisher, protected `pypi` environment, branch protection, private vulnerability reporting (referenced by
-  `SECURITY.md`), and whether to deploy the docs site. (The actions are SHA-pinned, #20; `releasing.md` says so.)
-- **Next step:** The release rules (MUP-ONA B0, [Versioning and releases](development/releasing.md#versioning-and-releases))
-  say no PyPI. If the owner decides to publish after all: complete the setup and make the workflow's tag check accept
-  `orkexa-vX.Y.Z`. Since TABRION MIG-ORK-3 the core requires a Tabrion range (now `tabrion>=0.2,<0.3`), so Tabrion
-  must be on PyPI first (TABRION G-R).
 
 ### ORK-011 · Deferred Bedrock features
 

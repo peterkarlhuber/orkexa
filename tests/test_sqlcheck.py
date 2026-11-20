@@ -8,7 +8,7 @@ runs Nodestro's 112 mandatory cases and 37 controls (``tests/fixtures/sqlcheck/t
 against :func:`check_statement`.
 
 The engine imports nothing but ``pglast`` (on first use) and the standard library and holds no Nodestro
-constant. Tests that parse SQL need pglast (``orkexa[sqlcheck]``, part of ``dev``); without it they skip, and
+constant. Tests that parse SQL need pglast (part of ``dev``); without it they skip, and
 the CI skip expectations (``tests/ci``) list no such skip, so a CI job without pglast fails.
 """
 
@@ -39,9 +39,7 @@ CASES = FIXTURES / "tenant_filter_cases.json"
 COLUMN = "org_id"
 TABLES = frozenset({"t_docs", "t_notes"})
 
-needs_pglast = pytest.mark.skipif(
-    importlib.util.find_spec("pglast") is None, reason="needs pglast (orkexa[sqlcheck])"
-)
+needs_pglast = pytest.mark.skipif(importlib.util.find_spec("pglast") is None, reason="needs pglast (dev)")
 
 
 def _kinds(sql: str, **options: object) -> list[str]:
@@ -394,9 +392,9 @@ def test_importing_the_engine_does_not_import_the_parser() -> None:
 
 
 # MUP-ONA T-PKG-1 (sqlcheck part)
-def test_without_pglast_orkexa_imports_and_the_engine_names_the_extra_on_first_use() -> None:
+def test_without_pglast_orkexa_imports_and_the_engine_names_pglast_on_first_use() -> None:
     """With pglast blocked, ``import orkexa`` and the engine module work; the first check raises ImportError
-    naming ``orkexa[sqlcheck]``."""
+    naming the pglast requirement."""
     code = (
         "import sys\n"
         "sys.modules['pglast'] = None\n"
@@ -410,4 +408,15 @@ def test_without_pglast_orkexa_imports_and_the_engine_names_the_extra_on_first_u
         [sys.executable, "-c", code], capture_output=True, text=True, check=True, timeout=120
     )
     assert result.stdout.strip() == f"ImportError|pglast|{sqlcheck.MISSING_PGLAST}"
-    assert "orkexa[sqlcheck]" in sqlcheck.MISSING_PGLAST
+    assert 'pip install "pglast>=7,<9"' in sqlcheck.MISSING_PGLAST
+
+
+def test_no_public_extra_names_pglast() -> None:
+    """pglast is GPL-3.0-or-later: this proprietary package needs it only for development (W0-4)."""
+    import tomllib
+
+    project = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())["project"]
+    extras = project["optional-dependencies"]
+    named = [name for name, reqs in extras.items() if name != "dev" and any("pglast" in r for r in reqs)]
+    assert named == []
+    assert any(r.startswith("pglast") for r in extras["dev"])

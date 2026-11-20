@@ -5,7 +5,7 @@
 * :mod:`orkexa.testing.conformance`: the public conformance suite of the storage contracts (``Index``,
   ``ReindexableIndex``, ``FileStore``, ``MemoryBackend``), runnable against any backend.
 * :mod:`orkexa.testing.sqlcheck`: a rule engine that checks that PostgreSQL statements on tenant-partitioned
-  tables are bound to one tenant (MUP-ONA B5; needs ``pip install "orkexa[sqlcheck]"``).
+  tables are bound to one tenant (MUP-ONA B5; needs ``pip install "pglast>=7,<9"``, a development dependency).
 
 Nothing here needs pytest, and no Orkexa module outside this package imports it. Import the submodules
 directly; this package itself exports nothing.

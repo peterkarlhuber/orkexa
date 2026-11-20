@@ -1,6 +1,7 @@
 """A rule engine for tenant-partitioned SQL: is a PostgreSQL statement bound to one tenant? (MUP-ONA B5)
 
-Install it with ``pip install "orkexa[sqlcheck]"`` (``pglast``, PostgreSQL's own parser).
+It needs ``pglast`` (PostgreSQL's own parser, GPL-3.0-or-later), which no extra of this package names:
+install it yourself with ``pip install "pglast>=7,<9"`` (it is part of the ``dev`` extra).
 :func:`check_statement` parses one or more statements and reports every way they may read or change rows of
 another tenant::
 
@@ -119,7 +120,7 @@ class Finding:
 
 
 #: The message of the :class:`ImportError` raised on first use without ``pglast``.
-MISSING_PGLAST = 'The SQL rule engine needs pglast: pip install "orkexa[sqlcheck]"'
+MISSING_PGLAST = 'The SQL rule engine needs pglast: pip install "pglast>=7,<9"'
 
 
 def _pglast(module: str) -> Any:
@@ -527,7 +528,7 @@ def check_statement(
 
     Raises:
         ValueError: ``placeholder`` or ``column`` is invalid.
-        ImportError: pglast is not installed (``pip install "orkexa[sqlcheck]"``).
+        ImportError: pglast is not installed (``pip install "pglast>=7,<9"``).
 
     Never raises for a text the parser rejects: that is an ``unparsed`` finding.
     """
