@@ -176,8 +176,8 @@ def test_m3_fold_drops_ignorables_and_dotless_i(tmp_path: Path) -> None:
     assert fold("\u00adpr\u0131vate\ufe0f") == "private"
     folder = tmp_path / "root"
     folder.mkdir()
-    root = SafeRoot(folder, blocked=["**/private", "**/.ssh"])
-    for path in (".s\u200bsh/id", ".ss\u2060h/id", "pr\u0131vate/x", "PRIVATE\u200d/x"):
+    root = SafeRoot(folder, blocked=["**/kit", "**/.ssh"])
+    for path in (".s\u200bsh/id", ".ss\u2060h/id", "k\u0131t/x", "KIT\u200d/x"):
         assert _code(lambda path=path: root.read_bytes(path)) == "fs.blocked", ascii(path)
 
 
