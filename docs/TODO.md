@@ -11,7 +11,7 @@
 |---|---|
 | P0 Critical | 0 |
 | P1 High | 0 |
-| P2 Medium | 4 |
+| P2 Medium | 5 |
 | P3 Low | 12 |
 | P4 Optional | 8 |
 
@@ -43,6 +43,14 @@ None known.
 
 Needs an independent review: ORK-004 (the static check). It belongs in the same independent review as Nodestro's
 tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off until then.
+
+### ORK-044 · Plain-string denials still reach the model
+
+- **Priority:** P2 Medium · **Status:** Open · **Refs:** [Denying a call](guides/streaming-hooks-errors.md#denying-a-call),
+  Locria plan Welle 0 (W0-3, L-4)
+- **What:** `before_tool` may still return a string, and its text goes to the model as `"Tool call denied: <reason>"`
+  (deprecated, with a warning). Next steps: nodestro-runtime returns `Denial` after its lock bump, then a string maps
+  to the generic `"Tool call denied."` so no free text from a hook can reach a model.
 
 ### ORK-003 · Loopback rule for `OllamaProvider`
 

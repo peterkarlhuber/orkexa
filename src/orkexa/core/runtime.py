@@ -27,6 +27,7 @@ import os
 import threading
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, cast
 import uuid
+import warnings
 
 from pydantic import BaseModel
 from typing_extensions import TypeVar
@@ -118,6 +119,27 @@ DEFAULT_MAX_TOOL_CALLS_PER_ROUND = 64
 
 _FINAL = ("end_turn", "stop_sequence", "refusal")
 _INCOMPLETE = ("max_tokens", "context_window_exceeded")
+
+
+@dataclass(frozen=True)
+class Denial:
+    """A ``before_tool`` hook's refusal, with the one text the model may read.
+
+    ``model_text`` goes to the model as the tool result; the host writes it from a fixed catalog: never a
+    person's comment, a path or the source of a rule (a comment for people belongs in the host's own
+    records). ``code`` is for the host and is not shown to the model.
+    """
+
+    model_text: str = "Tool call denied."
+    code: str | None = None
+
+
+#: Plain-string refusals keep their old wording (the string reaches the model) until the hosts return
+#: :class:`Denial` (Nodestro after the W0-3 lock bump); then a string gets only the fixed text.
+_STRING_DENIAL_WARNING = (
+    "A before_tool hook returned a string; return orkexa.Denial(model_text=...) instead. A plain string "
+    "will soon reach the model only as 'Tool call denied.', so a person's comment is never sent by mistake."
+)
 
 
 @dataclass(frozen=True)
@@ -1288,11 +1310,15 @@ class AgentCore(Generic[OutputT]):
 
     @staticmethod
     def _denial(reason: Any) -> str | None:
-        """Interpret a ``before_tool`` result: ``None``/``True`` allow, a string or ``False`` deny."""
+        """Interpret a ``before_tool`` result: ``None``/``True`` allow; a :class:`Denial`, ``False`` or
+        (deprecated) a string deny. The model reads only :attr:`Denial.model_text` or the fixed text."""
         if reason is None or reason is True:
             return None
         if reason is False:
             return "Tool call denied."
+        if isinstance(reason, Denial):
+            return reason.model_text
+        warnings.warn(_STRING_DENIAL_WARNING, DeprecationWarning, stacklevel=3)
         return f"Tool call denied: {reason}"
 
     def _is_memory_call(self, call: ToolCall) -> bool:

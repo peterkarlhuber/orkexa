@@ -247,7 +247,9 @@ def test_parallel_members_run_at_the_same_time_and_each_outcome_is_recorded() ->
         ("legal", "rejected"),
     ]
     assert outcomes[1].error == "RuntimeError: broken"
-    assert "Delegated in parallel:" in prompts[1] and "rejected: approval rejected" in prompts[1]
+    assert "Delegated in parallel:" in prompts[1]
+    assert "rejected: The following content" in prompts[1]
+    assert '<untrusted_data source="team member legal">\napproval rejected\n</untrusted_data>' in prompts[1]
     assert state.delegations("legal") and state.outcome == "finished"
 
 
@@ -356,7 +358,8 @@ def test_still_waiting_stays_paused_and_rejection_or_expiry_is_shown() -> None:
     state = run_orchestration("t", POOL, decide=decide, execute=execute, limits=limits, state=state)
     assert calls == [("research", None), ("legal", None), ("legal", "legal-run"), ("legal", "legal-run")]
     assert [o.status for o in state.steps[0].outcomes] == ["succeeded", "expired"]
-    assert "expired: approval expired" in prompts[0] and state.outcome == "finished"
+    assert '<untrusted_data source="team member legal">\napproval expired\n</untrusted_data>' in prompts[0]
+    assert "expired: The following content" in prompts[0] and state.outcome == "finished"
 
 
 def test_a_rejected_single_delegation_is_an_error_the_model_sees() -> None:
@@ -368,7 +371,7 @@ def test_a_rejected_single_delegation_is_an_error_the_model_sees() -> None:
     assert state.steps[0].error == "Peter rejected the payment"
     assert (
         state.steps[0].outcomes[0].status == "rejected"
-        and "rejected: Peter rejected the payment" in prompts[1]
+        and '<untrusted_data source="team member legal">\nPeter rejected the payment\n' in prompts[1]
     )
 
 
@@ -501,7 +504,7 @@ def test_a_version_1_record_still_reads_and_replays() -> None:
     state = OrchestrationState.model_validate(recorded)
     assert state.version == 1 and state.steps[0].outcomes == ()
     assert [v.ok for v in replay(state, POOL, OrchestrationLimits())] == [True, True]
-    assert "Delegated to research: facts\n   result:\nfacts" in decision_prompt(
+    assert '<untrusted_data source="team member research">\nfacts\n</untrusted_data>' in decision_prompt(
         state.model_copy(update={"outcome": None}), POOL, OrchestrationLimits()
     )
 

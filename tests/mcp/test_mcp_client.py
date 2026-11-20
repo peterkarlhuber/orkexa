@@ -208,3 +208,18 @@ def test_http_transport_rules() -> None:
     client = MCPClient(HttpTransport("http://127.0.0.1:9/mcp"), timeout=2)
     with pytest.raises(MCPError, match="not reachable"):
         client.initialize()
+
+
+# Locria Phase 0R, L-3: the error text of an MCP server is third-party text like its results.
+def test_server_errors_reach_the_model_only_framed() -> None:
+    with stdio_client() as client:
+        framed, trusted = mcp_tools(client)[1], mcp_tools(client, untrusted=False)[1]
+        with pytest.raises(ToolResultError) as error:
+            framed.execute({"to": "a"})
+        message = str(error.value)
+        assert 'source="mcp:fake/mail.send"' in message
+        start, end = message.index("<untrusted_data"), message.index("</untrusted_data>")
+        assert start < message.index("Unknown tool") < end
+        with pytest.raises(ToolResultError) as plain:
+            trusted.execute({"to": "a"})
+        assert "Unknown tool" in str(plain.value) and "<untrusted_data" not in str(plain.value)

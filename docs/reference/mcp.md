@@ -22,7 +22,7 @@ client = MCPClient(HttpTransport("http://127.0.0.1:7341/mcp", headers={"Authoriz
 
 A tool result is text written by a third party (an email, a web page, a database row). `mcp_tools` wraps every
 result in an `<untrusted_data source="mcp:server/tool">` frame that the text cannot close and tells the model to
-treat it as data. The frame lowers the risk of prompt injection; it does not remove it. Keep a `before_tool` policy
+treat it as data. An error message from the server is framed the same way. The frame lowers the risk of prompt injection; it does not remove it. Keep a `before_tool` policy
 or an approver for every tool with side effects, and prefer servers that enforce permissions themselves.
 
 ## Limits

@@ -560,3 +560,32 @@ def test_async_tool_timeout_and_concurrency_guard() -> None:
         assert await first == "gave up"
 
     asyncio.run(run())
+
+
+# Locria Phase 0R, L-2: a Denial carries the one text the model may read; a plain string is deprecated.
+def test_a_denial_shows_the_model_only_its_model_text() -> None:
+    from orkexa import Denial
+
+    def deny(call: ToolCall) -> Any:
+        if call.name != "multiply":
+            return None
+        return Denial(model_text="A person rejected this call.", code="rejected")
+
+    agent, model = agent_with(
+        tool_calls(("add", {"a": 1, "b": 2}), ("multiply", {"a": 2, "b": 2})),
+        text("done"),
+        tools=[add, multiply],
+        before_tool=deny,
+    )
+    agent.ask("go")
+    sent = str(model.requests[1].messages[-1].parts())
+    assert "A person rejected this call." in sent
+    assert "rejected'" not in sent and "Tool call denied:" not in sent
+
+
+def test_a_plain_string_denial_is_deprecated() -> None:
+    agent, _ = agent_with(
+        tool_calls(("add", {"a": 1, "b": 2})), text("x"), tools=[add], before_tool=lambda c: "no"
+    )
+    with pytest.warns(DeprecationWarning, match="orkexa.Denial"):
+        agent.ask("go")
