@@ -58,7 +58,7 @@ published, and it cannot upload anything until the one-time setup below is done.
     is published, its tag check expects `vX.Y.Z` and so refuses an `orkexa-v` tag, and
     it uploads nothing to a package index.
 * **No PyPI.** No release is uploaded to PyPI, and `release.yml` has no upload job (removed
-  2026-11-20, Locria Phase 0R W0-4). Publishing on an index would need an owner decision
+  2026-11-20, security review 2026-11 (phase 0R), W0-4). Publishing on an index would need an owner decision
   and a new job; consumers install orkexa by the commit in the studio lock.
 
 ## One-time setup (manual)

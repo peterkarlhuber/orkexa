@@ -351,7 +351,7 @@ def test_patterns_fold_case(tmp_path: Path) -> None:
 def test_protected_inside_a_wide_root(tmp_path: Path) -> None:
     """N10-22: the product's data folder and credential folders inside a root that is too wide."""
     home = tmp_path / "home"
-    data = home / ".locria"
+    data = home / ".app"
     (data / "runs" / "r1").mkdir(parents=True)
     (data / "vault.json").write_bytes(CANARY)
     (data / "runs" / "r1" / "out.txt").write_bytes(CANARY)
@@ -360,7 +360,7 @@ def test_protected_inside_a_wide_root(tmp_path: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(CANARY)
     root = SafeRoot(home, protected=[data])
-    blocked = (".locria/vault.json", ".locria/runs/r1/out.txt", ".aws/credentials", ".config/gcloud/key.json")
+    blocked = (".app/vault.json", ".app/runs/r1/out.txt", ".aws/credentials", ".config/gcloud/key.json")
     for path in (*blocked, "Library/Keychains/k.db", ".netrc"):
         assert _code(lambda path=path: root.read_bytes(path)) == "fs.blocked", path
 

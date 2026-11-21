@@ -562,7 +562,8 @@ def test_async_tool_timeout_and_concurrency_guard() -> None:
     asyncio.run(run())
 
 
-# Locria Phase 0R, L-2: a Denial carries the one text the model may read; a plain string is deprecated.
+# Security review 2026-11 (phase 0R), L-2: a Denial carries the one text the model may read; a plain string
+# is deprecated.
 def test_a_denial_shows_the_model_only_its_model_text() -> None:
     from orkexa import Denial
 

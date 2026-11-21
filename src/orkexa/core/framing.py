@@ -2,8 +2,8 @@
 
 Text that no person and no part of Orkexa wrote (a tool result or error of an MCP server, a web page, the
 result of a team member that may have read either) goes into a prompt only through :func:`frame_untrusted`,
-so the model is told it is data, not instructions (Locria Phase 0R, P0-4). The MCP client
-(:mod:`orkexa.mcp`) and the orchestration driver use this one function.
+so the model is told it is data, not instructions (security review 2026-11 (phase 0R), P0-4). The MCP
+client (:mod:`orkexa.mcp`) and the orchestration driver use this one function.
 """
 
 from __future__ import annotations

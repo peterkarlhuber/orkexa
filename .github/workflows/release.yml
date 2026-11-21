@@ -2,7 +2,8 @@
 # with a build provenance attestation.
 #
 # Nothing here runs on pushes or pull requests. Nothing is uploaded to a package index: the owner's rule is no PyPI
-# publishing (Locria Phase 0R, W0-4). Consumers install orkexa by the commit in the studio lock.
+# publishing (security review 2026-11 (phase 0R), W0-4). Consumers install orkexa by the commit in the studio
+# lock.
 name: Release
 
 on:

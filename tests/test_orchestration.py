@@ -234,7 +234,8 @@ def test_the_first_prompt_lists_the_pool_and_the_limit() -> None:
     )
 
 
-# Locria Phase 0R, L-4: a member's result or error is third-party text in the decision prompt.
+# Security review 2026-11 (phase 0R), L-4: a member's result or error is third-party text in the decision
+# prompt.
 @pytest.mark.parametrize(
     "step",
     [
