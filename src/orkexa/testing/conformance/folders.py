@@ -42,9 +42,10 @@ DATA_FOLDER = "data"
 #: Codes of a refusal because the grant was revoked or expired (the product's own codes may differ from
 #: ``fs.revoked``: a grant model that just finds no grant any more says so).
 GRANT_ENDED_CODES = frozenset({"fs.revoked", "access.missing_grant", "access.denied"})
-#: Codes of a folder that cannot be granted: the path guard's, or a safety limit of the product's grant model.
+#: Codes of a folder that cannot be granted: the path guard's, a safety limit of the product's grant model,
+#: or the product's own refusal of the folder.
 NOT_GRANTABLE_CODES = frozenset(
-    {"fs.protected_root", "fs.network_path", "fs.invalid_path", "access.safety_limit"}
+    {"fs.protected_root", "fs.network_path", "fs.invalid_path", "access.safety_limit", "folder.not_grantable"}
 )
 
 
@@ -172,7 +173,8 @@ def attack_catalog(context: Context) -> None:
     access = context.make()
     layout = pathguard.build_layout(context.workdir / "attack")
     grant = access.grant(str(layout.root))
-    findings = pathguard.check_reader(partial(_read_bytes, access, grant), layout)
+    # Any exception with the expected code is a refusal: a product's tools raise their own errors.
+    findings = pathguard.check_reader(partial(_read_bytes, access, grant), layout, refusal=Exception)
     expect_equal([f"{item.case} {item.path!r}: {item.problem}" for item in findings], [], "attack findings")
     listed = access.list(grant)
     for name in ("link_file", "link_dir", "chain1", "junction"):
