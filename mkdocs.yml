@@ -85,6 +85,7 @@ nav:
       - Orchestration: guides/orchestration.md
       - Security: guides/security.md
       - Path guard (orkexa.fs): guides/path-guard.md
+      - Long conversations: guides/compaction.md
   - Data protection and AI regulation:
       - compliance/index.md
       - Data flows and retention: compliance/data-flows.md
@@ -108,6 +109,7 @@ nav:
       - Skills: reference/skills.md
       - MCP client: reference/mcp.md
       - Path guard: reference/fs.md
+      - Context compaction: reference/compaction.md
       - Usage: reference/usage.md
       - Pricing: reference/pricing.md
       - Errors: reference/errors.md

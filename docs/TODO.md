@@ -13,7 +13,7 @@
 | P1 High | 0 |
 | P2 Medium | 6 |
 | P3 Low | 12 |
-| P4 Optional | 8 |
+| P4 Optional | 9 |
 
 **Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
 commit SHA. No entry blocks the frozen desktop candidate v0.2.0-preview.1 or the next Nodestro preview; every entry
@@ -186,6 +186,15 @@ None known.
   for the JSON answer and keeps it in the conversation history, although the user never wrote it.
 - **Next step:** Mark it as synthetic or drop it on commit; agree with Nodestro how chat views show it.
 
+### ORK-046 · Context compaction counts tokens by estimate
+
+- **Priority:** P4 Optional · **Status:** Open · **Refs:** [Long conversations](guides/compaction.md), Nodestro N-05
+- **What:** `orkexa.core.compaction` estimates tokens (three bytes of UTF-8 per token, plus a 10 % margin in
+  `context_budget`), so a conversation is compacted somewhat earlier than needed; `count=` takes a real counter, but
+  no provider adapter offers a cheap local one yet. Excerpts of untrusted frames are cut, not summarized.
+- **Next step:** Offer a local tokenizer per provider family where one is available without a request, and measure
+  the estimate's error on the local models.
+
 ## Tests and quality assurance
 
 ### ORK-042 · Dependency confusion: the studio origin commit of the poisoned-index check (TABRION DC-OR-1)
@@ -351,6 +360,7 @@ retrieval logic; new retrieval work (for example an ANN index) is planned here, 
 | This repo item | Other repo | Other item | Relation |
 |---|---|---|---|
 | ORK-045 | nodestro-runtime, nodestro-api | N-10 (`folders`, file tools), N-11 (folder browser), N-63 (conformance) | Nodestro builds folder grants on `orkexa.fs.SafeRoot`, reuses `system_folders()` for `output_folder.py` and runs `orkexa.testing.pathguard` against its tools; until then nothing calls `orkexa.fs` |
+| ORK-046 | nodestro-runtime | N-05 (context compaction of conversations) | The runtime fits a conversation's history into the answer model's context window with `orkexa.core.compaction` (trim by default, summarize per conversation) |
 | ORK-003 | nodestro-runtime | Local Docker Ollama URL (non-loopback) | A loopback default needs the runtime's opt-in first |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
 | ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows) | The managed server lives here; runtime and desktop rerun their tests |

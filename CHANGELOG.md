@@ -5,6 +5,21 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: `orkexa.core.compaction`, context compaction for long conversations (Nodestro N-05, 2026-11-21)
+
+* `compact` (and `acompact` with an async helper) fits a conversation of plain-text `Turn`s into a token budget:
+  the newest turns stay, the older ones become one turn of role `summary` that names its source range (`first`
+  to `ref`) and its method, `trimmed` (no model asked) or `summarized` (a helper model, any callable, with
+  `SUMMARY_INSTRUCTIONS`). A failing helper falls back to `trimmed` with `error`. An earlier summary turn is
+  summarized again with the newer turns, so its range carries over. `max_turns` caps the kept turns.
+* `context_budget` is the context window minus the output reserve, a 10 % margin and the reserved prompt tokens;
+  `estimate_tokens` is a deterministic estimate (three bytes of UTF-8 per token); `count=` takes a real counter.
+* Untrusted data stays framed: the helper sees `[data N]` placeholders instead of `<untrusted_data>` frames
+  (`split_untrusted`), the summary keeps an excerpt of each frame in a new frame with the original source (one
+  per source, `Compacted.sources`), and every frame tag in the helper's text is escaped, so it can neither open
+  nor close a frame. `orkexa.core.framing.PREAMBLE` is the sentence before every frame.
+* Guide: `docs/guides/compaction.md`; reference: `docs/reference/compaction.md`; tests: `tests/test_compaction.py`.
+
 ### Added: `orkexa.fs`, a path guard for granted folders (Nodestro N-10, 2026-11-20)
 
 * `SafeRoot` reads files below one folder and refuses everything that could lead outside it, on Linux, macOS and
