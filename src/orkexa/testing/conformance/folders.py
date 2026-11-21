@@ -87,9 +87,9 @@ def _tree(context: Context, name: str = "granted") -> Path:
     """A folder with a few files below the working directory."""
     root = context.workdir / name
     (root / "notes").mkdir(parents=True)
-    (root / "readme.md").write_text("Project overview\n", encoding="utf-8")
-    (root / "notes" / "plan.txt").write_text("The budget is 42 units\n", encoding="utf-8")
-    (root / "notes" / "todo.md").write_text("call the supplier\n", encoding="utf-8")
+    (root / "readme.md").write_text("Project overview\n", encoding="utf-8", newline="\n")
+    (root / "notes" / "plan.txt").write_text("The budget is 42 units\n", encoding="utf-8", newline="\n")
+    (root / "notes" / "todo.md").write_text("call the supplier\n", encoding="utf-8", newline="\n")
     return root
 
 
@@ -207,11 +207,11 @@ def exclude_patterns(context: Context) -> None:
     access = context.make()
     root = _tree(context)
     (root / "private").mkdir()
-    (root / "private" / "salary.txt").write_text("secret budget\n", encoding="utf-8")
-    (root / "notes" / "server.key").write_text("secret budget\n", encoding="utf-8")
+    (root / "private" / "salary.txt").write_text("secret budget\n", encoding="utf-8", newline="\n")
+    (root / "notes" / "server.key").write_text("secret budget\n", encoding="utf-8", newline="\n")
     nfd = unicodedata.normalize("NFD", "café")
     (root / nfd).mkdir()
-    (root / nfd / "menu.txt").write_text("secret budget\n", encoding="utf-8")
+    (root / nfd / "menu.txt").write_text("secret budget\n", encoding="utf-8", newline="\n")
     grant = access.grant(str(root), exclude=["private", "**/*.key", "café"])
     expect_equal(sorted(access.list(grant)), ["notes", "readme.md"], "the listing without excluded entries")
     expect_equal(sorted(access.list(grant, "notes")), ["notes/plan.txt", "notes/todo.md"], "a subfolder")
@@ -246,8 +246,8 @@ def size_limit(context: Context) -> None:
     """A file above the size limit is refused with a message that names the limit; a smaller one is read."""
     access = context.make()
     root = _tree(context)
-    (root / "big.txt").write_text("x" * 1001, encoding="utf-8")
-    (root / "small.txt").write_text("x" * 1000, encoding="utf-8")
+    (root / "big.txt").write_text("x" * 1001, encoding="utf-8", newline="\n")
+    (root / "small.txt").write_text("x" * 1000, encoding="utf-8", newline="\n")
     grant = access.grant(str(root), max_file_bytes=1000)
     error = _refused(
         lambda: access.read(grant, "big.txt"), "reading a file above the limit", ["fs.too_large"]
@@ -284,7 +284,7 @@ def root_replaced(context: Context) -> None:
     expect_equal(access.read(grant, "readme.md"), "Project overview\n", "before the swap")
     root.rename(context.workdir / "moved")
     root.mkdir()
-    (root / "readme.md").write_text("Planted\n", encoding="utf-8")
+    (root / "readme.md").write_text("Planted\n", encoding="utf-8", newline="\n")
     _refused(
         lambda: access.read(grant, "readme.md"),
         "reading a replaced folder",
@@ -296,7 +296,8 @@ def unicode_names(context: Context) -> None:
     """A file stored with a decomposed name is read with the composed name (W06-2)."""
     access = context.make()
     root = _tree(context)
-    (root / unicodedata.normalize("NFD", "Übersicht.txt")).write_text("Inhalt\n", encoding="utf-8")
+    decomposed = root / unicodedata.normalize("NFD", "Übersicht.txt")
+    decomposed.write_text("Inhalt\n", encoding="utf-8", newline="\n")
     grant = access.grant(str(root))
     expect_equal(access.read(grant, "Übersicht.txt"), "Inhalt\n", "the composed name")
     expect("Übersicht.txt" in access.list(grant), "the listing names it composed")
