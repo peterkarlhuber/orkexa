@@ -18,6 +18,8 @@ listed here. The development version is `0.2.0.dev0`.
 * Orkexa's own tests run the cases against a small grant store on `SafeRoot`
   (`tests/conformance/folder_access.py`) on Linux, macOS and Windows, and check that the suite catches a store
   that ignores exclusions, revocations or the data folder.
+* `orkexa.fs.allowed_folders` is public: the folders inside a system folder that may still hold a root (temporary
+  folders, removable media), next to `system_folders`, so a product checks other folders by the same lists.
 
 ### Added: `orkexa.fs`, a path guard for granted folders (Nodestro N-10, 2026-11-20)
 

@@ -91,6 +91,7 @@ __all__ = [
     "FsError",
     "SafeRoot",
     "TextBudget",
+    "allowed_folders",
     "display_name",
     "is_short_name",
     "root_problem",

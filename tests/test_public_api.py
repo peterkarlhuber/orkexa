@@ -292,6 +292,7 @@ PUBLIC = {
         "SafeRoot",
         "TEXT_SUFFIXES",
         "TextBudget",
+        "allowed_folders",
         "display_name",
         "is_short_name",
         "root_problem",
