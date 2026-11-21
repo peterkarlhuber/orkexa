@@ -33,10 +33,19 @@ checks ``vectors``; input limits need nothing. ``concurrent_writers`` never swit
 DEFAULT_PARTITION = "conformance-a"
 """The partition (tenant, or SQLite namespace) of the instances a case opens unless it names another."""
 
-Contract = Literal["index", "files", "memory"]
+Contract = Literal["index", "files", "memory", "folders"]
 Status = Literal["passed", "failed", "skipped"]
 
 _CONTRACTS: dict[str, type] = {"index": Index, "files": FileStore, "memory": MemoryBackend}
+
+
+def _contract(name: str) -> type:
+    """The class (or runtime-checkable protocol) the instances of a contract implement."""
+    if name == "folders":
+        from .folders import FolderAccess
+
+        return FolderAccess
+    return _CONTRACTS[name]
 
 
 class CaseFailure(AssertionError):
@@ -112,7 +121,7 @@ class Request:
 
 
 Factory = Callable[[Request], Any]
-"""Opens one instance (an ``Index``, ``FileStore`` or ``MemoryBackend``) for a :class:`Request`."""
+"""Opens one instance (``Index``, ``FileStore``, ``MemoryBackend``, ``FolderAccess``) for a request."""
 
 
 class Context:
@@ -159,7 +168,8 @@ class Case:
         name: Unique, stable name (``<area>.<what_it_checks>``); expectation files refer to it.
         needs: The capabilities the backend must report for the case to run; otherwise it is skipped.
         run: Performs the case; raises :class:`CaseFailure` (or any error) on a deviation.
-        contract: Which contract the instances implement: ``index``, ``files`` or ``memory``.
+        contract: Which contract the instances implement: ``index``, ``files``, ``memory`` or ``folders``
+            (:class:`~orkexa.testing.conformance.folders.FolderAccess`).
         security: A security case (partition, input limits, vector checks): it may need only
             :data:`SECURITY_NEEDS`, and its skip is marked in the report.
     """
@@ -178,7 +188,7 @@ class Case:
             raise ValueError(f"{self.name}: unknown capabilities {sorted(unknown)}")
         if self.security and not self.needs <= SECURITY_NEEDS:
             raise ValueError(f"{self.name}: a security case may need only {sorted(SECURITY_NEEDS)}")
-        if self.contract not in _CONTRACTS:
+        if self.contract not in (*_CONTRACTS, "folders"):
             raise ValueError(f"{self.name}: unknown contract {self.contract!r}")
 
     @property
@@ -369,7 +379,7 @@ def run_cases(
                 report.errors.append(
                     f"{type(probe).__name__} takes tenant_id but does not report the capability 'partitioned'"
                 )
-            wrong = sorted(c for c in contracts if not isinstance(probe, _CONTRACTS[c]))
+            wrong = sorted(c for c in contracts if not isinstance(probe, _contract(c)))
             if wrong:
                 report.errors.append(
                     f"{type(probe).__name__} does not implement the contract of the {', '.join(wrong)} cases"

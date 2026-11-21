@@ -5,6 +5,20 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: conformance cases for folder grants (Nodestro N-63, 2026-11-21)
+
+* `orkexa.testing.conformance.FOLDER_CASES` (T-CONF-9): 14 cases that check a product's read-only access to
+  granted folders through the methods of the new protocol `FolderAccess` (`grant`, `revoke`, `list`, `read`,
+  `search`, `accesses`): the product's data folder (`DATA_FOLDER`), file-system roots, the home folder and the
+  system folders cannot be granted; the attack catalog of `orkexa.testing.pathguard` and its swap race; include
+  and exclude patterns in any case and Unicode spelling; the size limit and its message; revocation, expiry and a
+  replaced root; NFD names; an access log without paths. Refusals carry a `code` (`GRANT_ENDED_CODES`,
+  `NOT_GRANTABLE_CODES` for the grant model's own codes).
+* `run_cases` accepts the contract `folders` next to `index`, `files` and `memory`.
+* Orkexa's own tests run the cases against a small grant store on `SafeRoot`
+  (`tests/conformance/folder_access.py`) on Linux, macOS and Windows, and check that the suite catches a store
+  that ignores exclusions, revocations or the data folder.
+
 ### Added: `orkexa.fs`, a path guard for granted folders (Nodestro N-10, 2026-11-20)
 
 * `SafeRoot` reads files below one folder and refuses everything that could lead outside it, on Linux, macOS and

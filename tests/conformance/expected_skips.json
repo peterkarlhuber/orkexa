@@ -1,5 +1,5 @@
 {
-  "comment": "MUP-ONA B1 (T-CONF-8): the conformance cases each CI job expects to be skipped, per target; a job may name another job whose expectations it shares. Skipped cases that are not listed, and listed cases that ran, fail the conformance tests. MUP-ONA B5: pg-a and pg-b (also as the restricted runtime role) run the PostgreSQL targets; nothing skips there.",
+  "comment": "MUP-ONA B1 (T-CONF-8): the conformance cases each CI job expects to be skipped, per target; a job may name another job whose expectations it shares. Skipped cases that are not listed, and listed cases that ran, fail the conformance tests. MUP-ONA B5: pg-a and pg-b (also as the restricted runtime role) run the PostgreSQL targets; nothing skips there. T-CONF-9: the folder grant cases (safe-root-folders) never skip.",
   "jobs": {
     "test": {
       "sqlite-index-fts": {
@@ -73,7 +73,8 @@
         "partition.memory_hostile_values": "EphemeralMemory lives in one instance: no partitions, no shared storage",
         "partition.memory_reads": "EphemeralMemory lives in one instance: no partitions, no shared storage",
         "partition.memory_updates_and_deletes": "EphemeralMemory lives in one instance: no partitions, no shared storage"
-      }
+      },
+      "safe-root-folders": {}
     },
     "lowest-versions": "test",
     "offline": "test",

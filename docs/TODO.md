@@ -109,8 +109,9 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
   `fstatat` and the open; an opted-in hard link may expose a file that lives elsewhere; the macOS memory budget
   is polled.
 - **Next step:** G-5 before productive activation (N-10 acceptance). Nodestro adopts it in N-10 (runtime `folders`, tools `list_folder`, `read_file`,
-  `search_files`) and moves nodestro-api's `output_folder.py` system-folder list onto `orkexa.fs.system_folders`
-  (N-11), and runs `orkexa.testing.pathguard` against its tools (N-63).
+  `search_files`, behind a switch that stays off) and moves nodestro-api's `output_folder.py` system-folder list
+  onto `orkexa.fs.system_folders`. The folder grant cases (`orkexa.testing.conformance.FOLDER_CASES`, N-63) run
+  against Orkexa's reference store on `SafeRoot` and, in nodestro-runtime's CI, through Nodestro's folder tools.
 
 ## Bugs and reliability
 

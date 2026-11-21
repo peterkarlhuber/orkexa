@@ -1,0 +1,64 @@
+"""The folder grant conformance suite (T-CONF-9, Nodestro N-63) against the reference implementation on
+SafeRoot, on every operating system the CI runs (the offline jobs run it on macOS and Windows)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from orkexa.testing.conformance import FOLDER_CASES, Case, Request, run_cases
+
+from .adapter import run_and_check
+from .factories import FACTORIES
+from .folder_access import SafeRootFolders
+
+
+# MUP-ONA T-CONF-9
+def test_the_safe_root_folders_conform(tmp_path: Path) -> None:
+    factory, expect = FACTORIES["safe-root-folders"]
+    report = run_and_check("safe-root-folders", factory, FOLDER_CASES, expect, tmp_path)
+    assert len(report.passed) == len(FOLDER_CASES)
+
+
+class _Leaky(SafeRootFolders):
+    """Ignores exclude patterns and revocations: the suite must catch both."""
+
+    def grant(self, path: str, **kwargs: object) -> str:  # type: ignore[override]
+        kwargs.pop("exclude", None)
+        return super().grant(path, **kwargs)  # type: ignore[arg-type]
+
+    def revoke(self, grant: str) -> None:
+        pass
+
+
+def test_the_suite_catches_a_leaky_implementation(tmp_path: Path) -> None:
+    report = run_cases(
+        lambda request: _Leaky(request.workdir / "data"), FOLDER_CASES, expect=(), workdir=tmp_path
+    )
+    assert {"folders.exclude_patterns", "folders.revoked"} <= set(report.failed)
+    assert "folders.list_read_search" in report.passed
+
+
+def test_a_backend_that_is_no_folder_access_is_reported(tmp_path: Path) -> None:
+    report = run_cases(lambda request: object(), FOLDER_CASES[:1], expect=(), workdir=tmp_path)
+    assert any("does not implement the contract of the folders cases" in error for error in report.errors)
+
+
+@pytest.mark.parametrize("case", FOLDER_CASES, ids=[case.name for case in FOLDER_CASES])
+def test_every_case_is_documented_and_marked(case: Case) -> None:
+    assert case.contract == "folders"
+    assert case.description
+    assert not case.needs
+
+
+def test_a_store_that_protects_nothing_fails(tmp_path: Path) -> None:
+    """A grant store that protects another folder than the data folder fails the data folder cases."""
+
+    def unprotected(request: Request) -> SafeRootFolders:
+        found = SafeRootFolders(request.workdir / "data")
+        found.data = request.workdir / "elsewhere"
+        return found
+
+    report = run_cases(unprotected, FOLDER_CASES, expect=(), workdir=tmp_path)
+    assert {"folders.data_folder_not_grantable", "folders.data_folder_inside_a_grant"} <= set(report.failed)
