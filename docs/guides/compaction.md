@@ -51,6 +51,10 @@ prompt. It gets at most a quarter of the budget; a longer answer is cut. When th
 Text that no person wrote (a web page, a tool or MCP result) reaches a prompt only inside an `<untrusted_data>`
 frame (`orkexa.core.framing.frame_untrusted`). Compaction keeps that promise:
 
+- Frames in a history are often written by a model, so they are read leniently and fail closed: any opening
+  tag `frame_untrusted` would escape (one line, CRLF, any quoting, extra spaces, any case, fullwidth brackets)
+  starts a frame that runs to the next closing tag, or to the end of the turn when there is none (an answer cut
+  off inside a frame). A frame without a `source` gets `UNKNOWN_SOURCE`; a stray closing tag is escaped.
 - The helper model never sees framed data. Each frame in the summarized turns becomes a placeholder (`[data 1]`) in
   its transcript, so instructions hidden in the data cannot steer the summary.
 - The summary keeps an excerpt of each frame (at most `EXCERPT_TOKENS` each, shorter when many frames share the

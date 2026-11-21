@@ -14,7 +14,8 @@ replaces) and its method. An earlier summary turn at the start is summarized aga
 turns, so its range carries over.
 
 **Untrusted data stays framed.** Text inside an ``<untrusted_data>`` frame
-(:func:`~orkexa.core.framing.frame_untrusted`) never reaches the helper model: the helper sees a placeholder
+(:func:`~orkexa.core.framing.frame_untrusted`, or anything a reader would take for one, also unclosed:
+:func:`split_untrusted`) never reaches the helper model: the helper sees a placeholder
 (``[data 1]``) instead, and the summary keeps an excerpt of each frame inside a new frame with the same
 ``source``. The helper's own text has every frame tag escaped, so it can neither open nor close a frame.
 Framed data is never turned into instructions.
@@ -30,8 +31,9 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 import re
 from typing import Literal
+import unicodedata
 
-from .framing import PREAMBLE, _escape_frame_tags, frame_untrusted
+from .framing import _OPEN, PREAMBLE, _escape_frame_tags, _names_the_frame, frame_untrusted
 
 #: Writes a summary of ``transcript`` in at most ``max_tokens`` tokens (e.g. one request to a small model with
 #: :data:`SUMMARY_INSTRUCTIONS` as its system prompt).
@@ -58,10 +60,14 @@ TRIM_NOTE_TOKENS = 40
 #: The most tokens of each untrusted frame a summary keeps.
 EXCERPT_TOKENS = 200
 
-_FRAME = re.compile(
-    rf'(?:{re.escape(PREAMBLE)}\n)?<untrusted_data source="([^"<>&\r\n]*)">\n(.*?)\n</untrusted_data>',
-    re.DOTALL,
-)
+#: The characters a model may read as ">" (the end of a tag).
+_END = re.compile("[>\uff1e\ufe65]")
+#: The ``source`` attribute of an opening tag, in any quoting (read from its NFKC form).
+_SOURCE = re.compile(r"""source\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
+#: The preamble of :func:`frame_untrusted` right before an opening tag (dropped with it).
+_PREAMBLE_END = re.compile(re.escape(PREAMBLE) + r"\s*$")
+#: The ``source`` of a frame whose opening tag names none.
+UNKNOWN_SOURCE = "unknown source"
 
 
 def estimate_tokens(text: str) -> int:
@@ -138,16 +144,80 @@ def _label(role: str) -> str:
     return {"user": "User", "assistant": "Assistant", "summary": "Summary"}.get(role, role.title())
 
 
+def _tag(text: str, at: int) -> tuple[str, int] | None:
+    """The frame tag whose "<" is at ``at``: ``("open" | "close", end)`` with ``end`` just after its ">"
+    (the end of the text when it has none), or ``None`` when the "<" starts no frame tag. Read as leniently
+    as :func:`~orkexa.core.framing.frame_untrusted` escapes: any case, compatibility forms, whitespace and
+    invisible characters inside the name."""
+    if not _names_the_frame(text, at + 1):
+        return None
+    kind = "open"
+    for char in text[at + 1 :]:
+        if char.isspace() or unicodedata.category(char) == "Cf":
+            continue
+        kind = "close" if unicodedata.normalize("NFKC", char) == "/" else "open"
+        break
+    found = _END.search(text, at + 1)
+    return kind, (found.end() if found is not None else len(text))
+
+
+def _source(tag: str) -> str:
+    found = _SOURCE.search(unicodedata.normalize("NFKC", tag))
+    label = next((group for group in found.groups() if group), "") if found is not None else ""
+    return re.sub(r"[\"<>&\r\n]", "", label).strip()[:200] or UNKNOWN_SOURCE
+
+
+def _strip_newline(body: str) -> str:
+    for start in ("\r\n", "\n"):
+        if body.startswith(start):
+            body = body[len(start) :]
+            break
+    for end in ("\r\n", "\n"):
+        if body.endswith(end):
+            body = body[: -len(end)]
+            break
+    return body
+
+
 def split_untrusted(text: str, *, start: int = 1) -> tuple[str, list[tuple[str, str]]]:
     """``text`` with each ``<untrusted_data>`` frame replaced by a placeholder ``[data N]`` (numbered from
-    ``start``), and the frames' ``(source, body)``; any other frame tag left in the text is escaped."""
+    ``start``), and the frames' ``(source, body)``.
+
+    Fails closed, since frames in a conversation's history may be written by a model and need not be
+    byte-exact copies of :func:`~orkexa.core.framing.frame_untrusted`: every opening tag it would escape (one
+    line or several, CRLF, any quoting, extra spaces, other spellings of the name) starts a frame that runs to
+    the next closing tag, or to the end of the text when there is none (an answer cut off inside a frame). The
+    preamble right before an opening tag goes with it; a frame without a ``source`` gets
+    :data:`UNKNOWN_SOURCE`. A closing tag without an opening one is escaped like any other frame tag left in
+    the text."""
     blocks: list[tuple[str, str]] = []
-
-    def placeholder(match: re.Match[str]) -> str:
-        blocks.append((match.group(1), match.group(2)))
-        return f"[data {start + len(blocks) - 1}]"
-
-    return _escape_frame_tags(_FRAME.sub(placeholder, text)), blocks
+    parts: list[str] = []
+    last = 0
+    position = 0
+    while True:
+        match = _OPEN.search(text, position)
+        if match is None:
+            break
+        found = _tag(text, match.start())
+        if found is None or found[0] == "close":
+            position = match.end()
+            continue
+        _kind, body_start = found
+        body_end, after = len(text), len(text)
+        search = body_start
+        while (close := _OPEN.search(text, search)) is not None:
+            tag = _tag(text, close.start())
+            if tag is not None and tag[0] == "close":
+                body_end, after = close.start(), tag[1]
+                break
+            search = close.end()
+        before = text[last : match.start()]
+        parts.append(_PREAMBLE_END.sub("", before))
+        blocks.append((_source(text[match.start() : body_start]), _strip_newline(text[body_start:body_end])))
+        parts.append(f"[data {start + len(blocks) - 1}]")
+        last = position = after
+    parts.append(text[last:])
+    return _escape_frame_tags("".join(parts)), blocks
 
 
 def _header(first: int | None, last: int | None) -> str:
@@ -322,6 +392,7 @@ __all__ = [
     "SUMMARY_SHARE",
     "TRIM_NOTE_TOKENS",
     "TURN_OVERHEAD",
+    "UNKNOWN_SOURCE",
     "AsyncSummarizer",
     "Compacted",
     "Method",

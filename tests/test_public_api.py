@@ -305,6 +305,7 @@ PUBLIC = {
         "TRIM_NOTE_TOKENS",
         "TURN_OVERHEAD",
         "Turn",
+        "UNKNOWN_SOURCE",
         "acompact",
         "compact",
         "context_budget",

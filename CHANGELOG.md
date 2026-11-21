@@ -18,6 +18,11 @@ listed here. The development version is `0.2.0.dev0`.
   (`split_untrusted`), the summary keeps an excerpt of each frame in a new frame with the original source (one
   per source, `Compacted.sources`), and every frame tag in the helper's text is escaped, so it can neither open
   nor close a frame. `orkexa.core.framing.PREAMBLE` is the sentence before every frame.
+* Frames that are not byte-exact copies of `frame_untrusted` (a model wrote them into the history) fail closed
+  (independent review of N-05, Medium): every opening tag a reader takes for the frame tag (one line, CRLF, any
+  quoting, extra spaces, any case, fullwidth brackets) starts a frame that runs to the next closing tag, or to the
+  end of the turn when it is unclosed; a frame without a source gets `UNKNOWN_SOURCE`, and a stray closing tag is
+  escaped. Before, such frames reached the helper as trusted text and their content sat unframed in the summary.
 * Guide: `docs/guides/compaction.md`; reference: `docs/reference/compaction.md`; tests: `tests/test_compaction.py`.
 
 ### Added: `orkexa.fs`, a path guard for granted folders (Nodestro N-10, 2026-11-20)
