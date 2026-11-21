@@ -129,7 +129,7 @@ def _member_line(member: Member) -> str:
 
 def _member_text(text: str, member: str) -> str:
     """A team member's result or error in the decision prompt: framed like any third-party text, because a
-    member may have read web pages, files or MCP results (Locria Phase 0R, L-4)."""
+    member may have read web pages, files or MCP results (security review 2026-11 (phase 0R), L-4)."""
     return frame_untrusted(text, f"team member {member}")
 
 

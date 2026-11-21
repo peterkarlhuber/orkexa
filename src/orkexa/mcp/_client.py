@@ -695,8 +695,9 @@ class MCPTool(Tool):
         try:
             result = self.client.call_tool(self.info.name, arguments, timeout=self.timeout)
         except MCPError as exc:
-            # The server's error text is third-party text like its results (Locria Phase 0R, L-3): framed
-            # when the server is untrusted, never handed to the model as if Orkexa had written it.
+            # The server's error text is third-party text like its results (security review 2026-11
+            # (phase 0R), L-3): framed when the server is untrusted, never handed to the model as if Orkexa
+            # had written it.
             message = str(exc)
             if self.untrusted:
                 source = f"mcp:{self.client.server.name or 'server'}/{self.info.name}"
