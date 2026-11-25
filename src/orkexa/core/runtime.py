@@ -153,6 +153,10 @@ class ToolCall:
     #: ``True`` when the call waited before (:class:`~orkexa.errors.ToolCallSuspended`) and the turn
     #: is resumed: the hook decides with the decision it waited for, it must not ask again.
     resumed: bool = False
+    #: Where the content this call returns comes from, as the tool declares it (``Tool(content_source=...)``,
+    #: :attr:`MemoryBackend.content_source <orkexa.MemoryBackend.content_source>`); ``None``: not declared
+    #: (also for an unknown tool). For hosts that track what enters the context; Orkexa does not act on it.
+    content_source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1302,7 +1306,15 @@ class AgentCore(Generic[OutputT]):
             input=deepcopy(part.arguments),
             agent=self.name,
             resumed=part.id in self._resuming,
+            content_source=self._content_source(part.name),
         )
+
+    def _content_source(self, name: str) -> str | None:
+        """What the tool ``name`` declares about its content (``None``: nothing, or no such tool)."""
+        if name == MEMORY_TOOL_NAME and self.memory is not None:
+            return self.memory.content_source
+        tool = self.tools.get(name)
+        return getattr(tool, "content_source", None) if tool is not None else None
 
     @staticmethod
     def _waiting(call: ToolCall, exc: ToolCallSuspended) -> _Waiting:

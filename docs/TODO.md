@@ -12,7 +12,7 @@
 | P0 Critical | 0 |
 | P1 High | 0 |
 | P2 Medium | 6 |
-| P3 Low | 12 |
+| P3 Low | 13 |
 | P4 Optional | 9 |
 
 **Release blockers:** None. Orkexa 0.2.0 is unreleased and no release is planned yet; Nodestro consumes it by
@@ -112,6 +112,18 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
   `search_files`, behind a switch that stays off) and moves nodestro-api's `output_folder.py` system-folder list
   onto `orkexa.fs.system_folders`. The folder grant cases (`orkexa.testing.conformance.FOLDER_CASES`, N-63) run
   against Orkexa's reference store on `SafeRoot` and, in nodestro-runtime's CI, through Nodestro's folder tools.
+
+### ORK-047 · Content sources of tools: a declaration, not a proof
+
+- **Priority:** P3 Low · **Status:** Open · **Refs:** `Tool(content_source=...)`, `ToolCall.content_source`,
+  `MemoryBackend.content_source`, `tests/test_content_source.py`, Nodestro plan N-08
+- **What:** A tool declares where the content it returns comes from (`folder`, `files`, `index`, `memory`), and the
+  agent reports it on every `ToolCall`, so a host can track what enters a model's context (Nodestro N-08 blocks
+  outbound calls once granted content is in a conversation). Orkexa does not act on it. The declaration is as good
+  as its author: an undeclared tool that returns granted content is not seen, and MCP tools never declare a source.
+  `EphemeralMemory` reports `memory` like every backend (it can start with files); a host whose memory holds only
+  the session's content sets `content_source = None` on the instance.
+- **Next step:** None in Orkexa until a second host needs more (for example a source per call instead of per tool).
 
 ## Bugs and reliability
 
@@ -362,6 +374,7 @@ retrieval logic; new retrieval work (for example an ANN index) is planned here, 
 |---|---|---|---|
 | ORK-045 | nodestro-runtime, nodestro-api | N-10 (`folders`, file tools), N-11 (folder browser), N-63 (conformance) | Nodestro builds folder grants on `orkexa.fs.SafeRoot`, reuses `system_folders()` for `output_folder.py` and runs `orkexa.testing.pathguard` against its tools; until then nothing calls `orkexa.fs` |
 | ORK-046 | nodestro-runtime | N-05 (context compaction of conversations) | The runtime fits a conversation's history into the answer model's context window with `orkexa.core.compaction` (trim by default, summarize per conversation) |
+| ORK-047 | nodestro-runtime | N-08 (egress protection by content provenance) | The runtime's folder, input file and knowledge tools declare their content source, and the engine marks a run and its conversation as holding granted content from `ToolCall.content_source` |
 | ORK-003 | nodestro-runtime | Local Docker Ollama URL (non-loopback) | A loopback default needs the runtime's opt-in first |
 | ORK-028 | nodestro-runtime | checkpoint storage (`tool_checkpoints`) | Runtime passes `checkpoint_key`; resume flow unchanged |
 | ORK-030 | nodestro-runtime, nodestro-desktop | RT-049, DSK-022 (managed Ollama on macOS/Windows) | The managed server lives here; runtime and desktop rerun their tests |

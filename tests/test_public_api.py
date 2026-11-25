@@ -144,6 +144,7 @@ PUBLIC = {
         "HYBRID_FUSIONS",
         "Hit",
         "HybridFusion",
+        "INDEX_CONTENT_SOURCE",
         "Index",
         "LEXICAL_WEIGHT",
         "MAX_QUERY_CHARS",
@@ -172,6 +173,7 @@ PUBLIC = {
         "word_weight",
     ],
     "orkexa.files": [
+        "FILES_CONTENT_SOURCE",
         "FILES_TOOL_NAME",
         "FileStore",
         "LocalFileStore",
