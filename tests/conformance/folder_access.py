@@ -14,9 +14,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import os
 from pathlib import Path
-import unicodedata
 
-from orkexa.fs import PDF_SUFFIXES, FsError, SafeRoot
+from orkexa.fs import PDF_SUFFIXES, FsError, SafeRoot, fold
 from orkexa.testing.conformance import DATA_FOLDER, Request
 
 
@@ -99,6 +98,7 @@ class SafeRootFolders:
             include=grant.include,
             exclude=grant.exclude,
             expect_identity=grant.identity,
+            on_open=self._opened(grant.path),
             **kwargs,  # type: ignore[arg-type]
         )
 
@@ -114,6 +114,15 @@ class SafeRootFolders:
             raise
         found.log.append((operation, "success"))
         return result
+
+    def _opened(self, path: str) -> Callable[[tuple[str, ...]], None]:
+        """Checks the denies against the names the file system stored for what is opened."""
+
+        def check(names: tuple[str, ...]) -> None:
+            if self._denied(os.path.join(path, *names)):
+                raise FsError("fs.denied", "A person denied this path")
+
+        return check
 
     def _allowed(self, root: SafeRoot) -> Callable[[str], bool]:
         return lambda relative: not self._denied(os.path.join(root.path, *relative.split("/")))
@@ -156,7 +165,7 @@ def _text(root: SafeRoot, path: str | bytes) -> str:
 def _parts(path: str) -> tuple[str, ...]:
     """The canonical components of an absolute path, compared without case (a deny fails closed)."""
     canonical = os.path.normpath(os.path.realpath(path))
-    return tuple(unicodedata.normalize("NFC", canonical).casefold().replace("\\", "/").split("/"))
+    return tuple(fold(part) for part in canonical.replace("\\", "/").split("/"))
 
 
 def _search(

@@ -298,6 +298,7 @@ PUBLIC = {
         "TextBudget",
         "allowed_folders",
         "display_name",
+        "fold",  # Nodestro N-10 re-review M2: products compare their own rules as the guard does
         "is_short_name",
         "root_problem",
         "split_relative",
