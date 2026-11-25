@@ -326,6 +326,7 @@ def walk(
         on_node(-1, root_info, ())
         info = root_info
         actual: list[str] = []
+        stored_names: list[str] = []
         for index, name in enumerate(parts):
             last = index == len(parts) - 1
             directory = not last or final == "dir"
@@ -345,8 +346,9 @@ def walk(
             if not _same(final_path, "\\".join([root, *actual])):
                 raise FsError("fs.outside_root", "The opened path is not below the root", path=shown)
             # The name NTFS stored (case, and what its upcase table equates, such as dotless i): the names
-            # on_node gets are the entry's own, not the spelling asked for.
-            actual[-1] = final_path.rsplit("\\", 1)[-1]
+            # on_node gets are the entry's own, not the spelling asked for. The path is still built from the
+            # names that were opened.
+            stored_names.append(final_path.rsplit("\\", 1)[-1])
             if info.dev != root_info.dev:
                 raise FsError("fs.cross_device", "The path crosses into another volume", path=shown)
             if not last and info.kind != "dir":
@@ -363,7 +365,7 @@ def walk(
                 again = _info(plain)
                 if (again.dev, again.ino) != (info.dev, info.ino):
                     raise FsError("fs.outside_root", "The file changed while it was opened", path=shown)
-            on_node(index, info, tuple(actual))
+            on_node(index, info, tuple(stored_names))
         if final == "file" and info.kind == "dir":
             raise FsError("fs.is_a_directory", "A file was expected, this is a folder", path=shown)
         if final == "dir" and info.kind != "dir":
