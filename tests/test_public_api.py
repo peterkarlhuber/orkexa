@@ -233,6 +233,7 @@ PUBLIC = {
         "Context",
         "DATA_FOLDER",  # Nodestro N-63: the folder grant cases
         "DEFAULT_PARTITION",
+        "DENIED_CODES",  # Nodestro N-10 review: denies in the folder grant cases
         "FILE_STORE_CASES",
         "FOLDER_CASES",
         "Factory",
@@ -241,6 +242,7 @@ PUBLIC = {
         "INDEX_CASES",
         "KeywordEmbeddings",
         "MEMORY_CASES",
+        "NOT_COVERED_CODES",
         "NOT_GRANTABLE_CODES",
         "Outcome",
         "PARTITION_FILE_STORE_CASES",

@@ -59,7 +59,15 @@ from ._core import (
 )
 from ._models import KeywordEmbeddings
 from .files import FILE_STORE_CASES
-from .folders import DATA_FOLDER, FOLDER_CASES, GRANT_ENDED_CODES, NOT_GRANTABLE_CODES, FolderAccess
+from .folders import (
+    DATA_FOLDER,
+    DENIED_CODES,
+    FOLDER_CASES,
+    GRANT_ENDED_CODES,
+    NOT_COVERED_CODES,
+    NOT_GRANTABLE_CODES,
+    FolderAccess,
+)
 from .index import INDEX_CASES, VECTOR_CASES
 from .memory import MEMORY_CASES
 from .partition import PARTITION_FILE_STORE_CASES, PARTITION_INDEX_CASES, PARTITION_MEMORY_CASES
@@ -72,11 +80,13 @@ __all__ = [
     "CAPABILITIES",
     "DATA_FOLDER",
     "DEFAULT_PARTITION",
+    "DENIED_CODES",
     "FILE_STORE_CASES",
     "FOLDER_CASES",
     "GRANT_ENDED_CODES",
     "INDEX_CASES",
     "MEMORY_CASES",
+    "NOT_COVERED_CODES",
     "NOT_GRANTABLE_CODES",
     "PARTITION_FILE_STORE_CASES",
     "PARTITION_INDEX_CASES",
