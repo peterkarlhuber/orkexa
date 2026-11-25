@@ -53,7 +53,9 @@ class SafeRootFolders:
         self.denies.append(_parts(path))
 
     def _denied(self, target: str) -> bool:
-        parts = _parts(target)
+        # ``target`` lies below a canonical root (the grant's path and names below it): no file-system
+        # access here, which would slow every open and disturb the swap race.
+        parts = _folded(target)
         return any(parts[: len(deny)] == deny for deny in self.denies)
 
     def grant(
@@ -163,9 +165,12 @@ def _text(root: SafeRoot, path: str | bytes) -> str:
 
 
 def _parts(path: str) -> tuple[str, ...]:
-    """The canonical components of an absolute path, compared without case (a deny fails closed)."""
-    canonical = os.path.normpath(os.path.realpath(path))
-    return tuple(fold(part) for part in canonical.replace("\\", "/").split("/"))
+    """The canonical components of an absolute path a person denied, compared as the guard compares names."""
+    return _folded(os.path.realpath(path))
+
+
+def _folded(path: str) -> tuple[str, ...]:
+    return tuple(fold(part) for part in os.path.normpath(path).replace("\\", "/").split("/"))
 
 
 def _search(
