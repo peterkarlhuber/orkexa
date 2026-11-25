@@ -3,15 +3,18 @@
 A product grants a folder to its agents, and its tools then list, read and search the files below it.
 These cases check such an implementation from the outside, through the operations of
 :class:`FolderAccess`: what can be granted at all, the path guard (:mod:`orkexa.fs` and the attack catalog
-of :mod:`orkexa.testing.pathguard`), include and exclude patterns, size limits, revocation and expiry, and
-the access log. The reference implementation is :class:`orkexa.fs.SafeRoot` under a small grant store
+of :mod:`orkexa.testing.pathguard`), include and exclude patterns, size limits, revocation and expiry, a
+person's deny on a file or subfolder (in any spelling), the grant's scope (agents) and mode, and the access
+log. The reference implementation is :class:`orkexa.fs.SafeRoot` under a small grant store
 (Orkexa's own tests); Nodestro runs the same cases through its folder tools.
 
 The factory opens a :class:`FolderAccess` for a :class:`~orkexa.testing.conformance.Request`. It must
 treat ``request.workdir / DATA_FOLDER`` as the product's own data folder (it may create it): that folder
 can never be granted and nothing inside it can be read. Refusals raise an exception with a ``code``
 attribute: the :mod:`orkexa.fs` code (an :class:`~orkexa.fs.FsError` has it), or for a grant that ended
-one of :data:`GRANT_ENDED_CODES`, for a folder that cannot be granted one of :data:`NOT_GRANTABLE_CODES`.
+one of :data:`GRANT_ENDED_CODES`, for a folder that cannot be granted one of
+:data:`NOT_GRANTABLE_CODES`, for a denied file or folder one of :data:`DENIED_CODES`, for a caller the grant
+does not cover one of :data:`NOT_COVERED_CODES`.
 """
 
 from __future__ import annotations
@@ -31,8 +34,10 @@ from ._core import Case, Context, expect, expect_equal, expect_error
 
 __all__ = [
     "DATA_FOLDER",
+    "DENIED_CODES",
     "FOLDER_CASES",
     "GRANT_ENDED_CODES",
+    "NOT_COVERED_CODES",
     "NOT_GRANTABLE_CODES",
     "FolderAccess",
 ]
@@ -47,6 +52,10 @@ GRANT_ENDED_CODES = frozenset({"fs.revoked", "access.missing_grant", "access.den
 NOT_GRANTABLE_CODES = frozenset(
     {"fs.protected_root", "fs.network_path", "fs.invalid_path", "access.safety_limit", "folder.not_grantable"}
 )
+#: Codes of a file or folder a person denied (:meth:`FolderAccess.deny`).
+DENIED_CODES = frozenset({"access.denied", "fs.denied"})
+#: Codes of a call by an agent or in a mode the grant does not cover (its scope and mode).
+NOT_COVERED_CODES = frozenset({"access.missing_grant", "access.denied", "fs.not_granted"})
 
 
 @runtime_checkable
@@ -60,6 +69,14 @@ class FolderAccess(Protocol):
     grant at once. ``accesses`` is the access log of a grant: one ``(operation, outcome)`` per call, with
     ``operation`` one of ``list``, ``read``, ``search`` and ``outcome`` one of ``success``, ``denied``,
     ``failure``. The log never holds a path or a file name.
+
+    ``agents`` limits a grant to these agents (empty: every agent); ``unattended=True`` lets it be used in
+    runs nobody watches (schedules, batches), which a grant does not allow otherwise. ``as_caller`` returns
+    the same grants as one agent sees them, in a supervised or an unattended run; the instance itself is a
+    supervised caller that names no agent. ``deny`` is a person's block on the absolute path of a file or
+    folder: from the next call on, no grant reads it (or anything below it), lists it or finds it, however
+    the path is spelled (a trailing separator, repeated separators, ``..``, another case: a deny compares
+    without case and fails closed).
     """
 
     def grant(
@@ -70,9 +87,15 @@ class FolderAccess(Protocol):
         exclude: Sequence[str] = (),
         max_file_bytes: int | None = None,
         expires_at: datetime | None = None,
+        agents: Sequence[str] = (),
+        unattended: bool = False,
     ) -> str: ...
 
     def revoke(self, grant: str) -> None: ...
+
+    def deny(self, path: str) -> None: ...
+
+    def as_caller(self, agent: str, *, unattended: bool = False) -> FolderAccess: ...
 
     def list(self, grant: str, path: str = "") -> builtins.list[str]: ...
 
@@ -325,6 +348,94 @@ def access_log(context: Context) -> None:
     expect_equal(access.accesses(other), [], "the log of another grant")
 
 
+def _denied_tree(context: Context, name: str = "granted") -> Path:
+    root = _tree(context, name)
+    (root / "private").mkdir()
+    (root / "private" / "pay.txt").write_text("salary of Ada\n", encoding="utf-8", newline="\n")
+    (root / "notes" / "secret.txt").write_text("salary of Bob\n", encoding="utf-8", newline="\n")
+    return root
+
+
+def _expect_denied(access: FolderAccess, grant: str, what: str) -> None:
+    """``private/`` and ``notes/secret.txt`` are denied: never listed, read or found; the rest still is."""
+    expect_equal(sorted(access.list(grant)), ["notes", "readme.md"], f"{what}: the listing")
+    expect_equal(
+        sorted(access.list(grant, "notes")), ["notes/plan.txt", "notes/todo.md"], f"{what}: a subfolder"
+    )
+    expect_equal(access.search(grant, "salary"), [], f"{what}: a search for the text of denied files")
+    expect_equal(access.search(grant, "secret"), [], f"{what}: a search for the name of a denied file")
+    expect_equal(access.search(grant, "pay"), [], f"{what}: a search for a name in a denied folder")
+    for path in ("private/pay.txt", "notes/secret.txt"):
+        _refused(partial(access.read, grant, path), f"{what}: reading {path}", DENIED_CODES)
+    # Other spellings of the request: refused as denied, as not found where names compare with case, or by the
+    # name rules.
+    spelled = DENIED_CODES | {"fs.not_found", "fs.invalid_path", "fs.parent_reference"}
+    for path in ("PRIVATE/pay.txt", "private//pay.txt", "./private/pay.txt", "notes/../private/pay.txt"):
+        _refused(partial(access.read, grant, path), f"{what}: reading {path!r}", spelled)
+    _refused(lambda: access.list(grant, "private"), f"{what}: listing the denied folder", DENIED_CODES)
+    expect_equal(
+        access.read(grant, "notes/plan.txt"), "The budget is 42 units\n", f"{what}: a file not denied"
+    )
+
+
+def denies(context: Context) -> None:
+    """A person's deny on one exact file and on a subfolder holds in every operation, also when the deny comes
+    after the grant (Nodestro N-10 review H1: a deny on a file was left out of listings and searches)."""
+    access = context.make()
+    root = _denied_tree(context)
+    grant = access.grant(str(root))
+    expect_equal(
+        sorted(access.search(grant, "salary")), ["notes/secret.txt", "private/pay.txt"], "before the deny"
+    )
+    access.deny(str(root / "notes" / "secret.txt"))
+    access.deny(str(root / "private"))
+    _expect_denied(access, grant, "after the deny")
+    other = access.as_caller("wf/b", unattended=False)
+    _expect_denied(other, grant, "for another caller")
+
+
+def deny_spellings(context: Context) -> None:
+    """A deny holds whatever spelling of the path the person used: a trailing separator, a repeated separator,
+    ``..`` or another case."""
+    spellings: tuple[Callable[[Path, str], str], ...] = (
+        lambda root, name: str(root / name) + os.sep,
+        lambda root, name: f"{root}{os.sep}{os.sep}{name}",
+        lambda root, name: str(root / "notes" / ".." / name),
+        lambda root, name: str(root / name.upper()),
+    )
+    access = context.make()
+    for index, spell in enumerate(spellings):  # each on a folder of its own
+        root = _denied_tree(context, f"spelling-{index}")
+        grant = access.grant(str(root))
+        access.deny(spell(root, "private"))
+        access.deny(spell(root, f"notes{os.sep}secret.txt"))
+        _expect_denied(access, grant, f"deny spelled as {spell(root, 'private')!r}")
+
+
+def scope_and_mode(context: Context) -> None:
+    """A grant for some agents opens nothing for another agent, and a grant for supervised runs opens nothing
+    in a run nobody watches; a grant for unattended runs does."""
+    access = context.make()
+    root = _tree(context)
+    grant = access.grant(str(root), agents=["wf/a"])
+    own = access.as_caller("wf/a")
+    expect_equal(own.read(grant, "readme.md"), "Project overview\n", "the agent of the grant")
+    expect_equal(own.search(grant, "budget"), ["notes/plan.txt"], "a search by the agent of the grant")
+    other = access.as_caller("wf/b")
+    _refused(lambda: other.read(grant, "readme.md"), "reading as another agent", NOT_COVERED_CODES)
+    _refused(lambda: other.list(grant), "listing as another agent", NOT_COVERED_CODES)
+    _refused(lambda: other.search(grant, "budget"), "searching as another agent", NOT_COVERED_CODES)
+    unattended = access.as_caller("wf/a", unattended=True)
+    _refused(lambda: unattended.read(grant, "readme.md"), "reading in an unattended run", NOT_COVERED_CODES)
+    _refused(lambda: unattended.search(grant, "budget"), "searching in an unattended run", NOT_COVERED_CODES)
+    background = access.grant(str(_tree(context, "background")), unattended=True)
+    expect_equal(
+        access.as_caller("wf/b", unattended=True).read(background, "readme.md"),
+        "Project overview\n",
+        "a grant for unattended runs",
+    )
+
+
 def _case(name: str, run: Callable[[Context], None], *, security: bool = False) -> Case:
     return Case(name, frozenset(), run, "folders", security)
 
@@ -344,5 +455,8 @@ FOLDER_CASES: tuple[Case, ...] = (
     _case("folders.root_replaced", root_replaced, security=True),
     _case("folders.unicode_names", unicode_names),
     _case("folders.access_log", access_log, security=True),
+    _case("folders.denies", denies, security=True),
+    _case("folders.deny_spellings", deny_spellings, security=True),
+    _case("folders.scope_and_mode", scope_and_mode, security=True),
 )
 """T-CONF-9: folder grants (:class:`FolderAccess`)."""

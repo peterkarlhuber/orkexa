@@ -140,12 +140,14 @@ on the case's storage; `expect`, `expect_equal`, `expect_error` and `expect_code
 
 `FOLDER_CASES` (Nodestro N-63) check a product's read-only access to granted folders from the outside: what can
 be granted, the path guard and its [attack catalog](#the-path-guard-attack-catalog), patterns, limits, the end of
-a grant and the access log. The factory opens an object with the methods of `FolderAccess`:
+a grant, a person's denies, the grant's scope and mode, and the access log. The factory opens an object with the methods of `FolderAccess`:
 
 | Method | Does |
 |---|---|
-| `grant(path, *, include=(), exclude=(), max_file_bytes=None, expires_at=None)` | grants an absolute folder, returns the grant's id |
+| `grant(path, *, include=(), exclude=(), max_file_bytes=None, expires_at=None, agents=(), unattended=False)` | grants an absolute folder, returns the grant's id; `agents` limits it to these agents (empty: every agent), `unattended=True` also opens it in runs nobody watches |
 | `revoke(grant)` | ends a grant at once |
+| `deny(path)` | a person blocks an absolute file or folder path for every grant, in any spelling (compared canonical and without case) |
+| `as_caller(agent, *, unattended=False)` | the same grants as one agent sees them (the object itself is a supervised caller without an agent) |
 | `list(grant, path="")` | the relative paths of a folder's entries |
 | `read(grant, path)` | the text of a file |
 | `search(grant, text)` | the relative paths of the files whose name or text contains `text` (any case) |
@@ -153,7 +155,8 @@ a grant and the access log. The factory opens an object with the methods of `Fol
 
 The factory treats `request.workdir / DATA_FOLDER` as the product's own data folder. A refusal raises an
 exception with a `code`: the `orkexa.fs` code, for a grant that ended one of `GRANT_ENDED_CODES`, for a folder
-that cannot be granted one of `NOT_GRANTABLE_CODES`.
+that cannot be granted one of `NOT_GRANTABLE_CODES`, for a denied file or folder one of `DENIED_CODES`, for a
+caller the grant does not cover one of `NOT_COVERED_CODES`.
 
 | Case | Checks |
 |---|---|
@@ -170,6 +173,9 @@ that cannot be granted one of `NOT_GRANTABLE_CODES`.
 | `folders.root_replaced` | a granted folder replaced by another one is refused |
 | `folders.unicode_names` | a name stored decomposed (NFD) is read with its composed name |
 | `folders.access_log` | every call is logged with its outcome; the log holds no path or file name |
+| `folders.denies` | a deny on one exact file and on a subfolder holds in listings, reads (also in other request spellings) and searches by name and text, for every caller |
+| `folders.deny_spellings` | a deny spelled with a trailing separator, a repeated separator, `..` or another case holds the same |
+| `folders.scope_and_mode` | a grant for some agents opens nothing for another; a supervised grant opens nothing in an unattended run, an unattended one does |
 
 Orkexa runs them against a small grant store on `SafeRoot` (`tests/conformance/folder_access.py`) on Linux,
 macOS and Windows; nodestro-runtime runs them through its folder tools.

@@ -18,7 +18,7 @@ listed here. The development version is `0.2.0.dev0`.
 
 ### Added: conformance cases for folder grants (Nodestro N-63, 2026-11-21)
 
-* `orkexa.testing.conformance.FOLDER_CASES` (T-CONF-9): 14 cases that check a product's read-only access to
+* `orkexa.testing.conformance.FOLDER_CASES` (T-CONF-9): 17 cases that check a product's read-only access to
   granted folders through the methods of the new protocol `FolderAccess` (`grant`, `revoke`, `list`, `read`,
   `search`, `accesses`): the product's data folder (`DATA_FOLDER`), file-system roots, the home folder and the
   system folders cannot be granted; the attack catalog of `orkexa.testing.pathguard` and its swap race; include
@@ -29,6 +29,12 @@ listed here. The development version is `0.2.0.dev0`.
 * Orkexa's own tests run the cases against a small grant store on `SafeRoot`
   (`tests/conformance/folder_access.py`) on Linux, macOS and Windows, and check that the suite catches a store
   that ignores exclusions, revocations or the data folder.
+* Three more cases (Nodestro N-10 review): `folders.denies` (a deny on an exact file and on a subfolder holds
+  in `list`, `read` and `search`), `folders.deny_spellings` (trailing separator, `//`, `..`, case) and
+  `folders.scope_and_mode` (agents and unattended runs). `FolderAccess` gains `deny(path)`,
+  `as_caller(agent, unattended=...)` and the grant parameters `agents` and `unattended`; new code sets
+  `DENIED_CODES` and `NOT_COVERED_CODES`. The suite's own tests check that it catches a store that checks a deny
+  only on reads, compares a deny as spelled, or ignores agents and mode.
 * `orkexa.fs.allowed_folders` is public: the folders inside a system folder that may still hold a root (temporary
   folders, removable media), next to `system_folders`, so a product checks other folders by the same lists.
 ### Added: `orkexa.core.compaction`, context compaction for long conversations (Nodestro N-05, 2026-11-21)
