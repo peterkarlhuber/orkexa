@@ -14,7 +14,7 @@ listed here. The development version is `0.2.0.dev0`.
   `index` (`INDEX_CONTENT_SOURCE`), the memory tool the backend's `MemoryBackend.content_source` (`memory`; an
   instance may set `None`).
 * Orkexa does not act on it; Nodestro uses it to track granted content in a conversation (N-08). See
-  [Tools and content](docs/reference/tools.md) and TODO ORK-047.
+  `docs/reference/tools.md` (Content sources) and TODO ORK-047.
 
 ### Added: conformance cases for folder grants (Nodestro N-63, 2026-11-21)
 
