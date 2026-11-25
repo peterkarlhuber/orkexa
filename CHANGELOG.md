@@ -28,7 +28,8 @@ listed here. The development version is `0.2.0.dev0`.
   system stored for the components opened so far, so a product checks its own rules (a person's deny) against
   what is really opened, not the spelling asked for (case, dotless i, ignorable characters on a case-insensitive
   file system); it refuses by raising. On POSIX the walk now reports the stored name where the file system
-  answers with one (macOS, Linux casefold folders). New case `folders.deny_request_spellings`: a denied folder is
+  answers with one (macOS, Linux casefold folders), and on Windows the name NTFS stored (from the final path of
+  the open handle). New case `folders.deny_request_spellings`: a denied folder is
   never read or listed through such a spelling; the reference store checks denies with `fold()` and `on_open`.
 * `orkexa.fs.allowed_folders` is public: the folders inside a system folder that may still hold a root (temporary
   folders, removable media), next to `system_folders`, so a product checks other folders by the same lists.

@@ -341,8 +341,12 @@ def walk(
             if problem is not None:
                 raise FsError(problem, "A cloud placeholder (files on demand) is on the way", path=shown)
             info = _info(handle)
-            if not _same(_final(handle), "\\".join([root, *actual])):
+            final_path = _final(handle)
+            if not _same(final_path, "\\".join([root, *actual])):
                 raise FsError("fs.outside_root", "The opened path is not below the root", path=shown)
+            # The name NTFS stored (case, and what its upcase table equates, such as dotless i): the names
+            # on_node gets are the entry's own, not the spelling asked for.
+            actual[-1] = final_path.rsplit("\\", 1)[-1]
             if info.dev != root_info.dev:
                 raise FsError("fs.cross_device", "The path crosses into another volume", path=shown)
             if not last and info.kind != "dir":
