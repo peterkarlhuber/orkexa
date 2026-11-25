@@ -690,8 +690,8 @@ def test_on_open_sees_the_stored_names_and_can_refuse(tmp_path: Path) -> None:
     raising."""
     base = tmp_path / "base"
     (base / "Private").mkdir(parents=True)
-    (base / "Private" / "pay.txt").write_text("salary\n", encoding="utf-8")
-    (base / "open.txt").write_text("fine\n", encoding="utf-8")
+    (base / "Private" / "pay.txt").write_text("salary\n", encoding="utf-8", newline="\n")
+    (base / "open.txt").write_text("fine\n", encoding="utf-8", newline="\n")
     seen: list[tuple[str, ...]] = []
 
     def on_open(names: tuple[str, ...]) -> None:
