@@ -175,6 +175,7 @@ caller the grant does not cover one of `NOT_COVERED_CODES`.
 | `folders.access_log` | every call is logged with its outcome; the log holds no path or file name |
 | `folders.denies` | a deny on one exact file and on a subfolder holds in listings, reads (also in other request spellings) and searches by name and text, for every caller |
 | `folders.deny_spellings` | a deny spelled with a trailing separator, a repeated separator, `..` or another case holds the same |
+| `folders.deny_request_spellings` | a denied folder is never read or listed through another spelling the file system may open as the same folder: case, dotless i, a zero-width space, a soft hyphen, NFD |
 | `folders.scope_and_mode` | a grant for some agents opens nothing for another; a supervised grant opens nothing in an unattended run, an unattended one does |
 
 Orkexa runs them against a small grant store on `SafeRoot` (`tests/conformance/folder_access.py`) on Linux,

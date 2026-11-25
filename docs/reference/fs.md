@@ -32,3 +32,5 @@ text = root.extract_text("specs/offer.pdf").text
 ::: orkexa.fs.allowed_folders
 
 ::: orkexa.fs.split_relative
+
+::: orkexa.fs.fold

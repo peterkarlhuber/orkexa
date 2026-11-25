@@ -7,7 +7,7 @@ listed here. The development version is `0.2.0.dev0`.
 
 ### Added: conformance cases for folder grants (Nodestro N-63, 2026-11-21)
 
-* `orkexa.testing.conformance.FOLDER_CASES` (T-CONF-9): 17 cases that check a product's read-only access to
+* `orkexa.testing.conformance.FOLDER_CASES` (T-CONF-9): 18 cases that check a product's read-only access to
   granted folders through the methods of the new protocol `FolderAccess` (`grant`, `revoke`, `list`, `read`,
   `search`, `accesses`): the product's data folder (`DATA_FOLDER`), file-system roots, the home folder and the
   system folders cannot be granted; the attack catalog of `orkexa.testing.pathguard` and its swap race; include
@@ -24,6 +24,12 @@ listed here. The development version is `0.2.0.dev0`.
   `as_caller(agent, unattended=...)` and the grant parameters `agents` and `unattended`; new code sets
   `DENIED_CODES` and `NOT_COVERED_CODES`. The suite's own tests check that it catches a store that checks a deny
   only on reads, compares a deny as spelled, or ignores agents and mode.
+* `SafeRoot(on_open=...)` and the public `orkexa.fs.fold` (Nodestro N-10 re-review M2). `on_open` is called while a path is opened with the names the file
+  system stored for the components opened so far, so a product checks its own rules (a person's deny) against
+  what is really opened, not the spelling asked for (case, dotless i, ignorable characters on a case-insensitive
+  file system); it refuses by raising. On POSIX the walk now reports the stored name where the file system
+  answers with one (macOS, Linux casefold folders). New case `folders.deny_request_spellings`: a denied folder is
+  never read or listed through such a spelling; the reference store checks denies with `fold()` and `on_open`.
 * `orkexa.fs.allowed_folders` is public: the folders inside a system folder that may still hold a root (temporary
   folders, removable media), next to `system_folders`, so a product checks other folders by the same lists.
 ### Added: `orkexa.core.compaction`, context compaction for long conversations (Nodestro N-05, 2026-11-21)

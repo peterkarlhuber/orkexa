@@ -412,6 +412,41 @@ def deny_spellings(context: Context) -> None:
         _expect_denied(access, grant, f"deny spelled as {spell(root, 'private')!r}")
 
 
+#: Other spellings of a name that a case-insensitive file system may open as the same entry: another case,
+#: dotless i (NTFS and exFAT equate it with I), a zero-width space and a soft hyphen (ignored by some file
+#: systems), and the decomposed form (NFD).
+_ALTERNATES: tuple[Callable[[str], str], ...] = (
+    str.upper,
+    lambda name: name.replace("i", chr(0x131)),
+    lambda name: name[:3] + chr(0x200B) + name[3:],
+    lambda name: name[:3] + chr(0xAD) + name[3:],
+    lambda name: unicodedata.normalize("NFD", name),
+)
+
+
+def deny_request_spellings(context: Context) -> None:
+    """A denied folder is never read or listed through another spelling of its name that the file system
+    may open as the same folder: case, dotless i, invisible characters, NFD (Nodestro N-10 re-review M2). A
+    refusal by the name rules or as not found is fine; content never comes back."""
+    access = context.make()
+    root = _tree(context)
+    denied = ["private", unicodedata.normalize("NFC", "privé")]
+    for name in denied:
+        (root / name).mkdir()
+        (root / name / "pay.txt").write_text("salary of Ada\n", encoding="utf-8", newline="\n")
+    grant = access.grant(str(root))
+    for name in denied:
+        access.deny(str(root / name))
+    refused = DENIED_CODES | {"fs.not_found", "fs.invalid_path", "fs.ambiguous_name"}
+    for name in denied:
+        for spell in _ALTERNATES:
+            shown = spell(name)
+            _refused(partial(access.read, grant, f"{shown}/pay.txt"), f"reading {shown!r}/pay.txt", refused)
+            _refused(partial(access.list, grant, shown), f"listing {shown!r}", refused)
+    expect_equal(sorted(access.list(grant)), ["notes", "readme.md"], "the listing without the denied folders")
+    expect_equal(access.search(grant, "salary"), [], "a search for the text in the denied folders")
+
+
 def scope_and_mode(context: Context) -> None:
     """A grant for some agents opens nothing for another agent, and a grant for supervised runs opens nothing
     in a run nobody watches; a grant for unattended runs does."""
@@ -457,6 +492,7 @@ FOLDER_CASES: tuple[Case, ...] = (
     _case("folders.access_log", access_log, security=True),
     _case("folders.denies", denies, security=True),
     _case("folders.deny_spellings", deny_spellings, security=True),
+    _case("folders.deny_request_spellings", deny_request_spellings, security=True),
     _case("folders.scope_and_mode", scope_and_mode, security=True),
 )
 """T-CONF-9: folder grants (:class:`FolderAccess`)."""

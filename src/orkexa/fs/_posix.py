@@ -553,7 +553,8 @@ def walk(
                     )
             finally:
                 os.close(parent)
-            actual.append(stored)
+            # The name the file system stored where it may differ from the one asked for (on_node's names).
+            actual.append(answered or stored)
             on_node(index, info, tuple(actual))
         if final == "file" and info.kind == "dir":
             raise FsError("fs.is_a_directory", "A file was expected, this is a folder", path=shown)

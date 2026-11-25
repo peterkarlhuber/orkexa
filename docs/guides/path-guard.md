@@ -30,6 +30,12 @@ Later, `SafeRoot(path, expect_identity=grant_identity)` refuses a folder that wa
 chunk, a listing at its next entry and an extraction before it returns its text. `repr(root)` does not show
 the path (it names a person's folders); `root.path` does.
 
+A product with its own rules on paths below the root (a person's deny on one subfolder) passes
+`on_open=check`. While a path is opened, `check(names)` gets the names the file system stored for the components
+opened so far (`()` for the root) and raises to refuse. On a case-insensitive file system a request may open an
+entry through another spelling (case, dotless i, ignorable characters), so compare the rule with these names,
+not with the path asked for (and compare with `fold()`, which equates what such file systems may equate).
+
 ## How a path is checked
 
 1. **Names first, the same on every system.** A path is relative, `/`-separated and normalized to NFC. Refused
