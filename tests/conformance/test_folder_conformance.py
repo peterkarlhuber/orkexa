@@ -86,7 +86,10 @@ def test_the_suite_catches_denies_scopes_and_modes_that_do_not_hold(tmp_path: Pa
         return set(report.failed)
 
     assert {"folders.denies", "folders.deny_spellings"} <= run(_DenyOnRead, "on-read")
-    assert run(_Literal, "literal") == {"folders.deny_spellings"}
+    # On Windows (8.3 names) and macOS (/var is /private/var) the temporary folder's spelling differs from
+    # its canonical path, so a literal store fails folders.denies there as well.
+    literal = run(_Literal, "literal")
+    assert "folders.deny_spellings" in literal and literal <= {"folders.denies", "folders.deny_spellings"}
     assert run(_Everyone, "everyone") == {"folders.scope_and_mode"}
 
 
