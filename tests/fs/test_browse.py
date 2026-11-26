@@ -265,5 +265,27 @@ def test_a_folder_swapped_after_the_check_is_not_listed(tree: Path, monkeypatch:
     assert _code(lambda: browse_folder(tree)) == "fs.root_changed"
 
 
+def test_a_hidden_folder_this_user_cannot_open_is_reported_as_not_shown(
+    tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another user's /root cannot even be opened; it is still ``fs.not_browsable``, as a root would be
+    ``fs.protected_root``. A folder the browser would show stays ``fs.permission``."""
+    system = next((folder for folder in system_folders() if Path(folder).is_dir()), None)
+    if system is None:
+        pytest.skip("no system folder exists here")
+    real = fs._backend.canonical
+
+    closed = {fs.fold(os.path.realpath(system)), fs.fold(str(tree.resolve()))}
+
+    def denied(path: str) -> tuple[str, object]:
+        if fs.fold(os.path.realpath(path)) in closed:
+            raise FsError("fs.permission", "The root folder cannot be opened (Permission denied)")
+        return real(path)
+
+    monkeypatch.setattr(fs._backend, "canonical", denied)
+    assert _code(lambda: browse_folder(system, home=tree)) == "fs.not_browsable"
+    assert _code(lambda: browse_folder(tree, home=tree)) == "fs.permission"
+
+
 def test_the_error_code_is_documented() -> None:
     assert "fs.not_browsable" in fs.FS_ERROR_CODES

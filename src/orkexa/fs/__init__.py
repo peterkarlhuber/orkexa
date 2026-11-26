@@ -978,8 +978,17 @@ def browse_folder(
     if max_folders < 1 or max_entries < 1 or max_seconds <= 0:
         raise ValueError("max_folders, max_entries and max_seconds must be positive")
     text = root_syntax(os.fspath(path))
-    canonical, info = _backend.canonical(text)
     browser = _Browser(protected=protected, home=home, blocked=blocked)
+    try:
+        canonical, info = _backend.canonical(text)
+    except FsError as error:
+        # A folder this user may not open (another user's /root) is still reported as not shown.
+        if error.code == "fs.permission":
+            real = os.path.realpath(text)
+            problem = browser.problem(real, browser.chain(real, None), _link_spellings(text))
+            if problem is not None:
+                raise FsError("fs.not_browsable", problem) from None
+        raise
     ids = browser.chain(canonical, info)
     walked = browser.walked(text, ids[0])
     if walked is None:

@@ -10,7 +10,8 @@ listed here. The development version is `0.2.0.dev0`.
 * `orkexa.fs.browse_folder(path, protected=..., home=...)` answers the sub-folders of an absolute folder for a
   folder picker: `FolderListing` with `Folder(name, path, link)` entries, never files. System folders, other
   users' home folders, blocked and protected folders are neither listed nor opened (`fs.not_browsable`, a new
-  code); links are shown only when their target passes the same checks. `browse_problem` names the reason.
+  code, also for such a folder this user cannot open); links are shown only when their target passes the same
+  checks. `browse_problem` names the reason.
   See the path guard guide, section "The folder browser".
 
 ### Fixed: the swap race no longer starves the reader on Windows (W3-S, 2026-11-26)
