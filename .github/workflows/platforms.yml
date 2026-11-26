@@ -76,6 +76,28 @@ jobs:
           name: junit-offline-${{ matrix.os }}
           path: junit-offline.xml
 
+  swap-race-loop:
+    # TEMPORARY (W3-S, removed before handover): the conformance swap race repeated on Windows.
+    name: swap race loop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: pip install --prefer-binary -r requirements/tabrion.txt -e .
+      - run: python scripts/swap_race_loop.py 200
+
   docker:
     # ORK-006/019/020/021: DockerSandbox against real daemons. Each job builds docker/sandbox.Dockerfile, runs the
     # preflight and the self-test (python -m orkexa.dynamic.docker --self-test) and the real-container tests,
