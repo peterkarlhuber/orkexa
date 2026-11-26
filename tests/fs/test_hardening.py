@@ -454,3 +454,22 @@ def test_l7_swap_race_reports_a_race_that_did_not_run(layout: pathguard.Layout) 
     findings = swap_race(root.read_bytes, layout, iterations=50, min_swaps=10**9, timeout=0.5)
     assert [finding.problem for finding in findings] == [findings[0].problem]
     assert "swaps happened" in findings[0].problem
+
+
+@pytest.mark.parametrize("folder", [False, True])
+def test_l7_swap_race_reports_a_reader_that_refuses_everything(
+    layout: pathguard.Layout, folder: bool
+) -> None:
+    """A reader that never returns the regular file is still a finding: reading on until it does (W3-S)
+    ends at the timeout, and the race is not passed as safe because nothing was ever read."""
+    reads = [0]
+
+    def refuses(path: str | bytes) -> bytes:
+        reads[0] += 1
+        raise FsError("fs.link", "refused")
+
+    started = time.monotonic()
+    findings = swap_race(refuses, layout, iterations=50, folder=folder, min_swaps=1, timeout=0.5)
+    assert [finding.problem for finding in findings] == ["the reader never returned the regular file"]
+    assert reads[0] > 50  # it read on past the iterations, until the timeout
+    assert time.monotonic() - started < 30

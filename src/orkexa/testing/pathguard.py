@@ -23,7 +23,6 @@ many times, and makes sure the swaps really happened. Nothing here needs pytest;
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-import contextlib
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -547,6 +546,10 @@ def check_reader(
     return findings
 
 
+#: How long the swapper of :func:`swap_race` waits before it tries a failed rename again (seconds).
+RETRY_PAUSE = 0.0005
+
+
 def swap_race(
     read: Callable[[str], bytes],
     layout: Layout,
@@ -562,9 +565,14 @@ def swap_race(
     times on ``race`` (``race/secret.txt`` with ``folder``). Any read that returns :data:`CANARY` is a
     finding, and so is a run in which fewer than ``min_swaps`` swaps happened (the race was not exercised) or
     in which ``read`` never returned the regular file (it refused everything); a reader that is done before
-    ``min_swaps`` swaps keeps reading for up to ``timeout`` seconds. The link is a symbolic link, or
-    a junction on Windows for a folder. Returns ``[]`` when the link cannot be made here (check
-    :attr:`Layout.created` first).
+    ``min_swaps`` swaps happened, or before it returned the regular file once, keeps reading (and checking
+    every read) for up to ``timeout`` seconds. The link is a symbolic link, or a junction on Windows for a
+    folder. Returns ``[]`` when the link cannot be made here (check :attr:`Layout.created` first).
+
+    A rename that fails is tried again after :data:`RETRY_PAUSE`, not at once: on Windows it fails while the
+    reader holds a handle (a sharing violation), and every attempt opens the entry for deletion, so an
+    immediate retry makes the reader's own opens fail as "in use" and can starve it. Every swap that can
+    happen still happens at once.
     """
     root = layout.root
     real, link = root / "race_real", root / "race_link"
@@ -593,6 +601,7 @@ def swap_race(
             except OSError:  # a sharing violation on Windows while the reader holds a handle
                 if stop.is_set() and not os.path.lexists(old):
                     return
+                time.sleep(RETRY_PAUSE)
 
     def swapper() -> None:
         occupant, spare = real, link  # "race" holds the occupant; the spare waits under its own name
@@ -600,6 +609,7 @@ def swap_race(
             try:
                 os.rename(root / "race", root / "race_tmp")
             except OSError:
+                time.sleep(RETRY_PAUSE)
                 continue
             try:
                 os.rename(spare, root / "race")
@@ -626,11 +636,22 @@ def swap_race(
                 break
             inside += 1
         deadline = time.monotonic() + timeout
-        while swaps[0] < min_swaps and not findings and thread.is_alive() and time.monotonic() < deadline:
-            # A fast reader may finish before the swapper got going: keep reading until it did.
-            with contextlib.suppress(Exception):
-                if CANARY in read(target):
-                    findings.append(Finding("N10-04", target, leak))
+        while (
+            (swaps[0] < min_swaps or inside == 0)
+            and not findings
+            and thread.is_alive()
+            and time.monotonic() < deadline
+        ):
+            # A fast reader may finish before the swapper got going, or before one of its reads met the
+            # regular file between two swaps: keep reading (each read checked as above) until both happened.
+            try:
+                data = read(target)
+            except Exception:
+                continue
+            if CANARY in data:
+                findings.append(Finding("N10-04", target, leak))
+                break
+            inside += 1
     finally:
         stop.set()
         thread.join(timeout=30)

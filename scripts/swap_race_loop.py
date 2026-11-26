@@ -1,23 +1,22 @@
 """TEMPORARY (W3-S, removed before handover): repeat the conformance swap race and count its outcomes.
 
-Runs the ``folders.swap_race`` case's two races (a file, a folder) ``N`` times with the case's own parameters
-against the reference folder access of the conformance tests, and prints how often each finding occurred, how many
-reads returned the regular file, and why the others were refused.
+Runs the ``folders.swap_race`` case's two races (a file, a folder) ``N`` times with the case's own
+parameters against the reference folder access of the conformance tests, and prints how often each finding
+occurred, how many reads returned the regular file, and why the others were refused.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from functools import partial
 from pathlib import Path
 import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests" / "conformance"))
 
-from folder_access import SafeRootFolders  # noqa: E402
+from folder_access import SafeRootFolders
 
-from orkexa.testing import pathguard  # noqa: E402
+from orkexa.testing import pathguard
 
 
 def main(rounds: int) -> int:
@@ -33,7 +32,9 @@ def main(rounds: int) -> int:
                 seen = reads[folder]
                 before = seen["ok"]
 
-                def read(path: str, seen: Counter[str] = seen) -> bytes:
+                def read(
+                    path: str, seen: Counter[str] = seen, access: SafeRootFolders = access, grant: str = grant
+                ) -> bytes:
                     try:
                         data = access.read(grant, path).encode("utf-8")
                     except Exception as exc:
