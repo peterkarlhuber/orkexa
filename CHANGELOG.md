@@ -13,6 +13,10 @@ listed here. The development version is `0.2.0.dev0`.
   code, also for such a folder this user cannot open); links are shown only when their target passes the same
   checks. `browse_problem` names the reason.
   See the path guard guide, section "The folder browser".
+* Review fixes: no answer tells whether something exists in or below a refused folder (a file or a missing name
+  in another user's home folder, `/etc/shadow`, a key in `~/.ssh` all answer `fs.not_browsable`), and a home
+  folder inside `/bin`, `/sbin`, `/usr`, `/lib*`, `/etc`, `/dev`, `/proc`, `/sys` or `/boot` is not browsable as the
+  user's own.
 
 ### Fixed: the swap race no longer starves the reader on Windows (W3-S, 2026-11-26)
 

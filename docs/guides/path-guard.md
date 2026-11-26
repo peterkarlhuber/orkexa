@@ -203,7 +203,14 @@ listing = browse_folder("/home/ada", protected=[data_dir])
   one (the list above, with the same exceptions), another user's home folder (any folder directly inside a folder
   of home folders other than `home`), a blocked folder by every spelling of its links, or a protected folder.
   The user's own home folder and everything below it may be browsed even when it is or lies in a system folder
-  (`/root`, a service account in `/var/lib`), unless it is a file-system root or holds a system folder.
+  (`/root`, a service account in `/var/lib`), unless it is a file-system root, holds a system folder or lies in a
+  folder of programs, libraries, configuration or the kernel (`/bin`, `/sbin`, `/usr`, `/lib*`, `/etc`, `/dev`,
+  `/proc`, `/sys`, `/boot`: Debian's `daemon` account lives in `/usr/sbin`).
+* No answer tells whether something exists in or below a refused folder: a path that cannot be resolved
+  (`fs.not_found`, `fs.not_a_directory`, `fs.permission`, `fs.unreadable`) is judged by its names first (the path
+  as given, every path its links lead through, the part that exists), and is `fs.not_browsable` when the checks
+  above refuse any of them. `/etc/shadow`, `~/.ssh/id_ed25519`, a file or a missing name in another user's home
+  folder all answer alike, so the browser enumerates neither files nor users.
 * The folder is opened once after the checks and must still be the folder that was checked (identity and final
   path, `fs.root_changed`); its entries are read through that open folder.
 * Left out: files and special files, names starting with `.` (on Windows also `$` and the hidden or system
@@ -315,6 +322,9 @@ or the reader never returned the regular file, so a race that did not run cannot
   the guard protects real user data (N-10 acceptance, ORK-045).
 * **The folder browser shows what the user may see.** `browse_folder` lists folder names the operating system
   lets the user read; hiding system folders, other users' home folders, blocked and protected folders is a
-  convenience and a guard against picking them, not access control. The time limit is checked between entries,
-  so a hung network mount can block one listing beyond `max_seconds`. A link's target is resolved with the
+  convenience and a guard against picking them, not access control. Other users' home folders are recognized by
+  name and by the identity of the folders that hold home folders (`/home`, `/Users` ...); a home folder elsewhere
+  (`/srv/home`, a bind mount, a directory service's home) is not recognized as another user's. The time limit is
+  checked between entries, so a hung network mount (or a link to one) can block one listing beyond
+  `max_seconds`. A link's target is resolved with the
   operating system's own resolution (`realpath`, the final path) and then checked like any other folder.

@@ -222,6 +222,16 @@ def test_the_own_home_folder_is_browsable_even_inside_a_system_folder(tmp_path: 
     assert not fs._home_open("/var")
     assert not fs._home_open("/usr")
     assert not fs._home_open(None)
+    # An account whose home lies in a folder of programs, libraries, configuration or the kernel (Debian's
+    # daemon in /usr/sbin, bin in /bin) gets no browsable home (N-11 review #2).
+    closed_homes = ("/usr/sbin", "/bin", "/sbin", "/usr/lib/svc", "/lib/x", "/etc/svc", "/dev/x", "/proc/1")
+    for closed in closed_homes:
+        assert not fs._home_open(closed), closed
+    for name in ("sbin", "bin"):
+        for prefix in ("/usr/", "/"):
+            folder = Path(prefix + name)
+            if folder.is_dir():
+                assert _code(lambda folder=folder: browse_folder(folder, home=folder)) == "fs.not_browsable"
     etc = Path("/etc")
     if etc.is_dir():
         assert _code(lambda: browse_folder(etc, home="/")) == "fs.not_browsable"
@@ -285,6 +295,52 @@ def test_a_hidden_folder_this_user_cannot_open_is_reported_as_not_shown(
     monkeypatch.setattr(fs._backend, "canonical", denied)
     assert _code(lambda: browse_folder(system, home=tree)) == "fs.not_browsable"
     assert _code(lambda: browse_folder(tree, home=tree)) == "fs.permission"
+
+
+def test_no_answer_tells_whether_something_exists_in_a_refused_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N-11 review #1: a file, a missing name or a folder below a refused folder (another user's home, a
+    blocked folder, a protected folder, a system folder) all answer ``fs.not_browsable``, so the answers
+    enumerate neither files nor users. Outside refused folders the codes stay as they are."""
+    users = tmp_path / "users"
+    (users / "bob" / "proj").mkdir(parents=True)
+    (users / "bob" / "notes.txt").write_text("x", encoding="utf-8")
+    home = users / "ada"
+    (home / ".ssh").mkdir(parents=True)
+    (home / ".ssh" / "id_ed25519").write_text("key", encoding="utf-8")
+    (home / "data").mkdir()
+    (home / "data" / "file.txt").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(fs, "home_parents", lambda: [str(users)])
+    refused = [
+        users / "bob" / "notes.txt",
+        users / "bob" / "proj",
+        users / "bob" / "nope",
+        users / "carol",
+        users / "carol" / "nope",
+        home / ".ssh" / "id_ed25519",
+        home / ".ssh" / "missing",
+        home / "data" / "file.txt",
+        home / "data" / "missing",
+    ]
+    for path in refused:
+        assert _code(lambda path=path: browse_folder(path, home=home, protected=[home / "data"])) == (
+            "fs.not_browsable"
+        ), path
+    # A link in the own home that leads into a refused folder answers alike, whatever its target.
+    _link(home / "to-bob", users / "bob")
+    for path in (home / "to-bob" / "notes.txt", home / "to-bob" / "nope"):
+        assert _code(lambda path=path: browse_folder(path, home=home)) == "fs.not_browsable", path
+    # The own home still tells a file and a missing folder apart.
+    (home / "own.txt").write_text("x", encoding="utf-8")
+    assert _code(lambda: browse_folder(home / "own.txt", home=home)) == "fs.not_a_directory"
+    assert _code(lambda: browse_folder(home / "missing", home=home)) == "fs.not_found"
+
+
+@pytest.mark.skipif(not POSIX, reason="/etc/shadow and /etc are POSIX system files")
+def test_a_file_or_a_missing_name_in_a_system_folder_is_not_shown(tmp_path: Path) -> None:
+    for path in ("/etc/shadow", "/etc/passwd", "/etc/no-such-file-n11", "/usr/no-such-folder-n11"):
+        assert _code(lambda path=path: browse_folder(path, home=tmp_path)) == "fs.not_browsable", path
 
 
 def test_the_error_code_is_documented() -> None:

@@ -802,6 +802,16 @@ DEFAULT_BROWSE_FOLDERS = 500
 _HIDDEN_ATTRIBUTES = 0x2 | 0x4
 #: The home folders of the administrator account (Linux, macOS), which are system folders themselves.
 _ROOT_HOMES = ("/root", "/var/root")
+#: System folders that hold programs, libraries, configuration or kernel interfaces: an account whose home
+#: folder lies in one (Debian's ``bin`` in ``/bin``, ``daemon`` in ``/usr/sbin``) gets no browsable home
+#: (N-11 review #2).
+#: A service's home in ``/var/lib`` stays browsable, as do ``/root`` and ``/var/root``.
+_CLOSED_HOMES = (
+    "/bin", "/sbin", "/usr", "/lib", "/lib32", "/lib64", "/libx32", "/etc", "/dev", "/proc", "/sys", "/boot",
+)  # fmt: skip
+#: Path guard codes that would tell whether something exists: for a path a refused folder covers they become
+#: ``fs.not_browsable`` (N-11 review #1).
+_EXISTENCE_CODES = frozenset({"fs.not_found", "fs.not_a_directory", "fs.permission", "fs.unreadable"})
 
 
 @dataclass(frozen=True)
@@ -982,10 +992,11 @@ def browse_folder(
     try:
         canonical, info = _backend.canonical(text)
     except FsError as error:
-        # A folder this user may not open (another user's /root) is still reported as not shown.
-        if error.code == "fs.permission":
-            real = os.path.realpath(text)
-            problem = browser.problem(real, browser.chain(real, None), _link_spellings(text))
+        # Whether something exists in or below a refused folder is never told (N-11 review #1): /etc/shadow,
+        # ~/.ssh/id_ed25519, a file or a missing name in another user's home folder and a folder this user may
+        # not open (another user's /root) are all "not shown", like the folder itself.
+        if error.code in _EXISTENCE_CODES:
+            problem = _given_problem(browser, text)
             if problem is not None:
                 raise FsError("fs.not_browsable", problem) from None
         raise
@@ -1034,16 +1045,31 @@ def browse_folder(
     )
 
 
+def _given_problem(browser: _Browser, text: str) -> str | None:
+    """Why the browser refuses the path as given, judged by its names before anything is resolved: the path
+    itself, every path its links lead through and the part of it that exists, resolved. Used for paths that
+    cannot be resolved, so that a refused folder answers alike whether or not something exists in it."""
+    spellings = _link_spellings(text)
+    for spelling in dict.fromkeys([*spellings, os.path.realpath(text)]):
+        problem = browser.problem(spelling, browser.chain(spelling, None), spellings)
+        if problem is not None:
+            return problem
+    return None
+
+
 def _home_open(home: str | None) -> bool:
     """Whether everything below the user's own home folder may be browsed, even when it lies in or is a
     system folder (a service account in /var/lib, the administrator's /root): not when the home folder is a
-    file-system root or holds a system folder (an account whose home is ``/``, ``/var`` or ``/usr/sbin``),
-    which would open the system."""
+    file-system root, holds a system folder (an account whose home is ``/`` or ``/var``) or lies in a system
+    folder of programs, libraries, configuration or the kernel (:data:`_CLOSED_HOMES`: ``/usr/sbin``,
+    ``/bin``), which would open the system."""
     if not home or len(path_parts(home)) <= (1 if os.name == "nt" else 0):
         return False
     roots = [path_parts(os.path.realpath(item)) for item in _ROOT_HOMES] if os.name != "nt" else []
     if path_parts(home) in roots:
         return True
+    if os.name != "nt" and any(inside(home, folder) for folder in _CLOSED_HOMES):
+        return False
     return not any(inside(folder, home) for folder in system_folders())
 
 
