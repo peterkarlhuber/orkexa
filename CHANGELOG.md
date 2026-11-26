@@ -5,6 +5,34 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: conformance cases for folder grants (Nodestro N-63, 2026-11-21)
+
+* `orkexa.testing.conformance.FOLDER_CASES` (T-CONF-9): 18 cases that check a product's read-only access to
+  granted folders through the methods of the new protocol `FolderAccess` (`grant`, `revoke`, `list`, `read`,
+  `search`, `accesses`): the product's data folder (`DATA_FOLDER`), file-system roots, the home folder and the
+  system folders cannot be granted; the attack catalog of `orkexa.testing.pathguard` and its swap race; include
+  and exclude patterns in any case and Unicode spelling; the size limit and its message; revocation, expiry and a
+  replaced root; NFD names; an access log without paths. Refusals carry a `code` (`GRANT_ENDED_CODES`,
+  `NOT_GRANTABLE_CODES` for the grant model's own codes).
+* `run_cases` accepts the contract `folders` next to `index`, `files` and `memory`.
+* Orkexa's own tests run the cases against a small grant store on `SafeRoot`
+  (`tests/conformance/folder_access.py`) on Linux, macOS and Windows, and check that the suite catches a store
+  that ignores exclusions, revocations or the data folder.
+* Three more cases (Nodestro N-10 review): `folders.denies` (a deny on an exact file and on a subfolder holds
+  in `list`, `read` and `search`), `folders.deny_spellings` (trailing separator, `//`, `..`, case) and
+  `folders.scope_and_mode` (agents and unattended runs). `FolderAccess` gains `deny(path)`,
+  `as_caller(agent, unattended=...)` and the grant parameters `agents` and `unattended`; new code sets
+  `DENIED_CODES` and `NOT_COVERED_CODES`. The suite's own tests check that it catches a store that checks a deny
+  only on reads, compares a deny as spelled, or ignores agents and mode.
+* `SafeRoot(on_open=...)` and the public `orkexa.fs.fold` (Nodestro N-10 re-review M2). `on_open` is called while a path is opened with the names the file
+  system stored for the components opened so far, so a product checks its own rules (a person's deny) against
+  what is really opened, not the spelling asked for (case, dotless i, ignorable characters on a case-insensitive
+  file system); it refuses by raising. On POSIX the walk now reports the stored name where the file system
+  answers with one (macOS, Linux casefold folders), and on Windows the name NTFS stored (from the final path of
+  the open handle). New case `folders.deny_request_spellings`: a denied folder is
+  never read or listed through such a spelling; the reference store checks denies with `fold()` and `on_open`.
+* `orkexa.fs.allowed_folders` is public: the folders inside a system folder that may still hold a root (temporary
+  folders, removable media), next to `system_folders`, so a product checks other folders by the same lists.
 ### Added: `orkexa.core.compaction`, context compaction for long conversations (Nodestro N-05, 2026-11-21)
 
 * `compact` (and `acompact` with an async helper) fits a conversation of plain-text `Turn`s into a token budget:

@@ -15,6 +15,7 @@ from orkexa.testing.conformance import (
     ALL_FILE_STORE_CASES,
     ALL_INDEX_CASES,
     ALL_MEMORY_CASES,
+    FOLDER_CASES,
     INDEX_CASES,
     MEMORY_CASES,
     PARTITION_INDEX_CASES,
@@ -340,8 +341,9 @@ def test_the_repository_expectations_cover_every_job_and_target() -> None:
 
     data = json.loads(EXPECTED_SKIPS.read_text(encoding="utf-8"))
     targets = set(FACTORIES) | {f"{target}-legacy" for target in LEGACY}
+    known = _names(ALL_INDEX_CASES + ALL_MEMORY_CASES + ALL_FILE_STORE_CASES + FOLDER_CASES)
     for job in ("test", "lowest-versions", "offline"):
         for target in targets:
             for name in load_expected_skips(EXPECTED_SKIPS, job, target):
-                assert name in _names(ALL_INDEX_CASES + ALL_MEMORY_CASES + ALL_FILE_STORE_CASES), name
+                assert name in known, name
     assert set(data["jobs"]["test"]) == targets

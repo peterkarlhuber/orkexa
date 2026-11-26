@@ -46,6 +46,7 @@ import sys
 import threading
 import time
 from typing import Any, Literal
+import unicodedata
 
 from ._names import (
     DEFAULT_BLOCKED,
@@ -91,7 +92,9 @@ __all__ = [
     "FsError",
     "SafeRoot",
     "TextBudget",
+    "allowed_folders",
     "display_name",
+    "fold",
     "is_short_name",
     "root_problem",
     "split_relative",
@@ -369,6 +372,11 @@ class SafeRoot:
         writable: Allow :meth:`create_file` and :meth:`rename` (default: read only, ``fs.read_only``).
         expect_identity: The ``(device, inode)`` recorded when the folder was granted (:attr:`identity`); a
             different folder at the same path raises ``fs.root_changed``.
+        on_open: Called while a path is opened, after each component, with the names the file system stored
+            for the components opened so far (the root itself is ``()``). On a case-insensitive file system
+            a request may name an entry in another spelling (case, dotless i, ignorable characters); these
+            are the entry's own names, so a product checks its own rules (a person's deny) against what is
+            really opened. It raises to refuse; the path is then neither read nor listed.
     """
 
     def __init__(
@@ -387,6 +395,7 @@ class SafeRoot:
         allow_cloud_files: bool = False,
         expect_identity: tuple[int, int] | None = None,
         writable: bool = False,
+        on_open: Callable[[tuple[str, ...]], None] | None = None,
     ) -> None:
         if max_file_bytes < 0 or max_entries < 1 or max_list_seconds <= 0:
             raise ValueError(
@@ -440,6 +449,7 @@ class SafeRoot:
         self.allow_hard_links = allow_hard_links
         self.allow_cloud_files = allow_cloud_files
         self.writable = writable
+        self._on_open = on_open
         self._revoked = threading.Event()
 
     def __repr__(self) -> str:
@@ -501,10 +511,14 @@ class SafeRoot:
         self._protected_ids |= _identities(self._protected_paths)
         protected = set(self._protected_ids)
 
+        on_open = self._on_open
+
         def check(index: int, info: Info, names: tuple[str, ...]) -> None:
-            del index, names
+            del index
             if _identity(info) in protected:
                 raise FsError("fs.blocked", "This path is inside a protected folder", path=shown)
+            if on_open is not None:
+                on_open(tuple(unicodedata.normalize("NFC", name) for name in names))
 
         return check
 

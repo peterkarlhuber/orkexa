@@ -16,6 +16,8 @@ from typing import Any
 from orkexa import EphemeralMemory, FileMemory, LocalFileStore, SQLiteFileStore, SQLiteIndex, SQLiteMemory
 from orkexa.testing.conformance import Request
 
+from .folder_access import safe_root_folders
+
 LEGACY_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "legacy" / "FX-SQ-0"
 
 
@@ -69,6 +71,8 @@ FACTORIES: dict[str, tuple[Callable[..., Any], frozenset[str]]] = {
     "local-file-store": (local_file_store, frozenset()),
     "file-memory": (file_memory, frozenset()),
     "ephemeral-memory": (ephemeral_memory, frozenset()),
+    # T-CONF-9 (Nodestro N-63): the folder grant cases against the reference store on SafeRoot.
+    "safe-root-folders": (safe_root_folders, frozenset()),
 }
 """Factory and expected capabilities per target name (the names of tests/conformance/expected_skips.json)."""
 

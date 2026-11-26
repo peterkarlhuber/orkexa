@@ -60,6 +60,7 @@ whose `needs` the backend does not report is skipped, with the reason in the rep
 | `FILE_STORE_CASES` | `FileStore` | T-CONF-5 |
 | `MEMORY_CASES` | `MemoryBackend`, path rules, limits | T-CONF-6 |
 | `PARTITION_INDEX_CASES`, `PARTITION_FILE_STORE_CASES`, `PARTITION_MEMORY_CASES` | partitions never see each other | T-PART |
+| `FOLDER_CASES` | `FolderAccess`: read-only folder grants (see [below](#the-folder-grant-cases)) | T-CONF-9 |
 
 `ALL_INDEX_CASES`, `ALL_FILE_STORE_CASES` and `ALL_MEMORY_CASES` combine them per contract. Security cases
 (partitions, query limits, vector checks) can only depend on `partitioned`, `vectors` and `reindex`; the report
@@ -134,6 +135,53 @@ on the case's storage; `expect`, `expect_equal`, `expect_error` and `expect_code
 ::: orkexa.testing.conformance.load_expected_skips
 
 ::: orkexa.testing.conformance.KeywordEmbeddings
+
+### The folder grant cases
+
+`FOLDER_CASES` (Nodestro N-63) check a product's read-only access to granted folders from the outside: what can
+be granted, the path guard and its [attack catalog](#the-path-guard-attack-catalog), patterns, limits, the end of
+a grant, a person's denies, the grant's scope and mode, and the access log. The factory opens an object with the methods of `FolderAccess`:
+
+| Method | Does |
+|---|---|
+| `grant(path, *, include=(), exclude=(), max_file_bytes=None, expires_at=None, agents=(), unattended=False)` | grants an absolute folder, returns the grant's id; `agents` limits it to these agents (empty: every agent), `unattended=True` also opens it in runs nobody watches |
+| `revoke(grant)` | ends a grant at once |
+| `deny(path)` | a person blocks an absolute file or folder path for every grant, in any spelling (compared canonical and without case) |
+| `as_caller(agent, *, unattended=False)` | the same grants as one agent sees them (the object itself is a supervised caller without an agent) |
+| `list(grant, path="")` | the relative paths of a folder's entries |
+| `read(grant, path)` | the text of a file |
+| `search(grant, text)` | the relative paths of the files whose name or text contains `text` (any case) |
+| `accesses(grant)` | the access log: one `(operation, outcome)` per call, never a path |
+
+The factory treats `request.workdir / DATA_FOLDER` as the product's own data folder. A refusal raises an
+exception with a `code`: the `orkexa.fs` code, for a grant that ended one of `GRANT_ENDED_CODES`, for a folder
+that cannot be granted one of `NOT_GRANTABLE_CODES`, for a denied file or folder one of `DENIED_CODES`, for a
+caller the grant does not cover one of `NOT_COVERED_CODES`.
+
+| Case | Checks |
+|---|---|
+| `folders.list_read_search` | a granted folder is listed, read and searched (the positive control) |
+| `folders.data_folder_not_grantable` | the data folder, a folder inside it and a link to it cannot be granted |
+| `folders.data_folder_inside_a_grant` | a grant above the data folder never lists, reads or finds anything in it |
+| `folders.system_folders_not_grantable` | file-system roots, the home folder and the system folders that exist |
+| `folders.attack_catalog` | every name and link attack of `pathguard.check_reader`; links are never listed through; searches never find outside or blocked content |
+| `folders.swap_race` | a file and a folder swapped for links while they are read (`pathguard.swap_race`) |
+| `folders.exclude_patterns` | excluded entries are never listed, read or found, in any case or Unicode spelling |
+| `folders.include_patterns` | only included files are listed, read and found |
+| `folders.size_limit` | a file above `max_file_bytes` is refused with a message that names the limit |
+| `folders.revoked`, `folders.expired` | a revoked or expired grant refuses every later call |
+| `folders.root_replaced` | a granted folder replaced by another one is refused |
+| `folders.unicode_names` | a name stored decomposed (NFD) is read with its composed name |
+| `folders.access_log` | every call is logged with its outcome; the log holds no path or file name |
+| `folders.denies` | a deny on one exact file and on a subfolder holds in listings, reads (also in other request spellings) and searches by name and text, for every caller |
+| `folders.deny_spellings` | a deny spelled with a trailing separator, a repeated separator, `..` or another case holds the same |
+| `folders.deny_request_spellings` | a denied folder is never read or listed through another spelling the file system may open as the same folder: case, dotless i, a zero-width space, a soft hyphen, NFD |
+| `folders.scope_and_mode` | a grant for some agents opens nothing for another; a supervised grant opens nothing in an unattended run, an unattended one does |
+
+Orkexa runs them against a small grant store on `SafeRoot` (`tests/conformance/folder_access.py`) on Linux,
+macOS and Windows; nodestro-runtime runs them through its folder tools.
+
+::: orkexa.testing.conformance.FolderAccess
 
 ## The tenant SQL rule engine
 

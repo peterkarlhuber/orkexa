@@ -675,3 +675,48 @@ def test_every_raised_code_is_documented() -> None:
     raised = set(re.findall(r'"(fs\.[a-z_]+)"', source))
     assert raised <= set(FS_ERROR_CODES), sorted(raised - set(FS_ERROR_CODES))
     assert len(raised) >= 25
+
+
+DOTLESS_I = chr(0x131)
+
+
+class _Refused(Exception):
+    pass
+
+
+def test_on_open_sees_the_stored_names_and_can_refuse(tmp_path: Path) -> None:
+    """N-10 re-review M2: a product checks its own rules (a person's deny) against the names really opened,
+    not the names asked for. ``on_open`` gets the stored names of every opened component and refuses by
+    raising."""
+    base = tmp_path / "base"
+    (base / "Private").mkdir(parents=True)
+    (base / "Private" / "pay.txt").write_text("salary\n", encoding="utf-8", newline="\n")
+    (base / "open.txt").write_text("fine\n", encoding="utf-8", newline="\n")
+    seen: list[tuple[str, ...]] = []
+
+    def on_open(names: tuple[str, ...]) -> None:
+        seen.append(names)
+        if names[:1] == ("Private",):
+            raise _Refused("denied")
+
+    root = SafeRoot(str(base), on_open=on_open)
+    assert root.read_bytes("open.txt") == b"fine\n"
+    assert seen == [(), ("open.txt",)]
+    for call in (
+        lambda: root.read_bytes("Private/pay.txt"),
+        lambda: root.list("Private"),
+        lambda: root.stat("Private/pay.txt"),
+    ):
+        with pytest.raises(_Refused):
+            call()
+    caseless = os.path.exists(base / "PRIVATE")
+    if (
+        caseless
+    ):  # macOS and Windows by default: another spelling opens the same folder, under its stored name
+        seen.clear()
+        for spelling in ("PRIVATE/pay.txt", "private/PAY.TXT", f"pr{DOTLESS_I}vate/pay.txt"):
+            with pytest.raises((_Refused, FsError)) as caught:
+                root.read_bytes(spelling)
+            if isinstance(caught.value, FsError):  # dotless i only where the file system equates it (NTFS)
+                assert spelling.startswith(f"pr{DOTLESS_I}") and caught.value.code == "fs.not_found"
+        assert ("Private",) in seen and all(names[:1] in ((), ("Private",)) for names in seen)

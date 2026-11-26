@@ -1,4 +1,4 @@
-"""The public conformance suite of the storage contracts (MUP-ONA B1, T-CONF; ADR 0014).
+"""The public conformance suite of the storage contracts and of folder grants (MUP-ONA B1, T-CONF; ADR 0014).
 
 Every backend of ``Index`` (and ``ReindexableIndex``), ``FileStore`` and ``MemoryBackend`` runs the same
 cases: the SQLite and local classes in Orkexa's own tests, Nodestro's PostgreSQL classes in nodestro-runtime,
@@ -30,7 +30,9 @@ lost capability fails instead of silently skipping. The case lists:
 * :data:`FILE_STORE_CASES` (T-CONF-5) in :mod:`.files`;
 * :data:`MEMORY_CASES` (T-CONF-6) in :mod:`.memory`;
 * :data:`PARTITION_INDEX_CASES`, :data:`PARTITION_FILE_STORE_CASES`, :data:`PARTITION_MEMORY_CASES` (plan
-  chapter 10.4, T-PART) in :mod:`.partition`.
+  chapter 10.4, T-PART) in :mod:`.partition`;
+* :data:`FOLDER_CASES` (T-CONF-9, Nodestro N-63) in :mod:`.folders`: read-only access to granted folders
+  (:class:`FolderAccess`) through the path guard :mod:`orkexa.fs` and its attack catalog.
 
 The package needs no pytest; see the documentation ("Testing helpers and conformance") for a pytest adapter.
 """
@@ -57,6 +59,15 @@ from ._core import (
 )
 from ._models import KeywordEmbeddings
 from .files import FILE_STORE_CASES
+from .folders import (
+    DATA_FOLDER,
+    DENIED_CODES,
+    FOLDER_CASES,
+    GRANT_ENDED_CODES,
+    NOT_COVERED_CODES,
+    NOT_GRANTABLE_CODES,
+    FolderAccess,
+)
 from .index import INDEX_CASES, VECTOR_CASES
 from .memory import MEMORY_CASES
 from .partition import PARTITION_FILE_STORE_CASES, PARTITION_INDEX_CASES, PARTITION_MEMORY_CASES
@@ -67,10 +78,16 @@ __all__ = [
     "ALL_INDEX_CASES",
     "ALL_MEMORY_CASES",
     "CAPABILITIES",
+    "DATA_FOLDER",
     "DEFAULT_PARTITION",
+    "DENIED_CODES",
     "FILE_STORE_CASES",
+    "FOLDER_CASES",
+    "GRANT_ENDED_CODES",
     "INDEX_CASES",
     "MEMORY_CASES",
+    "NOT_COVERED_CODES",
+    "NOT_GRANTABLE_CODES",
     "PARTITION_FILE_STORE_CASES",
     "PARTITION_INDEX_CASES",
     "PARTITION_MEMORY_CASES",
@@ -81,6 +98,7 @@ __all__ = [
     "CaseFailure",
     "Context",
     "Factory",
+    "FolderAccess",
     "KeywordEmbeddings",
     "Outcome",
     "Report",
