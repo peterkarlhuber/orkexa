@@ -48,6 +48,7 @@ tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secu
 tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteIndex]  # POSIX permission bits
 tests.backends.sqlite.test_robustness::test_database_files_are_private_with_secure_delete_and_wal[SQLiteMemory]  # POSIX permission bits
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
+tests.fs.test_browse::test_a_file_or_a_missing_name_in_a_system_folder_is_not_shown  # /etc and the POSIX system folders do not exist on Windows
 tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[boot]  # the Linux system folders exist on Linux only
 tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[dev]  # the Linux system folders exist on Linux only
 tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[etc]  # the Linux system folders exist on Linux only
