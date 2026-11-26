@@ -124,6 +124,14 @@ tests.conformance.test_sqlite_conformance::test_a_legacy_copy_keeps_its_content_
 tests.conformance.test_sqlite_conformance::test_the_sqlite_backends_conform[sqlite-index-vec]  # sqlite-vec cannot be loaded here
 tests.conformance.test_sqlite_conformance::test_the_suite_runs_on_a_copy_of_the_legacy_files[sqlite-index-vec]  # sqlite-vec cannot be loaded here
 tests.contract.test_contract::test_structured_answer_after_tool_rounds_and_a_reasoning_only_tool_phase_end[anthropic-True]  # the scripted Anthropic stream has no parsed output (covered by tests/anthropic)
+tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[boot]  # the Linux system folders exist on Linux only
+tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[dev]  # the Linux system folders exist on Linux only
+tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[etc]  # the Linux system folders exist on Linux only
+tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[proc]  # the Linux system folders exist on Linux only
+tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[sys]  # the Linux system folders exist on Linux only
+tests.fs.test_browse::test_linux_system_folders_cannot_be_browsed[usr]  # the Linux system folders exist on Linux only
+tests.fs.test_browse::test_macos_system_folders_cannot_be_browsed  # the macOS system folders exist on macOS only
+tests.fs.test_browse::test_the_own_home_folder_is_browsable_even_inside_a_system_folder  # /root and the POSIX system folders do not exist on Windows
 tests.fs.test_hardening::test_l1_an_openat2_error_never_switches_to_the_fallback  # openat2 is a Linux system call
 tests.fs.test_hardening::test_l1_the_fallback_refuses_when_mounts_cannot_be_checked  # mount ids (/proc/self/fdinfo) are a Linux feature
 tests.fs.test_hardening::test_l2_the_rename_fallback_cleans_up  # the link-and-unlink fallback is the POSIX rename without renameat2

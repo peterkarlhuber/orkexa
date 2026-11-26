@@ -2,6 +2,9 @@
 # Format: <junit classname>::<name>  # <reason>. Justify every change in the PR.
 # Job ci.yml/fs-fallbacks: tests/fs with ORKEXA_TEST_FS_FALLBACKS=1 (no openat2, no renameat2) on Linux.
 
+tests.fs.test_browse::test_macos_system_folders_cannot_be_browsed  # the macOS system folders exist on macOS only
+tests.fs.test_browse::test_windows_hidden_folders_and_dollar_names_are_left_out  # the hidden attribute and $ names are Windows rules
+tests.fs.test_browse::test_windows_system_folders_cannot_be_browsed  # the Windows system folders exist on Windows only
 tests.fs.test_hardening::test_l1_an_openat2_error_never_switches_to_the_fallback  # this kernel has no openat2
 tests.fs.test_rereview::test_m3_n7_a_real_casefold_folder_is_checked_by_its_stored_names  # needs an ext4 casefold folder (ORKEXA_TEST_CASEFOLD_DIR, CI job fs-fallbacks)
 tests.fs.test_safe_root::test_linux_mounts_below_the_root[openat2]  # this kernel has no openat2
