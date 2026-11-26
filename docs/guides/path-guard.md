@@ -184,6 +184,38 @@ folders, the same system-folder environment variables, `\\?\C:\x` as `C:\x`, and
 every UNC root, where N-06 maps `\\localhost\C$` to drive `C:` for comparison; and it refuses relative names with a
 trailing dot or space, where N-06 drops them as Windows does.
 
+## The folder browser
+
+A person picks a folder to grant before any root exists, so `browse_folder(path)` lists folders by absolute path,
+also above the folders that can be roots: the root of the file system or drive, the folders of all home folders
+and the user's own home folder. It answers a `FolderListing` (`path`, `parent`, `folders`, `truncated`) of
+`Folder` entries (`name`, `path`, `link`): folder names and paths only, never a file, a file name or a size.
+
+```python
+from orkexa.fs import browse_folder
+
+listing = browse_folder("/home/ada", protected=[data_dir])
+[folder.name for folder in listing.folders]  # ["Documents", "Music", "Projects"]
+```
+
+* The path is checked like a root's text (`fs.invalid_path`, `fs.network_path`), canonicalized (links resolved)
+  and refused with `fs.not_browsable` when `browse_problem` names a reason: a system folder or a folder inside
+  one (the list above, with the same exceptions), another user's home folder (any folder directly inside a folder
+  of home folders other than `home`), a blocked folder by every spelling of its links, or a protected folder.
+  The user's own home folder and everything below it may be browsed even when it is or lies in a system folder
+  (`/root`, a service account in `/var/lib`), unless it is a file-system root or holds a system folder.
+* The folder is opened once after the checks and must still be the folder that was checked (identity and final
+  path, `fs.root_changed`); its entries are read through that open folder.
+* Left out: files and special files, names starting with `.` (on Windows also `$` and the hidden or system
+  attribute), names that break the name rules, and every folder the checks above refuse, compared by name and by
+  identity. A symbolic link or junction is shown (`link=True`) only when its target is a folder that passes the
+  same checks; `path` is then the target, never the link.
+* At most `max_entries` entries are read in `max_seconds` and at most `max_folders` (500) answered; beyond, the
+  answer is `truncated` rather than refused.
+
+The answer is a snapshot. A folder that changes after it was listed is checked again when it is browsed, and a
+grant of it goes through `SafeRoot`'s own checks, which are stricter (no home folder, no file-system root).
+
 ## Creating and renaming
 
 With `writable=True`, `create_file(path, data)` creates a new file and `rename(source, target)` renames a file or
@@ -228,7 +260,8 @@ formats are not part of Orkexa (Nodestro's runtime has its own DOCX and XLSX rea
 `fs.link`, `fs.outside_root`, `fs.cross_device`, `fs.hard_link`, `fs.not_regular_file`, `fs.not_a_directory`,
 `fs.is_a_directory`, `fs.not_found`, `fs.ambiguous_name`, `fs.blocked`, `fs.excluded`, `fs.too_large`,
 `fs.too_many_entries`, `fs.protected_root`, `fs.network_path`, `fs.cloud_file`, `fs.root_changed`, `fs.revoked`,
-`fs.read_only`, `fs.exists`, `fs.permission`, `fs.unreadable`, `fs.unsupported_type`, `fs.too_complex`.
+`fs.read_only`, `fs.exists`, `fs.permission`, `fs.unreadable`, `fs.unsupported_type`, `fs.not_browsable`,
+`fs.too_complex`.
 `FsError` is a `PermissionError`; its message never contains an absolute path.
 
 ## The attack catalog
@@ -280,3 +313,8 @@ or the reader never returned the regular file, so a race that did not run cannot
 * The independent review of #109 is fixed (each finding has a regression test in `tests/fs/test_hardening.py`),
   and so is its re-review (N1-N3, N5-N7 fixed, N4 documented; `tests/fs/test_rereview.py`); G-5 is due before
   the guard protects real user data (N-10 acceptance, ORK-045).
+* **The folder browser shows what the user may see.** `browse_folder` lists folder names the operating system
+  lets the user read; hiding system folders, other users' home folders, blocked and protected folders is a
+  convenience and a guard against picking them, not access control. The time limit is checked between entries,
+  so a hung network mount can block one listing beyond `max_seconds`. A link's target is resolved with the
+  operating system's own resolution (`realpath`, the final path) and then checked like any other folder.

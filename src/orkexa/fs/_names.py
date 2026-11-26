@@ -58,6 +58,8 @@ FS_ERROR_CODES: dict[str, str] = {
     "fs.permission": "The operating system denied access",
     "fs.unreadable": "The file could not be read",
     "fs.unsupported_type": "No text extraction exists for this kind of file",
+    "fs.not_browsable": "The folder browser neither lists nor opens this folder: a system folder, another "
+    "user's home folder, a blocked folder, a protected folder, or a folder inside one of these",
     "fs.too_complex": "The text extraction exceeded a budget (reason: pages, chars, timeout, memory, limit, "
     "crash)",
 }

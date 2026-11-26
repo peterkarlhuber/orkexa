@@ -5,6 +5,14 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: a folder browser on the path guard (N-11, 2026-11-26)
+
+* `orkexa.fs.browse_folder(path, protected=..., home=...)` answers the sub-folders of an absolute folder for a
+  folder picker: `FolderListing` with `Folder(name, path, link)` entries, never files. System folders, other
+  users' home folders, blocked and protected folders are neither listed nor opened (`fs.not_browsable`, a new
+  code); links are shown only when their target passes the same checks. `browse_problem` names the reason.
+  See [the path guard guide](docs/guides/path-guard.md#the-folder-browser).
+
 ### Fixed: the swap race no longer starves the reader on Windows (W3-S, 2026-11-26)
 
 * `orkexa.testing.pathguard.swap_race` (conformance case `folders.swap_race`, N-63) failed now and then on

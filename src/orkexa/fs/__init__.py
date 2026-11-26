@@ -78,6 +78,7 @@ else:
 
 __all__ = [
     "DEFAULT_BLOCKED",
+    "DEFAULT_BROWSE_FOLDERS",
     "DEFAULT_LIST_SECONDS",
     "DEFAULT_MAX_ENTRIES",
     "DEFAULT_MAX_FILE_BYTES",
@@ -89,10 +90,14 @@ __all__ = [
     "TEXT_SUFFIXES",
     "Entry",
     "ExtractedText",
+    "Folder",
+    "FolderListing",
     "FsError",
     "SafeRoot",
     "TextBudget",
     "allowed_folders",
+    "browse_folder",
+    "browse_problem",
     "display_name",
     "fold",
     "is_short_name",
@@ -787,3 +792,293 @@ def _pdf_pages(data: bytes, budget: TextBudget, shown: str) -> list[str]:
         ) from None
     except ValueError:
         raise FsError("fs.unreadable", "The PDF cannot be read", path=shown) from None
+
+
+# ---- the folder browser ------------------------------------------------------------------------------------
+
+#: Most sub-folders :func:`browse_folder` answers for one folder; beyond, the answer is ``truncated``.
+DEFAULT_BROWSE_FOLDERS = 500
+#: Windows' hidden and system attributes (``FILE_ATTRIBUTE_HIDDEN``, ``FILE_ATTRIBUTE_SYSTEM``).
+_HIDDEN_ATTRIBUTES = 0x2 | 0x4
+#: The home folders of the administrator account (Linux, macOS), which are system folders themselves.
+_ROOT_HOMES = ("/root", "/var/root")
+
+
+@dataclass(frozen=True)
+class Folder:
+    """One sub-folder of a :class:`FolderListing`.
+
+    ``name`` is the name as stored (show it with :func:`display_name`); ``path`` the canonical absolute path
+    to browse next. ``link`` marks a symbolic link or junction: ``path`` is then its target, which passed the
+    same checks as every other folder (:func:`browse_problem`).
+    """
+
+    name: str
+    path: str
+    link: bool = False
+
+
+@dataclass(frozen=True)
+class FolderListing:
+    """The answer of :func:`browse_folder`: the canonical folder, its parent (``None`` at the root of a file
+    system or drive), its sub-folders sorted by name, and whether the listing stopped early
+    (``truncated``)."""
+
+    path: str
+    parent: str | None
+    folders: tuple[Folder, ...]
+    truncated: bool = False
+
+
+class _Browser:
+    """The checks of :func:`browse_problem`, with the folders' identities looked up once per listing."""
+
+    def __init__(
+        self,
+        *,
+        protected: Iterable[str | os.PathLike[str]],
+        home: str | os.PathLike[str] | None,
+        blocked: Iterable[str],
+    ) -> None:
+        self.home = _home(home)
+        found = _backend.stat_path(self.home) if self.home else None
+        self.home_id = _identity(found) if found is not None else None
+        self.home_open = _home_open(self.home)
+        parents = home_parents()
+        self.outer = [
+            parent
+            for parent in parents
+            if not any(inside(parent, other) and path_parts(parent) != path_parts(other) for other in parents)
+        ]
+        self.outer_ids = _identities(self.outer)
+        self.system_ids = _identities(system_folders())
+        self.allowed_ids = _identities(allowed_folders())
+        self.blocked = [pattern for pattern in patterns(blocked) if pattern.floating]
+        self.protected = [os.fspath(folder) for folder in protected]
+        self.protected_ids = _identities(self.protected)
+
+    def chain(self, path: str, info: Info | None) -> list[tuple[int, int] | None]:
+        """The identities of ``path`` and every folder above it, nearest first."""
+        found = [_backend.stat_path(folder) for folder in _ancestors(path)]
+        ids = [_identity(item) if item is not None else None for item in found]
+        if info is not None:
+            ids[0] = _identity(info)
+        return ids
+
+    def problem(
+        self, path: str, ids: list[tuple[int, int] | None], spellings: Iterable[str] = ()
+    ) -> str | None:
+        parts = path_parts(path)
+        every = [parts, *(path_parts(item) for item in spellings)]
+        if any(pattern.covers(spelling) for pattern in self.blocked for spelling in every):
+            return "A blocked folder (credentials, keys, keychains) or a folder inside one is not shown"
+        for folder in self.protected:
+            if inside(path, folder) or inside(path, os.path.realpath(folder)):
+                return "A protected folder (or a folder inside one) is not shown"
+        if self.protected_ids & {identity for identity in ids if identity is not None}:
+            return "A protected folder (or a folder inside one) is not shown"
+        if self.home_open and self.home and (inside(path, self.home) or self.home_id in ids):
+            return None
+        own = path_parts(self.home) if self.home else None
+        for parent in self.outer:
+            above = path_parts(parent)
+            if len(parts) > len(above) and parts[: len(above)] == above and parts[: len(above) + 1] != own:
+                return "Another user's home folder (or a folder inside one) is not shown"
+        for index in range(len(ids) - 1):
+            if ids[index + 1] in self.outer_ids and ids[index] != self.home_id:
+                return "Another user's home folder (or a folder inside one) is not shown"
+        for identity in ids:
+            if identity in self.allowed_ids:
+                return None
+            if identity in self.system_ids:
+                return "A system folder (or a folder inside one) is not shown"
+        if any(inside(path, folder) for folder in system_folders()) and not any(
+            inside(path, folder) for folder in allowed_folders()
+        ):
+            return "A system folder (or a folder inside one) is not shown"
+        return None
+
+    def walked(self, given: str, end: tuple[int, int] | None) -> list[str] | None:
+        """The spellings of ``given`` as its links are resolved, or ``None`` when they no longer end at the
+        folder that was resolved (a link changed in between)."""
+        walked = _link_spellings(given)
+        found = _backend.stat_path(walked[-1])
+        if end is not None and (found is None or _identity(found) != end):
+            return None
+        return walked
+
+
+def browse_problem(
+    path: str,
+    info: Info | None = None,
+    *,
+    protected: Iterable[str | os.PathLike[str]] = (),
+    home: str | os.PathLike[str] | None = None,
+    blocked: Iterable[str] = DEFAULT_BLOCKED,
+    given: str | os.PathLike[str] | None = None,
+) -> str | None:
+    """Why the folder browser (:func:`browse_folder`) neither lists nor opens the canonical folder ``path``
+    (a message), or ``None``.
+
+    Unlike :func:`root_problem` this allows the folders a person passes on the way to their own: the root of
+    a file system or drive, the folders that hold the home folders, and the user's own home folder (``home``,
+    default: the home folder of this process's user) with everything below it. Refused:
+
+    * a system folder (:func:`system_folders`) or a folder inside one, except the temporary and
+      removable-media folders of :func:`allowed_folders` and the user's own home folder (also ``/root``),
+      unless that home folder is a file-system root or holds a system folder;
+    * another user's home folder (a folder directly inside ``/home``, ``/Users``, ``C:\\Users`` ... that is
+      not ``home``) or a folder inside one;
+    * a folder that the ``blocked`` patterns starting with ``**/`` cover by its canonical path or, with
+      ``given``, by the path as given and every path its links lead through;
+    * a ``protected`` folder or a folder inside one.
+
+    Folders are compared by name (NFC plus case-folded) and by identity, as in :func:`root_problem`.
+    """
+    browser = _Browser(protected=protected, home=home, blocked=blocked)
+    ids = browser.chain(path, info)
+    spellings: list[str] = []
+    if given:
+        walked = browser.walked(os.fspath(given), ids[0])
+        if walked is None:
+            return "The links on the way to the folder changed while it was checked"
+        spellings = walked
+    return browser.problem(path, ids, spellings)
+
+
+def browse_folder(
+    path: str | os.PathLike[str],
+    *,
+    protected: Iterable[str | os.PathLike[str]] = (),
+    home: str | os.PathLike[str] | None = None,
+    blocked: Iterable[str] = DEFAULT_BLOCKED,
+    max_folders: int = DEFAULT_BROWSE_FOLDERS,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
+    max_seconds: float = DEFAULT_LIST_SECONDS,
+) -> FolderListing:
+    """The sub-folders of an absolute folder, for a folder picker: folder names and paths, never files.
+
+    ``path`` is canonicalized (links resolved; on Windows the final path) and refused with
+    ``fs.not_browsable`` when :func:`browse_problem` names a reason, with ``fs.invalid_path`` or
+    ``fs.network_path`` as a root would be, and with ``fs.not_found``, ``fs.not_a_directory`` or
+    ``fs.permission``. The folder is then opened once and must still be the folder that was checked
+    (identity and final path, else ``fs.root_changed``); its entries are read through that open folder.
+
+    Left out of the answer: files and every other entry that is not a folder; names starting with ``.``
+    (and on Windows names starting with ``$`` and folders with the hidden or system attribute); names that
+    break the rules of :func:`split_relative`; and every folder that :func:`browse_problem` refuses. A
+    symbolic link or junction is resolved and shown (``link``) only when its target is a folder that passes
+    the same checks; its ``path`` is the target. At most ``max_entries`` entries are read within
+    ``max_seconds`` and at most ``max_folders`` folders answered; beyond any of them the answer is
+    ``truncated``.
+
+    The answer is a snapshot: a folder may change after it was listed, so the folder to browse next is
+    checked again when it is opened.
+    """
+    if max_folders < 1 or max_entries < 1 or max_seconds <= 0:
+        raise ValueError("max_folders, max_entries and max_seconds must be positive")
+    text = root_syntax(os.fspath(path))
+    canonical, info = _backend.canonical(text)
+    browser = _Browser(protected=protected, home=home, blocked=blocked)
+    ids = browser.chain(canonical, info)
+    walked = browser.walked(text, ids[0])
+    if walked is None:
+        raise FsError("fs.root_changed", "The links on the way to the folder changed while it was checked")
+    problem = browser.problem(canonical, ids, walked)
+    if problem is not None:
+        raise FsError("fs.not_browsable", problem)
+    folders: list[Folder] = []
+    truncated = False
+    deadline = time.monotonic() + max_seconds
+    node, close = _open_folder(canonical, _identity(info))
+    try:
+        for read, (name, kind, _size, _links) in enumerate(_backend.listing(node, canonical, ()), 1):
+            if read > max_entries or time.monotonic() > deadline:
+                truncated = True
+                break
+            if kind not in ("dir", "link") or _hidden_name(name):
+                continue
+            try:
+                split_relative(name)
+            except FsError:
+                continue
+            child = os.path.join(canonical, name)
+            if kind == "dir":
+                found = _child_identity(node, name, child)
+                if found is not None and browser.problem(child, [found, *ids]) is None:
+                    folders.append(Folder(name=name, path=child))
+                continue
+            target = _link_target(browser, child)
+            if target is not None:
+                folders.append(Folder(name=name, path=target, link=True))
+    finally:
+        close(node)
+    folders.sort(key=lambda folder: (fold(folder.name), folder.name))
+    if len(folders) > max_folders:
+        folders, truncated = folders[:max_folders], True
+    parent = os.path.dirname(canonical)
+    return FolderListing(
+        path=canonical,
+        parent=parent if parent and parent != canonical else None,
+        folders=tuple(folders),
+        truncated=truncated,
+    )
+
+
+def _home_open(home: str | None) -> bool:
+    """Whether everything below the user's own home folder may be browsed, even when it lies in or is a
+    system folder (a service account in /var/lib, the administrator's /root): not when the home folder is a
+    file-system root or holds a system folder (an account whose home is ``/``, ``/var`` or ``/usr/sbin``),
+    which would open the system."""
+    if not home or len(path_parts(home)) <= (1 if os.name == "nt" else 0):
+        return False
+    roots = [path_parts(os.path.realpath(item)) for item in _ROOT_HOMES] if os.name != "nt" else []
+    if path_parts(home) in roots:
+        return True
+    return not any(inside(folder, home) for folder in system_folders())
+
+
+def _hidden_name(name: str) -> bool:
+    return name.startswith(".") or (os.name == "nt" and name.startswith("$"))
+
+
+def _open_folder(path: str, identity: tuple[int, int]) -> tuple[int, Callable[[int], None]]:
+    """The folder ``path`` opened (a descriptor or handle) after it was checked, and how to close it."""
+    if sys.platform == "win32":
+        handle, _ = _backend._open_root(path, identity, True)
+        return handle, _backend._close
+    fd, _ = _backend._open_root(path, identity)
+    return fd, os.close
+
+
+def _child_identity(node: int, name: str, child: str) -> tuple[int, int] | None:
+    """The identity of the folder ``name`` in the open folder ``node``; ``None`` when it is gone, hidden or
+    cannot be looked at. Never follows a link."""
+    if sys.platform == "win32":
+        try:
+            if getattr(os.lstat(child), "st_file_attributes", 0) & _HIDDEN_ATTRIBUTES:
+                return None
+        except OSError:
+            return None
+        found = _backend.stat_path(child)
+        return _identity(found) if found is not None else None
+    try:
+        st = os.stat(name, dir_fd=node, follow_symlinks=False)
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino)
+
+
+def _link_target(browser: _Browser, link: str) -> str | None:
+    """The canonical target of the link or junction ``link`` when it is a folder the browser shows."""
+    try:
+        if sys.platform == "win32" and getattr(os.lstat(link), "st_file_attributes", 0) & _HIDDEN_ATTRIBUTES:
+            return None
+        target, info = _backend.canonical(root_syntax(link))
+    except (FsError, OSError, ValueError):
+        return None
+    ids = browser.chain(target, info)
+    walked = browser.walked(link, ids[0])
+    if walked is None or browser.problem(target, ids, walked) is not None:
+        return None
+    return target
