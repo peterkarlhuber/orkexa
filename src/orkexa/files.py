@@ -55,9 +55,18 @@ if TYPE_CHECKING:
     from .backends.sqlite.files import SQLiteFileStore as SQLiteFileStore
     from .memory import MemoryBackend
 
-__all__ = ["FILES_TOOL_NAME", "FileStore", "LocalFileStore", "SQLiteFileStore", "StoredFile"]
+__all__ = [
+    "FILES_CONTENT_SOURCE",
+    "FILES_TOOL_NAME",
+    "FileStore",
+    "LocalFileStore",
+    "SQLiteFileStore",
+    "StoredFile",
+]
 
 FILES_TOOL_NAME = "files"
+#: What the tool of a :class:`FileStore` declares about its content (``ToolCall.content_source``).
+FILES_CONTENT_SOURCE = "files"
 IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
 _ID = re.compile(r"[0-9a-f]{16}")
 _EXTRA_TEXT_TYPES = {".md": "text/markdown", ".csv": "text/csv", ".json": "text/plain", ".yaml": "text/plain"}
@@ -371,7 +380,7 @@ class FileStore(ABC):
             header = f"File {entry.id}: {entry.name} ({entry.media_type})"
             return [header, store.block(entry.id, citations=citations)]
 
-        return Tool(files, name=name)
+        return Tool(files, name=name, content_source=FILES_CONTENT_SOURCE)
 
 
 class LocalFileStore(FileStore):

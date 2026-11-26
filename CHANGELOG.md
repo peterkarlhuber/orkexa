@@ -5,6 +5,17 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: content sources of tools (Nodestro N-08, 2026-11-25)
+
+* `Tool(content_source=...)` declares where the content a tool returns comes from (a short lower-case label such as
+  `folder`; `orkexa.tools.check_content_source` checks it). The agent reports it on every call as the new field
+  `ToolCall.content_source` (`None` when nothing is declared or the tool is unknown), in the sync and async agent.
+* Orkexa's own tools declare theirs: a `FileStore`'s tool `files` (`FILES_CONTENT_SOURCE`), an `Index`'s search tool
+  `index` (`INDEX_CONTENT_SOURCE`), the memory tool the backend's `MemoryBackend.content_source` (`memory`; an
+  instance may set `None`).
+* Orkexa does not act on it; Nodestro uses it to track granted content in a conversation (N-08). See
+  `docs/reference/tools.md` (Content sources) and TODO ORK-047.
+
 ### Added: conformance cases for folder grants (Nodestro N-63, 2026-11-21)
 
 * `orkexa.testing.conformance.FOLDER_CASES` (T-CONF-9): 18 cases that check a product's read-only access to

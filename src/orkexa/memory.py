@@ -201,6 +201,11 @@ class MemoryBackend(ABC):
             boundary with a hint to use ``view_range``.
     """
 
+    #: What a memory call declares about its content (``ToolCall.content_source``): ``"memory"``, since
+    #: stored memory can hold what earlier sessions or other agents wrote. A subclass whose content only ever
+    #: comes from the current session may set ``None``.
+    content_source: str | None = "memory"
+
     def __init__(self, *, max_file_chars: int = 100_000, max_view_chars: int = 16_000) -> None:
         if max_file_chars < 1 or max_view_chars < 1:
             raise ValueError("max_file_chars and max_view_chars must be positive")

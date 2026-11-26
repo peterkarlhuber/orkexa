@@ -31,12 +31,21 @@ from .content import ContentBlock, ToolContent, to_tool_content
 from .core.types import ToolDefinition
 from .errors import ToolDefinitionError, ToolExecutionError, ToolInputError, ToolResultError
 
-__all__ = ["Tool", "ToolOutput"]
+__all__ = ["Tool", "ToolOutput", "check_content_source"]
 
 ToolOutput = str | list[ContentBlock]
 """What :meth:`Tool.execute` returns: text/JSON, or blocks for a ``-> ToolContent`` tool."""
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_-]{1,128}")
+#: A content source label: lower case, short, no spaces (``folder``, ``files``, ``memory``).
+_CONTENT_SOURCE = re.compile(r"[a-z][a-z0-9_]{0,31}")
+
+
+def check_content_source(value: str | None) -> str | None:
+    """``value`` if it is a valid content source label or ``None``; else :class:`ToolDefinitionError`."""
+    if value is not None and (not isinstance(value, str) or not _CONTENT_SOURCE.fullmatch(value)):
+        raise ToolDefinitionError(f"Invalid content source: {value!r} (a-z, 0-9 and _; at most 32)")
+    return value
 
 
 def _parse_tool_docstring(function: Callable[..., Any]) -> tuple[str, dict[str, str], str]:
@@ -117,6 +126,13 @@ class Tool:
 
     The decorated object stays callable like the original function; use
     :meth:`execute` to run it with validated, JSON-shaped tool input.
+
+    ``content_source`` declares where the content a call returns comes from, for
+    hosts that track the provenance of what enters a model's context (for
+    example ``"folder"`` for a tool that reads files of a folder a person
+    granted). ``None`` (the default) declares nothing. The agent reports it on
+    every :class:`~orkexa.ToolCall` of the tool (``ToolCall.content_source``);
+    Orkexa itself does not act on it.
     """
 
     def __init__(
@@ -125,9 +141,11 @@ class Tool:
         *,
         name: str | None = None,
         strict: bool = True,
+        content_source: str | None = None,
     ) -> None:
         self.name = name
         self.strict = strict
+        self.content_source = check_content_source(content_source)
         self.function: Callable[..., Any] | None = None
         self.description: str | None = None
         self.return_description: str | None = None
@@ -215,7 +233,7 @@ class Tool:
         if self.function is None:
             if len(args) != 1 or kwargs or not callable(args[0]):
                 raise ToolDefinitionError("Decorator expects exactly one function")
-            return type(self)(args[0], name=self.name, strict=self.strict)
+            return type(self)(args[0], name=self.name, strict=self.strict, content_source=self.content_source)
         # Normal direct Python call; use .execute() for API calls with validation.
         return self.function(*args, **kwargs)
 

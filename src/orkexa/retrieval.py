@@ -67,6 +67,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "HYBRID_FUSIONS",
+    "INDEX_CONTENT_SOURCE",
     "LEXICAL_WEIGHT",
     "MAX_QUERY_CHARS",
     "MAX_QUERY_WORDS",
@@ -101,6 +102,8 @@ __all__ = [
 ]
 
 SEARCH_TOOL_NAME = "search"
+#: What the search tool of an :class:`Index` declares about its content (``ToolCall.content_source``).
+INDEX_CONTENT_SOURCE = "index"
 Embedder = Callable[[list[str]], Sequence[Sequence[float]]]
 """Turns texts into vectors, e.g. a Voyage AI or sentence-transformers call."""
 
@@ -758,7 +761,7 @@ class Index(ABC):
                 return ["No results found."]
             return [hit.block(citations=citations) for hit in hits]
 
-        return Tool(search, name=name)
+        return Tool(search, name=name, content_source=INDEX_CONTENT_SOURCE)
 
 
 def _check_query(query: str, max_chars: int, max_words: int) -> None:
