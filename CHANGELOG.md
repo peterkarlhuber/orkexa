@@ -5,6 +5,22 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Fixed: the swap race no longer starves the reader on Windows (W3-S, 2026-11-26)
+
+* `orkexa.testing.pathguard.swap_race` (conformance case `folders.swap_race`, N-63) failed now and then on
+  windows-latest with "the reader never returned the regular file", never with content from outside the root. The
+  cause was in the harness, not a TOCTOU gap. On Windows a rename fails while the reader holds a handle, and the
+  swapper retried at once. Each attempt opens the entry for deletion, so the reader's own opens failed as "in use"
+  and the reader starved.
+* The swapper now waits `RETRY_PAUSE` (0.5 ms) before it retries a failed rename. A reader that has not yet returned
+  the regular file keeps reading up to the timeout, and each of those reads is checked for the canary. The attack
+  and the findings are the same: `test_l7_swap_race_reports_a_reader_that_refuses_everything` pins that a reader
+  that refuses everything is still reported.
+* The conformance race was repeated 200 times on windows-latest:
+  * before the fix, 8 of 200 rounds failed (1.9 % of folder reads got through);
+  * after the fix, 0 of 200 in each of two runs (0 rounds without a regular read).
+* On windows-11-arm the race failed in 0 of 200 rounds before the fix and in 0 of 200 in each of two runs after it.
+
 ### Added: content sources of tools (Nodestro N-08, 2026-11-25)
 
 * `Tool(content_source=...)` declares where the content a tool returns comes from (a short lower-case label such as
