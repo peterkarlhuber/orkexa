@@ -20,6 +20,20 @@ listed here. The development version is `0.2.0.dev0`.
   * before the fix, 8 of 200 rounds failed (1.9 % of folder reads got through);
   * after the fix, 0 of 200 in each of two runs (0 rounds without a regular read).
 * On windows-11-arm the race failed in 0 of 200 rounds before the fix and in 0 of 200 in each of two runs after it.
+* Review of #116 (test strength): pausing after every refused rename let the swapper sleep through the gap
+  right after the reader closed its handle. With the Windows rule emulated, a check-then-open reader was caught in
+  60 of 60 rounds by master and in only 22 of 60 by the first fix. Now:
+  * a refused rename is retried at once up to `RETRY_SPIN` (500) times in a row, and only then paused;
+  * `min_swaps` counts only swaps during the reads.
+  * Numbers after the change:
+    * the review's PoC: 59 of 60 (master 60 of 60);
+    * on windows-latest and windows-11-arm, a check-then-open reader was caught in 40 of 40 rounds for a file and
+      for a folder, natively and emulated (master the same). The review's lstat reader is caught in about 0 of 40
+      rounds there by master, the first fix and this change alike;
+    * 200 conformance rounds on each runner: no finding, and no round without a regular read.
+  * Self-tests: `test_l7_swap_race_catches_a_reader_that_checks_then_opens`,
+    `test_l7_swap_race_catches_a_check_then_open_reader_under_the_windows_sharing_rule` and
+    `test_l7_swap_race_retries_a_failed_rename_at_once_before_it_pauses` (fails on the first fix).
 
 ### Added: content sources of tools (Nodestro N-08, 2026-11-25)
 
