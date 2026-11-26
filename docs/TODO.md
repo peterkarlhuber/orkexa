@@ -108,6 +108,12 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
   folder granted under its own name (the target of a link); a special file swapped in on macOS between
   `fstatat` and the open; an opted-in hard link may expose a file that lives elsewhere; the macOS memory budget
   is polled.
+- Done (W3-S): the intermittent `folders.swap_race` failure on windows-latest ("the reader never returned the
+  regular file") was a harness starvation, not a TOCTOU gap: the swapper's immediate rename retries kept the entry
+  open for deletion. It is fixed in `pathguard.swap_race`: an immediate retry up to `RETRY_SPIN` times, then
+  `RETRY_PAUSE`, and `min_swaps` counted during the reads. 0 of 3 x 200 Windows rounds fail (before: 8 of 200). A
+  check-then-open reader is still caught at master's rate (review of #116: emulated 59/60 vs master 60/60; first
+  fix 22/60). See the changelog.
 - **Next step:** G-5 before productive activation (N-10 acceptance). Nodestro adopts it in N-10 (runtime `folders`, tools `list_folder`, `read_file`,
   `search_files`, behind a switch that stays off) and moves nodestro-api's `output_folder.py` system-folder list
   onto `orkexa.fs.system_folders`. The folder grant cases (`orkexa.testing.conformance.FOLDER_CASES`, N-63) run
