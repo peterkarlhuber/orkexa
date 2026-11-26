@@ -473,3 +473,130 @@ def test_l7_swap_race_reports_a_reader_that_refuses_everything(
     assert [finding.problem for finding in findings] == ["the reader never returned the regular file"]
     assert reads[0] > 50  # it read on past the iterations, until the timeout
     assert time.monotonic() - started < 30
+
+
+def _check_then_open(layout: pathguard.Layout, held: list[bool] | None = None) -> Callable[[str], bytes]:
+    """A deliberately vulnerable reader: it checks the entry without a handle (``lstat``), then opens it by
+    its path, which follows a link swapped in between (a TOCTOU bug). ``held`` is ``[True]`` while it holds
+    a handle."""
+
+    def is_link(path: Path) -> bool:
+        return os.path.islink(path) or bool(getattr(os.path, "isjunction", lambda _p: False)(path))
+
+    def read(name: str | bytes) -> bytes:
+        path = layout.root / str(name)
+        if is_link(path) or is_link(path.parent):  # check ...
+            raise OSError("link refused")
+        if held is not None:
+            held[0] = True
+        try:
+            with open(path, "rb") as handle:  # ... then use
+                return handle.read()
+        finally:
+            if held is not None:
+                held[0] = False
+
+    return read
+
+
+#: Rounds a self-test may take to catch the vulnerable reader (it stops at the first catch). A round catches
+#: it with a probability that depends on the machine (a third of the rounds or more on Linux).
+ROUNDS = 25
+
+
+def _rounds_caught(tmp_path: Path, folder: bool, rounds: int) -> tuple[int, int]:
+    caught = ran = 0
+    for number in range(rounds):
+        layout = build_layout(tmp_path / f"r{int(folder)}-{number}")
+        found = swap_race(_check_then_open(layout), layout, folder=folder, timeout=5)
+        if found:
+            ran += 1
+        if any("canary" in finding.problem for finding in found):
+            caught += 1
+            break
+    return caught, ran
+
+
+@pytest.mark.parametrize("folder", [False, True])
+def test_l7_swap_race_catches_a_reader_that_checks_then_opens(tmp_path: Path, folder: bool) -> None:
+    """The swap race is a real test (review of #116): a reader that checks an entry and then opens it by its
+    path is caught reading the canary, on every platform the CI runs, with the swapper's retry rules as they
+    are (an immediate retry first, a pause only after :data:`~orkexa.testing.pathguard.RETRY_SPIN` tries)."""
+    caught, ran = _rounds_caught(tmp_path, folder, rounds=ROUNDS)
+    if ran == 0:
+        pytest.skip("no link can be made here")
+    assert caught >= 1
+
+
+def test_l7_swap_race_catches_a_check_then_open_reader_under_the_windows_sharing_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same with Windows' rule emulated on every platform: a rename of ``race`` fails while the reader
+    holds a handle on it (a sharing violation). Before, a swapper that paused after each failed rename slept
+    through the gap after the reader closed its handle and let the vulnerable reader pass in most rounds."""
+    held = [False]
+    rename = os.rename
+
+    def windows_like(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        if held[0] and os.path.basename(os.fspath(src)).startswith("race"):
+            raise PermissionError(32, "sharing violation (emulated)")
+        rename(src, dst)
+
+    caught = ran = 0
+    for number in range(ROUNDS):
+        if caught:
+            break
+        layout = build_layout(tmp_path / f"w{number}")
+        reader = _check_then_open(layout, held)
+        monkeypatch.setattr(os, "rename", windows_like)
+        try:
+            found = swap_race(reader, layout, timeout=5)
+        finally:
+            monkeypatch.setattr(os, "rename", rename)
+        ran += bool(found)
+        caught += any("canary" in finding.problem for finding in found)
+    if ran == 0:
+        pytest.skip("no link can be made here")
+    assert caught >= 1
+
+
+def test_l7_swap_race_retries_a_failed_rename_at_once_before_it_pauses(
+    layout: pathguard.Layout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review of #116 (test strength): the swapper retries a refused rename at once, and pauses only after
+    :data:`~orkexa.testing.pathguard.RETRY_SPIN` refusals in a row. Before, it paused after every refusal
+    and so slept through the gap right after the reader closed its handle, where a check-then-open bug is
+    caught."""
+    refusals = pathguard.RETRY_SPIN * 2 + 10
+    left = [refusals]
+    rename = os.rename
+    pauses: list[float] = []
+    sleep = time.sleep
+
+    failures = [0]  # every refused rename: the emulated ones, and real ones (Windows, while the reader reads)
+
+    def refusing(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        if left[0] > 0 and os.path.basename(os.fspath(src)) == "race":
+            left[0] -= 1
+            failures[0] += 1
+            raise PermissionError(32, "sharing violation (emulated)")
+        try:
+            rename(src, dst)
+        except OSError:
+            failures[0] += 1
+            raise
+
+    def recorded(seconds: float) -> None:
+        pauses.append(seconds)
+        sleep(seconds)
+
+    monkeypatch.setattr(os, "rename", refusing)
+    monkeypatch.setattr(time, "sleep", recorded)
+    root = SafeRoot(layout.root)
+    found = swap_race(root.read_bytes, layout, iterations=200, min_swaps=1, timeout=10)
+    monkeypatch.setattr(os, "rename", rename)
+    assert found == []
+    assert left[0] == 0
+    # At most one pause per RETRY_SPIN refusals in a row (before: one per refusal).
+    assert pauses and set(pauses) == {pathguard.RETRY_PAUSE}
+    assert len(pauses) <= failures[0] // pathguard.RETRY_SPIN
