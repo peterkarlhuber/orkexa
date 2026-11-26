@@ -97,7 +97,7 @@ jobs:
           python-version: "3.13"
       - run: pip install --prefer-binary -r requirements/tabrion.txt -e .
       - run: python scripts/swap_race_loop.py 200
-      - run: python scripts/swap_race_loop.py 0 60
+      - run: python scripts/swap_race_loop.py 0 40
 
   docker:
     # ORK-006/019/020/021: DockerSandbox against real daemons. Each job builds docker/sandbox.Dockerfile, runs the

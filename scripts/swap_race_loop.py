@@ -56,41 +56,80 @@ def main(rounds: int) -> int:
 
 
 def vulnerable_rates(rounds: int) -> None:
-    """How often a check-then-open reader is caught: master's swap_race and this branch's (#116 review)."""
+    """How often a check-then-open reader is caught: master's swap_race and this branch's (#116 review),
+    for a file and a folder, natively and with Windows' sharing rule emulated."""
     import importlib.util
     import os
     import stat
+    from typing import Any
 
     from orkexa.testing import pathguard as branch
 
-    source = Path(__file__).with_name("_pathguard_master.py")
-    spec = importlib.util.spec_from_file_location("pathguard_master", source)
-    assert spec is not None and spec.loader is not None
-    master = importlib.util.module_from_spec(spec)
-    sys.modules["pathguard_master"] = master
-    spec.loader.exec_module(master)
-    for label, module in (("master", master), ("branch", branch), ("master", master), ("branch", branch)):
-        caught = clean = other = 0
-        for number in range(rounds):
-            with tempfile.TemporaryDirectory() as work:
-                layout = module.build_layout(Path(work) / f"v{number}")
+    def load(name: str) -> Any:
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(f"_{name}.py"))
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
 
-                def read(name: str, root: Path = layout.root) -> bytes:
-                    path = root / name
-                    if stat.S_ISLNK(os.lstat(path).st_mode):  # check ...
-                        raise OSError("link refused")
-                    with open(path, "rb") as handle:  # ... then use
-                        return handle.read()
+    master, before = load("pathguard_master"), load("pathguard_ee34e49")
+    held = [False]
+    rename = os.rename
 
-                found = module.swap_race(read, layout, iterations=10_000, timeout=5)
-                if any("canary" in item.problem for item in found):
-                    caught += 1
-                elif not found:
-                    clean += 1
-                else:
-                    other += 1
-        line = f"vulnerable reader, {label}: caught {caught}/{rounds}, passed clean {clean}, other {other}"
-        print(line, flush=True)
+    def windows_like(src: str, dst: str) -> None:
+        if held[0] and os.path.basename(os.fspath(src)).startswith("race"):
+            raise PermissionError(32, "sharing violation (emulated)")
+        rename(src, dst)
+
+    def is_link(path: Path) -> bool:
+        return os.path.islink(path) or bool(getattr(os.path, "isjunction", lambda _p: False)(path))
+
+    implementations = (("master", master), ("ee34e49", before), ("branch", branch))
+    for kind in ("islink", "lstat"):
+        for emulated in (False, True):
+            for folder in (False, True) if kind == "islink" else (False,):
+                for label, module in implementations * 2:
+                    caught = clean = other = nolink = 0
+                    for number in range(rounds):
+                        with tempfile.TemporaryDirectory() as work:
+                            layout = module.build_layout(Path(work) / f"v{number}")
+
+                            def read(name: str, root: Path = layout.root, kind: str = kind) -> bytes:
+                                path = root / name
+                                if kind == "lstat":  # the review's reader (poc_swap_race_strength.py)
+                                    if stat.S_ISLNK(os.lstat(path).st_mode):
+                                        raise OSError("link refused")
+                                elif is_link(path) or is_link(path.parent):  # check ...
+                                    raise OSError("link refused")
+                                held[0] = True
+                                try:
+                                    with open(path, "rb") as handle:  # ... then use
+                                        return handle.read()
+                                finally:
+                                    held[0] = False
+
+                            if emulated:
+                                os.rename = windows_like  # type: ignore[assignment]
+                            try:
+                                found = module.swap_race(
+                                    read, layout, iterations=10_000, folder=folder, timeout=5
+                                )
+                            finally:
+                                os.rename = rename
+                            if not (layout.root / "race").exists() and not found:
+                                nolink += 1
+                            elif any("canary" in item.problem for item in found):
+                                caught += 1
+                            elif not found:
+                                clean += 1
+                            else:
+                                other += 1
+                    line = (
+                        f"vulnerable reader {kind}, emulated={emulated} folder={folder} {label}:"
+                        f" caught {caught}/{rounds}, passed clean {clean}, other {other}, no link {nolink}"
+                    )
+                    print(line, flush=True)
 
 
 if __name__ == "__main__":
