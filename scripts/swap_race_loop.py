@@ -1,23 +1,22 @@
 """TEMPORARY (W3-S, removed before handover): repeat the conformance swap race and count its outcomes.
 
-Runs the ``folders.swap_race`` case's two races (a file, a folder) ``N`` times with the case's own parameters
-against the reference folder access of the conformance tests, and prints how often each finding occurred, how many
-reads returned the regular file, and why the others were refused.
+Runs the ``folders.swap_race`` case's two races (a file, a folder) ``N`` times with the case's own
+parameters against the reference folder access of the conformance tests, and prints how often each finding
+occurred, how many reads returned the regular file, and why the others were refused.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from functools import partial
 from pathlib import Path
 import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests" / "conformance"))
 
-from folder_access import SafeRootFolders  # noqa: E402
+from folder_access import SafeRootFolders
 
-from orkexa.testing import pathguard  # noqa: E402
+from orkexa.testing import pathguard
 
 
 def main(rounds: int) -> int:
@@ -33,7 +32,9 @@ def main(rounds: int) -> int:
                 seen = reads[folder]
                 before = seen["ok"]
 
-                def read(path: str, seen: Counter[str] = seen) -> bytes:
+                def read(
+                    path: str, seen: Counter[str] = seen, access: SafeRootFolders = access, grant: str = grant
+                ) -> bytes:
                     try:
                         data = access.read(grant, path).encode("utf-8")
                     except Exception as exc:
@@ -54,30 +55,27 @@ def main(rounds: int) -> int:
     return 1 if findings else 0
 
 
-if __name__ == "__main__" and len(sys.argv) <= 2:
-    raise SystemExit(main(int(sys.argv[1]) if len(sys.argv) > 1 else 100))
-
-
 def vulnerable_rates(rounds: int) -> None:
-    """How often a check-then-open reader is caught: master's swap_race against this branch's (review of #116)."""
+    """How often a check-then-open reader is caught: master's swap_race and this branch's (#116 review)."""
     import importlib.util
     import os
     import stat
 
     from orkexa.testing import pathguard as branch
 
-    spec = importlib.util.spec_from_file_location("pathguard_master", Path(__file__).with_name("_pathguard_master.py"))
-    master = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    source = Path(__file__).with_name("_pathguard_master.py")
+    spec = importlib.util.spec_from_file_location("pathguard_master", source)
+    assert spec is not None and spec.loader is not None
+    master = importlib.util.module_from_spec(spec)
     sys.modules["pathguard_master"] = master
-    spec.loader.exec_module(master)  # type: ignore[union-attr]
+    spec.loader.exec_module(master)
     for label, module in (("master", master), ("branch", branch), ("master", master), ("branch", branch)):
         caught = clean = other = 0
         for number in range(rounds):
             with tempfile.TemporaryDirectory() as work:
                 layout = module.build_layout(Path(work) / f"v{number}")
-                root = layout.root
 
-                def read(name: str, root: Path = root) -> bytes:
+                def read(name: str, root: Path = layout.root) -> bytes:
                     path = root / name
                     if stat.S_ISLNK(os.lstat(path).st_mode):  # check ...
                         raise OSError("link refused")
@@ -91,8 +89,12 @@ def vulnerable_rates(rounds: int) -> None:
                     clean += 1
                 else:
                     other += 1
-        print(f"vulnerable reader, {label}: caught {caught}/{rounds}, passed clean {clean}, other findings {other}", flush=True)
+        line = f"vulnerable reader, {label}: caught {caught}/{rounds}, passed clean {clean}, other {other}"
+        print(line, flush=True)
 
 
-if __name__ == "__main__" and len(sys.argv) > 2:
-    vulnerable_rates(int(sys.argv[2]))
+if __name__ == "__main__":
+    if len(sys.argv) > 2:
+        vulnerable_rates(int(sys.argv[2]))
+    else:
+        raise SystemExit(main(int(sys.argv[1]) if len(sys.argv) > 1 else 100))
