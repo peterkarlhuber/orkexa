@@ -282,12 +282,15 @@ PUBLIC = {
     ],
     "orkexa.fs": [  # Nodestro N-10: the path guard
         "DEFAULT_BLOCKED",
+        "DEFAULT_BROWSE_FOLDERS",  # Nodestro N-11: the folder browser
         "DEFAULT_LIST_SECONDS",
         "DEFAULT_MAX_ENTRIES",
         "DEFAULT_MAX_FILE_BYTES",
         "Entry",
         "ExtractedText",
         "FS_ERROR_CODES",
+        "Folder",
+        "FolderListing",
         "FsError",
         "MAX_DEPTH",
         "MAX_NAME_BYTES",
@@ -297,6 +300,8 @@ PUBLIC = {
         "TEXT_SUFFIXES",
         "TextBudget",
         "allowed_folders",
+        "browse_folder",
+        "browse_problem",
         "display_name",
         "fold",  # Nodestro N-10 re-review M2: products compare their own rules as the guard does
         "is_short_name",

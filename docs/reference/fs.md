@@ -27,6 +27,14 @@ text = root.extract_text("specs/offer.pdf").text
 
 ::: orkexa.fs.root_problem
 
+::: orkexa.fs.browse_folder
+
+::: orkexa.fs.browse_problem
+
+::: orkexa.fs.FolderListing
+
+::: orkexa.fs.Folder
+
 ::: orkexa.fs.system_folders
 
 ::: orkexa.fs.allowed_folders

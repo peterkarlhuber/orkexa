@@ -108,6 +108,12 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
   folder granted under its own name (the target of a link); a special file swapped in on macOS between
   `fstatat` and the open; an opted-in hard link may expose a file that lives elsewhere; the macOS memory budget
   is polled.
+- New for the review (N-11): the folder browser `browse_folder` / `browse_problem` (`tests/fs/test_browse.py`),
+  which lists folder names above the folders that can be roots (file-system root, home folders). Review findings
+  1 (existence oracle) and 2 (homes in `/usr/sbin`, `/bin`) are fixed. Open (review 3 and 4): other users' home
+  folders outside the known parents (`/srv/home`, bind mounts, directory-service homes) are not recognized
+  (comparing against every account's `pw_dir` identity would close it); a hung mount, also behind a link, can
+  stall one listing beyond its time limit, which is checked only between entries.
 - Done (W3-S): the intermittent `folders.swap_race` failure on windows-latest ("the reader never returned the
   regular file") was a harness starvation, not a TOCTOU gap: the swapper's immediate rename retries kept the entry
   open for deletion. It is fixed in `pathguard.swap_race`: an immediate retry up to `RETRY_SPIN` times, then
