@@ -429,16 +429,23 @@ _ENTRIES = (
     ),
     Statement(
         "memory_write",
-        "INSERT INTO {memory} (tenant_id, namespace, path, content)"
-        " VALUES (%(tenant_id)s, %(namespace)s, %(path)s, %(content)s)"
+        "INSERT INTO {memory} (tenant_id, namespace, path, content, origin)"
+        " VALUES (%(tenant_id)s, %(namespace)s, %(path)s, %(content)s, %(origin)s)"
         " ON CONFLICT (tenant_id, namespace, path) DO UPDATE SET content = excluded.content,"
-        " updated_at = clock_timestamp()",
-        _p("path", "content"),
+        " origin = excluded.origin, updated_at = clock_timestamp()",
+        _p("path", "content", "origin"),
         "write",
     ),
     Statement(
         "memory_files",
         "SELECT path, octet_length(content) FROM {memory}"
+        " WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND starts_with(path, %(start)s)",
+        _p("start"),
+        "read",
+    ),
+    Statement(
+        "memory_entries",
+        "SELECT path, octet_length(content), updated_at, origin FROM {memory}"
         " WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND starts_with(path, %(start)s)",
         _p("start"),
         "read",

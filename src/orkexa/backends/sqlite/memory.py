@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 import os
 
 from ..._storage import connect_private_database, storage_errors, write_transaction
-from ...memory import MemoryBackend
+from ...memory import MemoryBackend, MemoryEntry, _path
 
 __all__ = ["SQLiteMemory"]
 
@@ -23,6 +23,11 @@ class SQLiteMemory(MemoryBackend):
     Each ``namespace`` is a separate ``/memories`` (one per user or project) in the
     table ``memory_files``. Every command runs in a transaction, and the database
     uses WAL mode, so several processes can share one file.
+
+    Each file keeps the time and origin of its last write (N-24, capability
+    ``metadata``). A table from an earlier release has no ``origin`` column;
+    opening adds it (one ``ALTER TABLE`` in a write transaction): the files keep
+    their content and time and list the origin ``None``.
 
     Args:
         database: Path of the database file (``":memory:"`` for a temporary one).
@@ -56,18 +61,26 @@ class SQLiteMemory(MemoryBackend):
                 self._connection.execute(
                     "CREATE TABLE IF NOT EXISTS memory_files ("
                     " namespace TEXT NOT NULL, path TEXT NOT NULL, content TEXT NOT NULL,"
-                    " updated_at TEXT NOT NULL, PRIMARY KEY (namespace, path))"
+                    " updated_at TEXT NOT NULL, origin TEXT, PRIMARY KEY (namespace, path))"
                 )
+            if not self._has_origin():
+                with write_transaction(self._connection):  # BEGIN IMMEDIATE: one process adds it
+                    if not self._has_origin():
+                        self._connection.execute("ALTER TABLE memory_files ADD COLUMN origin TEXT")
         except BaseException:
             self._connection.close()
             raise
 
     @property
     def capabilities(self) -> frozenset[str]:
-        """``partitioned`` (by ``namespace``) and ``concurrent_writers``.
+        """``partitioned`` (by ``namespace``), ``concurrent_writers`` and ``metadata``.
 
         See :attr:`MemoryBackend.capabilities`."""
-        return frozenset({"partitioned", "concurrent_writers"})
+        return frozenset({"partitioned", "concurrent_writers", "metadata"})
+
+    def _has_origin(self) -> bool:
+        columns = self._connection.execute("PRAGMA table_info(memory_files)").fetchall()
+        return any(row[1] == "origin" for row in columns)
 
     def close(self) -> None:
         """Close the database connection."""
@@ -93,11 +106,25 @@ class SQLiteMemory(MemoryBackend):
 
     def _write(self, key: str, text: str) -> None:
         self._connection.execute(
-            "INSERT INTO memory_files (namespace, path, content, updated_at) VALUES (?, ?, ?, ?) "
+            "INSERT INTO memory_files (namespace, path, content, updated_at, origin) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT (namespace, path) DO UPDATE SET content = excluded.content, "
-            "updated_at = excluded.updated_at",
-            (self.namespace, key, text, datetime.now(UTC).isoformat()),
+            "updated_at = excluded.updated_at, origin = excluded.origin",
+            (self.namespace, key, text, datetime.now(UTC).isoformat(), self._origin),
         )
+
+    def _entries(self, prefix: str) -> dict[str, MemoryEntry]:
+        start = f"{prefix}/" if prefix else ""
+        rows = self._connection.execute(
+            "SELECT path, length(CAST(content AS BLOB)), updated_at, origin FROM memory_files "
+            "WHERE namespace = ? AND substr(path, 1, ?) = ?",
+            (self.namespace, len(start), start),
+        )
+        return {
+            str(path): MemoryEntry(
+                _path(str(path)), int(size), _time(updated_at), None if origin is None else str(origin)
+            )
+            for path, size, updated_at, origin in rows
+        }
 
     def _files(self, prefix: str) -> dict[str, int]:
         start = f"{prefix}/" if prefix else ""
@@ -128,3 +155,12 @@ class SQLiteMemory(MemoryBackend):
                 old + "/",
             ),
         )
+
+
+def _time(value: object) -> datetime | None:
+    """A stored ``updated_at`` (ISO 8601) as an aware time; ``None`` for a value that is not one."""
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)

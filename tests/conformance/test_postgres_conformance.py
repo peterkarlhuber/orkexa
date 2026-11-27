@@ -33,13 +33,14 @@ from .adapter import run_and_check
 
 ALL = frozenset({"vectors", "reindex", "partitioned", "concurrent_writers"})
 STORAGE = frozenset({"partitioned", "concurrent_writers"})
+MEMORY = STORAGE | {"metadata"}
 
 #: target -> (the cases it runs, the capabilities it must report)
 TARGETS: dict[str, tuple[tuple[Case, ...], frozenset[str]]] = {
     "pg-index": (ALL_INDEX_CASES, ALL),
     "pg-index-python": (ALL_INDEX_CASES, ALL),
     "pg-file-store": (ALL_FILE_STORE_CASES, STORAGE),
-    "pg-memory": (ALL_MEMORY_CASES, STORAGE),
+    "pg-memory": (ALL_MEMORY_CASES, MEMORY),
 }
 
 #: T-PART-n (plan 10.4, in its order R, W, U, D, RX, TX, CC, V, J) -> the orkexa cases that prove it.

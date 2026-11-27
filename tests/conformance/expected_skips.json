@@ -62,6 +62,7 @@
       },
       "file-memory": {
         "memory.concurrent_inserts_lose_nothing": "FileMemory is one directory for one process: no partitions, no concurrent writers",
+        "memory.metadata": "FileMemory stores plain files: no time or origin per file (no metadata capability)",
         "memory.second_instance_sees_the_files": "FileMemory is one directory for one process: no partitions, no concurrent writers",
         "partition.memory_hostile_values": "FileMemory is one directory for one process: no partitions, no concurrent writers",
         "partition.memory_reads": "FileMemory is one directory for one process: no partitions, no concurrent writers",

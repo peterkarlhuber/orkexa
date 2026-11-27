@@ -193,9 +193,11 @@ def test_psycopg_source_runs_each_mode(db: support.Database) -> None:
     assert isinstance(source, ConnectionSource)
     executor = Executor(source, layout=LAYOUT, tenant_id=TENANT)
     key = {"tenant_id": TENANT, "namespace": "n"}
-    assert executor.execute("memory_write", {**key, "path": "a", "content": "x"}).rowcount == 1
+    assert (
+        executor.execute("memory_write", {**key, "path": "a", "content": "x", "origin": None}).rowcount == 1
+    )
     with executor.transaction():
-        executor.execute("memory_write", {**key, "path": "b", "content": "y"})
+        executor.execute("memory_write", {**key, "path": "b", "content": "y", "origin": None})
         assert executor.execute("memory_files", {**key, "start": ""}).rows == [("a", 1), ("b", 1)]
     with pytest.raises(ValueError), source.transaction("bulk"):  # type: ignore[arg-type]
         pass
@@ -207,10 +209,10 @@ def test_a_failed_transaction_rolls_back_and_the_next_operation_is_clean(db: sup
     """A forced error after the first statement rolls the transaction back; the next operation works."""
     executor = Executor(db.source, layout=LAYOUT, tenant_id=TENANT)
     key = {"tenant_id": TENANT, "namespace": "n"}
-    executor.execute("memory_write", {**key, "path": "keep", "content": "x"})
+    executor.execute("memory_write", {**key, "path": "keep", "content": "x", "origin": None})
     with pytest.raises(RuntimeError), executor.transaction():
         executor.execute("memory_clear", key)
-        executor.execute("memory_write", {**key, "path": "new", "content": "y"})
+        executor.execute("memory_write", {**key, "path": "new", "content": "y", "origin": None})
         raise RuntimeError("forced")
     assert executor.execute("memory_files", {**key, "start": ""}).rows == [("keep", 1)]
     with pytest.raises(Exception), executor.transaction():  # noqa: B017 - the server's own error

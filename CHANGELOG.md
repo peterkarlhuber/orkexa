@@ -5,6 +5,16 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: memory entries with their time and origin (N-24, 2026-11-27)
+
+* `MemoryBackend.list_entries(path)` lists every memory file as `MemoryEntry(path, size, updated_at, origin)`.
+  `create`, `str_replace` and `insert` take an optional `origin`; `execute` (the model's memory tool) writes with
+  `ORIGIN_TOOL`. New capability `metadata` (`EphemeralMemory`, `SQLiteMemory`, `PostgresMemory`); conformance
+  cases `memory.list_entries` and `memory.metadata`.
+* `SQLiteMemory` adds the nullable column `origin` to an existing `memory_files` table when it opens it. The
+  PostgreSQL schema is now version 2 (`origin` on the memory table, Nodestro migration 0011); `migrate` brings a
+  database of version 1 to version 2, and `verify_schema` reports a missing `origin` column.
+
 ### Fixed: a PDF with a damaged object is unreadable again under pypdf 7.2.0 (W5, 2026-11-27)
 
 * pypdf 7.2.0 turns a `RecursionError` or `MemoryError` inside an array into `PdfReadError`, which a lenient

@@ -186,6 +186,8 @@ PUBLIC = {
         "MEMORY_ROOT",
         "MEMORY_TOOL_NAME",
         "MemoryBackend",
+        "MemoryEntry",
+        "ORIGIN_TOOL",
         "SQLiteMemory",
     ],
     "orkexa.embeddings": [

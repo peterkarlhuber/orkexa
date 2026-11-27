@@ -17,7 +17,8 @@ here, rendered with the test prefix ``t_``:
   name; ``schema.py`` and ``connection.py`` run only their own constant statements; no ``sql.Literal``;
   psycopg only in ``connection.py`` (inside functions) or for type checking.
 * **T-PAR-2** the catalog rendered with ``nodestro_`` is Nodestro's catalog of nodestro-runtime 76f9cb2
-  (``tests/fixtures/postgres/nodestro_catalog.json``), text for text.
+  (``tests/fixtures/postgres/nodestro_catalog.json``), text for text, except the entries of :data:`SINCE_B4`
+  (changed or added later, each with its exact text here).
 
 The tests need psycopg (rendering) and pglast (the rule engine), both in ``dev``; they need no server.
 """
@@ -92,6 +93,7 @@ EXPECTED: dict[str, bool] = {
     "memory_read": True,
     "memory_write": True,
     "memory_files": True,
+    "memory_entries": True,
     "memory_delete": True,
     "memory_rename": True,
     "memory_clear": True,
@@ -373,14 +375,16 @@ def test_no_module_outside_the_catalog_runs_free_sql() -> None:
 
 
 def test_the_schema_steps_loop_runs_only_the_constant_steps() -> None:
-    """The one ``_render(step, ...)`` that T-CAT-4 lets through iterates the constant ``_STEPS``."""
+    """The one ``_render(step, ...)`` that T-CAT-4 lets through iterates the constant ``_STEPS`` (or, N-24,
+    the constant ``_STEPS_V2`` of schema version 2)."""
     tree = ast.parse((PACKAGE / "schema.py").read_text(encoding="utf-8"))
     loops = [node for node in ast.walk(tree) if isinstance(node, ast.For | ast.comprehension)]
     steps = [loop for loop in loops if isinstance(loop.target, ast.Name) and loop.target.id == "step"]
-    assert steps and all(ast.unparse(loop.iter) == "_STEPS" for loop in steps)
-    assert "_STEPS" in _constants(tree) or any(
-        isinstance(node, ast.AnnAssign) and ast.unparse(node.target) == "_STEPS" for node in tree.body
-    )
+    assert steps and all(ast.unparse(loop.iter) in {"_STEPS", "_STEPS_V2"} for loop in steps)
+    for name in ("_STEPS", "_STEPS_V2"):
+        assert name in _constants(tree) or any(
+            isinstance(node, ast.AnnAssign) and ast.unparse(node.target) == name for node in tree.body
+        )
 
 
 def test_values_are_bound_and_psycopg_is_imported_late() -> None:
@@ -449,12 +453,48 @@ def _nodestro() -> dict[str, Any]:
     return data
 
 
+#: Entries changed or added after B4, with their exact text for ``nodestro_`` and their parameters; every
+#: other entry stays Nodestro's of 76f9cb2. N-24: a memory write records its origin (schema version 2), and
+#: the entries list the time and origin of each file.
+SINCE_B4: dict[str, dict[str, Any]] = {
+    "memory_write": {
+        "text": 'INSERT INTO "nodestro_memory_files" (tenant_id, namespace, path, content, origin)'
+        " VALUES (%(tenant_id)s, %(namespace)s, %(path)s, %(content)s, %(origin)s)"
+        " ON CONFLICT (tenant_id, namespace, path) DO UPDATE SET content = excluded.content,"
+        " origin = excluded.origin, updated_at = clock_timestamp()",
+        "params": ["tenant_id", "namespace", "path", "content", "origin"],
+        "kind": "write",
+        "partitioned": True,
+        "rows": False,
+    },
+    "memory_entries": {
+        "text": 'SELECT path, octet_length(content), updated_at, origin FROM "nodestro_memory_files"'
+        " WHERE tenant_id = %(tenant_id)s AND namespace = %(namespace)s AND starts_with(path, %(start)s)",
+        "params": ["tenant_id", "namespace", "start"],
+        "kind": "read",
+        "partitioned": True,
+        "rows": True,
+    },
+}
+#: The entries of :data:`SINCE_B4` that Nodestro's catalog of 76f9cb2 has (in another form).
+CHANGED_SINCE_B4 = frozenset({"memory_write"})
+
+
+def _expected_statements() -> dict[str, Any]:
+    """Nodestro's catalog of 76f9cb2 with the entries of :data:`SINCE_B4`."""
+    statements = dict(_nodestro()["statements"])
+    assert set(statements) >= CHANGED_SINCE_B4
+    assert not (set(SINCE_B4) - CHANGED_SINCE_B4) & set(statements)
+    statements.update(SINCE_B4)
+    return statements
+
+
 # MUP-ONA T-PAR-2
 @needs_psycopg
 def test_the_catalog_rendered_for_nodestro_is_nodestros_catalog() -> None:
     nodestro = _nodestro()
     assert nodestro["prefix"] == "nodestro_"
-    statements = nodestro["statements"]
+    statements = _expected_statements()
     assert sorted(statements) == sorted(CATALOG)
     for name, entry in CATALOG.items():
         expected = statements[name]
@@ -482,6 +522,6 @@ def test_the_catalog_equals_nodestros_after_normalization() -> None:
         printed = "; ".join(RawStream()(raw) for raw in parse_sql(to_postgres_params(text)))
         return re.sub(r"\$\d+", "$?", printed)
 
-    statements = _nodestro()["statements"]
+    statements = _expected_statements()
     for name, entry in CATALOG.items():
         assert normalized(_text(entry.template, "nodestro_")) == normalized(statements[name]["text"]), name

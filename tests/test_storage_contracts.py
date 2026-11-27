@@ -217,9 +217,9 @@ def test_capabilities_of_the_orkexa_implementations(tmp_path: Path) -> None:
     with SQLiteFileStore(tmp_path / "f.db") as store:
         assert store.capabilities == {"partitioned", "concurrent_writers"}
     with SQLiteMemory(tmp_path / "m.db") as memory:
-        assert memory.capabilities == {"partitioned", "concurrent_writers"}
+        assert memory.capabilities == {"partitioned", "concurrent_writers", "metadata"}
     assert LocalFileStore(tmp_path / "files").capabilities == frozenset()
-    assert EphemeralMemory().capabilities == frozenset()
+    assert EphemeralMemory().capabilities == {"metadata"}
     assert FileMemory(tmp_path / "memory").capabilities == frozenset()
 
 
