@@ -1,17 +1,20 @@
-"""The tables of the PostgreSQL backend as data: schema version 1, its check and its explicit migration.
+"""The tables of the PostgreSQL backend as data: schema version 2, its check and its explicit migration.
 
 Schema version 1 is exactly the form of Nodestro's migrations ``0002_knowledge_memory.sql`` and
 ``0010_knowledge_vectors.sql`` (nodestro-runtime), for any :class:`~orkexa.backends.postgres.PostgresLayout`:
-five tables, their constraints and three indexes, vectors as ``real[]``. The pgvector extension is never part
+five tables, their constraints and three indexes, vectors as ``real[]``. Version 2 (N-24) adds the nullable
+column ``origin`` to the memory table (Nodestro's ``0011_memory_origin.sql``): who wrote a memory file last.
+Files from version 1 keep their content and list the origin ``None``. The pgvector extension is never part
 of it: the backend ranks vectors with pgvector where an administrator installed it (``CREATE EXTENSION
 vector``), else in Python.
 
 * :func:`verify_schema` checks a database read-only (``information_schema``, ``pg_indexes``,
   ``pg_extension``): it never changes anything and never raises; it returns a :class:`SchemaReport`. A product
   calls it at start.
-* :func:`schema_steps` gives the statements of version 1 for a layout, for a product's own migration runner.
+* :func:`schema_steps` gives the statements of version 2 for a layout, for a product's own migration runner.
 * :func:`migrate` applies them, only when called (never by the stores), with a role that may create tables,
-  and records the version in ``<prefix>orkexa_schema``. It never runs ``CREATE EXTENSION``.
+  and records the version in ``<prefix>orkexa_schema``; a database of version 1 gets the steps of version 2
+  only. It never runs ``CREATE EXTENSION``.
 
 The runtime role of a product needs no DDL privilege: ``SELECT``, ``INSERT``, ``UPDATE`` and ``DELETE`` on the
 five tables (and ``SELECT`` on the version table, for :func:`verify_schema`) are enough.
@@ -30,7 +33,7 @@ from .connection import Connection, ConnectionSource, psycopg_sql
 __all__ = ["SCHEMA_VERSION", "SchemaProblem", "SchemaReport", "migrate", "schema_steps", "verify_schema"]
 
 #: The schema version this release of the backend reads and writes.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -49,7 +52,8 @@ class _Column:
 
 _TEXT_C = {"data_type": "text", "udt_name": "text", "collation": "C"}
 
-#: Schema version 1: every table (by its template placeholder) and its columns, as 0002 + 0010 create them.
+#: The schema: every table (by its template placeholder) and its columns, as 0002 + 0010 create them and 0011
+#: extends them (version 2).
 _TABLES: Mapping[str, tuple[_Column, ...]] = {
     "files": (
         _Column("tenant_id", nullable=False, **_TEXT_C),
@@ -88,6 +92,7 @@ _TABLES: Mapping[str, tuple[_Column, ...]] = {
             nullable=False,
             default="clock_timestamp()",
         ),
+        _Column("origin", "text", "text", nullable=True),  # version 2
     ),
     "spaces": (
         _Column("tenant_id", nullable=False, **_TEXT_C),
@@ -174,6 +179,9 @@ _STEPS: tuple[str, ...] = (
     "CREATE INDEX {vectors_chunk} ON {vectors} (chunk_id)",
 )
 
+#: The statements of schema version 2 after version 1 (Nodestro's 0011 without comments).
+_STEPS_V2: tuple[str, ...] = ("ALTER TABLE {memory} ADD COLUMN origin text",)
+
 #: The version table of :func:`migrate` (one row per applied version).
 _VERSION_TABLE = (
     "CREATE TABLE IF NOT EXISTS {version} (version integer PRIMARY KEY, applied_at timestamptz NOT NULL"
@@ -220,21 +228,22 @@ def _render(template: str, layout: PostgresLayout) -> Any:
 
 
 def schema_steps(layout: PostgresLayout) -> tuple[str, ...]:
-    """The statements that create schema version 1 for ``layout``, in order, as SQL text.
+    """The statements that create schema version 2 for ``layout``, in order, as SQL text.
 
     For a product that runs its own migrations. The table and index names are quoted identifiers; the text is
-    the form of Nodestro's migrations 0002 and 0010 without comments and without the optional ``CREATE
+    the form of Nodestro's migrations 0002, 0010 and 0011 without comments and without the optional ``CREATE
     EXTENSION vector``. The version table of :func:`migrate` is not part of it.
 
     Raises:
         ImportError: psycopg is not installed.
     """
-    return tuple(str(_render(step, layout).as_string(None)) for step in _STEPS)
+    version_1 = tuple(str(_render(step, layout).as_string(None)) for step in _STEPS)
+    return version_1 + tuple(str(_render(step, layout).as_string(None)) for step in _STEPS_V2)
 
 
 @dataclass(frozen=True)
 class SchemaProblem:
-    """One difference between a database and schema version 1.
+    """One difference between a database and the current schema version.
 
     ``kind`` is ``missing_table``, ``missing_column``, ``wrong_column`` (type, nullability, collation,
     default, generation or identity), ``missing_index``, ``wrong_index``, ``version`` (the version table names
@@ -264,7 +273,7 @@ class SchemaReport:
         pgvector: Whether the pgvector extension is installed in the database (``CREATE EXTENSION vector``);
             the index then ranks vectors in the database (mode B), else in Python (mode A). Either is valid.
         pgvector_version: The installed extension version, or ``None``.
-        problems: Every difference from schema version 1; empty when the schema is usable.
+        problems: Every difference from the current schema version; empty when the schema is usable.
     """
 
     prefix: str
@@ -276,7 +285,7 @@ class SchemaReport:
 
     @property
     def ok(self) -> bool:
-        """Whether the database holds schema version 1 for the layout (pgvector does not matter)."""
+        """Whether the database holds the current schema version for the layout (pgvector does not matter)."""
         return not self.problems
 
     def summary(self) -> str:
@@ -378,7 +387,7 @@ def _error_text(exc: Exception) -> str:
 
 
 def verify_schema(source: ConnectionSource, layout: PostgresLayout) -> SchemaReport:
-    """Check read-only that the database of ``source`` holds schema version 1 for ``layout``.
+    """Check read-only that the database of ``source`` holds the current schema version for ``layout``.
 
     Reads ``information_schema``, ``pg_indexes``, ``pg_extension`` and the version table of :func:`migrate`
     (when it exists) in one ``read`` transaction; changes nothing, needs no DDL privilege (a table the role
@@ -424,11 +433,12 @@ def verify_schema(source: ConnectionSource, layout: PostgresLayout) -> SchemaRep
 
 
 def migrate(source: ConnectionSource, layout: PostgresLayout) -> int:
-    """Create schema version 1 for ``layout`` where it is missing, and record it; only when called explicitly.
+    """Create schema version 2 for ``layout`` where it is missing, and record it; only when called explicitly.
 
     Runs in one transaction under an advisory lock (concurrent calls wait for each other): creates the version
-    table ``<prefix>orkexa_schema`` if needed, applies :func:`schema_steps` if no version is recorded, and
-    records version 1. A database that already has version 1 is left unchanged. It never runs ``CREATE
+    table ``<prefix>orkexa_schema`` if needed, applies :func:`schema_steps` if no version is recorded, or only
+    the steps of version 2 if version 1 is recorded, and records version 2. A database that already has
+    version 2 is left unchanged. It never runs ``CREATE
     EXTENSION``: an administrator installs pgvector, if wanted, and the index picks it up
     (``PostgresIndex.refresh``).
 
@@ -469,6 +479,11 @@ def migrate(source: ConnectionSource, layout: PostgresLayout) -> int:
             )
         if current == SCHEMA_VERSION:
             return current
+        if current == 1:
+            for step in _STEPS_V2:
+                connection.execute(_render(step, layout))
+            connection.execute(_render(_VERSION_WRITE, layout), {"version": SCHEMA_VERSION})
+            return current
         existing = [
             layout.table(key) for key in _TABLES if _rows(connection, _Q_TABLE, {"name": layout.table(key)})
         ]
@@ -480,6 +495,8 @@ def migrate(source: ConnectionSource, layout: PostgresLayout) -> int:
                 reason="unrecorded",
             )
         for step in _STEPS:
+            connection.execute(_render(step, layout))
+        for step in _STEPS_V2:
             connection.execute(_render(step, layout))
         connection.execute(_render(_VERSION_WRITE, layout), {"version": SCHEMA_VERSION})
         return current

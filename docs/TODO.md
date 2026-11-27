@@ -389,6 +389,7 @@ retrieval logic; new retrieval work (for example an ANN index) is planned here, 
 
 | This repo item | Other repo | Other item | Relation |
 |---|---|---|---|
+| N-24 (done here) | nodestro-runtime, nodestro-api | N-24 (memory entries) | `MemoryBackend.list_entries` and the `origin` of writes; PostgreSQL schema version 2 needs Nodestro's migration `0011_memory_origin.sql` (a Nodestro release with this Orkexa must ship it, else its start check reports the missing column); memory paths are at most `MEMORY_MAX_PATH` (512) characters. Open: on SQLite, `list_entries` and `view` take a write lock (`BEGIN IMMEDIATE`, the shared `_command` transaction); a read-only transaction for reads needs its own hook in every backend |
 | ORK-045 | nodestro-runtime, nodestro-api | N-10 (`folders`, file tools), N-11 (folder browser), N-63 (conformance) | Nodestro builds folder grants on `orkexa.fs.SafeRoot`, reuses `system_folders()` for `output_folder.py` and runs `orkexa.testing.pathguard` against its tools; until then nothing calls `orkexa.fs` |
 | ORK-046 | nodestro-runtime | N-05 (context compaction of conversations) | The runtime fits a conversation's history into the answer model's context window with `orkexa.core.compaction` (trim by default, summarize per conversation) |
 | ORK-047 | nodestro-runtime | N-08 (egress protection by content provenance) | The runtime's folder, input file and knowledge tools declare their content source, and the engine marks a run and its conversation as holding granted content from `ToolCall.content_source` |

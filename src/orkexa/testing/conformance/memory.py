@@ -1,14 +1,16 @@
 """Conformance cases of the ``MemoryBackend`` contract (T-CONF-6): the six commands, path rules, limits,
-failed commands that change nothing, concurrent writers."""
+failed commands that change nothing, concurrent writers; N-24: the entries with their metadata."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from functools import partial
 import threading
 from typing import Any
 
 from ...errors import MemoryToolError
+from ...memory import ORIGIN_TOOL
 from ._core import Case, Context, expect, expect_equal, expect_error
 
 __all__ = ["MEMORY_CASES"]
@@ -28,6 +30,7 @@ BAD_PATHS: tuple[str, ...] = (
     "/memories/x\x00.md",
     "/memories/x\n.md",
     "/memories/x\x7f.md",
+    "/memories/" + "a/" * 251 + "x.md",  # longer than MEMORY_MAX_PATH (short segments: no file system limit)
 )
 
 
@@ -67,8 +70,8 @@ def create_and_view(context: Context) -> None:
 
 
 def path_rules(context: Context) -> None:
-    """Paths outside ``/memories``, traversals (also URL-encoded), backslashes and control characters are
-    refused by every command; nothing is written."""
+    """Paths outside ``/memories``, traversals (also URL-encoded), backslashes, control characters and paths
+    longer than ``MEMORY_MAX_PATH`` are refused by every command; nothing is written."""
     memory = context.make()
     memory.create("/memories/keep.md", "keep")
     before = _snapshot(memory)
@@ -241,6 +244,79 @@ def concurrent_inserts(context: Context) -> None:
     expect_equal(len(set(lines)), 60, "distinct lines")
 
 
+def list_entries(context: Context) -> None:
+    """N-24: ``list_entries`` lists every file below a directory, sorted, with its size in bytes; a file, a
+    missing directory or a bad path lists nothing or is refused. Every backend, with or without metadata."""
+    memory = context.make()
+    memory.create("/memories/b.md", "bb")
+    memory.create("/memories/dir/a.md", "\u00e4")
+    memory.create("/memories/dir/sub/c.md", "c")
+    entries = memory.list_entries()
+    expect_equal(
+        [(entry.path, entry.size) for entry in entries],
+        [("/memories/b.md", 2), ("/memories/dir/a.md", 2), ("/memories/dir/sub/c.md", 1)],
+        "entries",
+    )
+    expect_equal(
+        [entry.path for entry in memory.list_entries("/memories/dir")],
+        ["/memories/dir/a.md", "/memories/dir/sub/c.md"],
+        "entries of a directory",
+    )
+    expect_equal(memory.list_entries("/memories/b.md"), [], "entries of a file")
+    expect_equal(memory.list_entries("/memories/missing"), [], "entries of a missing directory")
+    for path in BAD_PATHS[:4]:
+        expect_error(partial(memory.list_entries, path), MemoryToolError, f"list_entries {path!r}")
+    expect_error(lambda: memory.create("/memories/x.md", "x", origin="a\nb"), ValueError, "a newline origin")
+    expect_error(lambda: memory.create("/memories/x.md", "x", origin="o" * 201), ValueError, "a long origin")
+    expect_error(lambda: memory.view("/memories/x.md"), MemoryToolError, "the file of a refused origin")
+
+
+def _entry(memory: Any, path: str) -> Any:
+    found = [entry for entry in memory.list_entries() if entry.path == path]
+    expect_equal(len(found), 1, f"the entry {path}")
+    return found[0]
+
+
+def metadata(context: Context) -> None:
+    """N-24 (capability ``metadata``): every file keeps the time (aware, UTC) and origin of its last write. A
+    write records its own origin (``None`` without one), the memory tool records ``ORIGIN_TOOL``, a rename
+    keeps the origin, a delete removes the entry; a second instance sees the same metadata."""
+    memory = context.make()
+    early = datetime.now(UTC) - timedelta(minutes=10)
+    memory.create("/memories/a.md", "one\n", origin="user")
+    first = _entry(memory, "/memories/a.md")
+    expect_equal(first.origin, "user", "the origin of create")
+    expect(first.updated_at is not None and first.updated_at.tzinfo is not None, f"an aware time: {first!r}")
+    late = datetime.now(UTC) + timedelta(minutes=10)
+    expect(early <= first.updated_at <= late, f"the time of the write: {first.updated_at!r}")
+    memory.execute({"command": "str_replace", "path": "/memories/a.md", "old_str": "one", "new_str": "two"})
+    second = _entry(memory, "/memories/a.md")
+    expect_equal(second.origin, ORIGIN_TOOL, "the origin of the memory tool")
+    expect(second.updated_at >= first.updated_at, "a later write has a later time")
+    memory.insert("/memories/a.md", 0, "zero", origin="user:someone")
+    expect_equal(_entry(memory, "/memories/a.md").origin, "user:someone", "the origin of insert")
+    memory.create("/memories/b.md", "b")
+    expect_equal(_entry(memory, "/memories/b.md").origin, None, "a write without an origin")
+    memory.create("/memories/b.md", "b2", origin="user")
+    expect_equal(_entry(memory, "/memories/b.md").origin, "user", "an overwrite records its origin")
+    memory.rename("/memories/a.md", "/memories/dir/a.md")
+    expect_equal(_entry(memory, "/memories/dir/a.md").origin, "user:someone", "a rename keeps the origin")
+    expect_equal(_entry(memory, "/memories/dir/a.md").size, len(b"zero\ntwo\n"), "the size")
+    memory.rename("/memories/dir", "/memories/moved")
+    expect_equal(_entry(memory, "/memories/moved/a.md").origin, "user:someone", "a moved directory")
+    expect_error(
+        lambda: memory.str_replace("/memories/b.md", "zzz", "x", origin="tool"), MemoryToolError, "no match"
+    )
+    expect_equal(_entry(memory, "/memories/b.md").origin, "user", "a failed command records nothing")
+    memory.delete("/memories/b.md")
+    expect_equal([entry.path for entry in memory.list_entries()], ["/memories/moved/a.md"], "after delete")
+    if "concurrent_writers" in context.capabilities:
+        other = context.make()
+        expect_equal(
+            _entry(other, "/memories/moved/a.md").origin, "user:someone", "seen by a second instance"
+        )
+
+
 def _case(name: str, run: Callable[[Context], None], *needs: str, security: bool = False) -> Case:
     return Case(name, frozenset(needs), run, "memory", security)
 
@@ -255,6 +331,8 @@ MEMORY_CASES: tuple[Case, ...] = (
     _case("memory.files_are_not_directories", files_and_directories),
     _case("memory.size_limits_change_nothing", size_limits),
     _case("memory.execute_validates_payloads", execute_payloads),
+    _case("memory.list_entries", list_entries),
+    _case("memory.metadata", metadata, "metadata"),
     _case("memory.second_instance_sees_the_files", second_instance, "concurrent_writers"),
     _case("memory.concurrent_inserts_lose_nothing", concurrent_inserts, "concurrent_writers"),
 )

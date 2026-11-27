@@ -67,10 +67,10 @@ FACTORIES: dict[str, tuple[Callable[..., Any], frozenset[str]]] = {
         frozenset({"vectors", "reindex", "partitioned", "concurrent_writers"}),
     ),
     "sqlite-file-store": (sqlite_file_store, frozenset({"partitioned", "concurrent_writers"})),
-    "sqlite-memory": (sqlite_memory, frozenset({"partitioned", "concurrent_writers"})),
+    "sqlite-memory": (sqlite_memory, frozenset({"partitioned", "concurrent_writers", "metadata"})),
     "local-file-store": (local_file_store, frozenset()),
     "file-memory": (file_memory, frozenset()),
-    "ephemeral-memory": (ephemeral_memory, frozenset()),
+    "ephemeral-memory": (ephemeral_memory, frozenset({"metadata"})),
     # T-CONF-9 (Nodestro N-63): the folder grant cases against the reference store on SafeRoot.
     "safe-root-folders": (safe_root_folders, frozenset()),
 }

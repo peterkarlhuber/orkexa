@@ -118,11 +118,13 @@ SQL rule engine ([`orkexa.testing.sqlcheck`](testing.md#the-tenant-sql-rule-engi
 fires, and compare the catalog rendered with `nodestro_` with Nodestro's catalog
 ([ADR 0015](../architecture/decisions/0015-statement-catalog-and-sql-rule-engine.md)).
 
-## Schema version 1
+## Schema version 2
 
-Schema version 1 (`SCHEMA_VERSION`) is exactly the form of Nodestro's migrations `0002_knowledge_memory.sql` and
+Schema version 1 is exactly the form of Nodestro's migrations `0002_knowledge_memory.sql` and
 `0010_knowledge_vectors.sql`, for any prefix: five tables, their constraints and three indexes, vectors as
-`real[]`. pgvector is never part of the schema.
+`real[]`. pgvector is never part of the schema. Version 2 (`SCHEMA_VERSION`, N-24) adds the nullable column
+`origin` to the memory table (Nodestro's `0011_memory_origin.sql`): who wrote a memory file last
+(`MemoryEntry.origin`). Files written before keep their content and list the origin `None`.
 
 The backend never runs DDL at run time (MUP-ONA E-13): the runtime role needs only `SELECT`, `INSERT`, `UPDATE` and
 `DELETE` on the five tables (and `SELECT` on the version table for `verify_schema`), no `CREATE`, no ownership.
@@ -130,8 +132,8 @@ The backend never runs DDL at run time (MUP-ONA E-13): the runtime role needs on
 | Function | Use |
 |---|---|
 | `verify_schema(source, layout) -> SchemaReport` | checks the tables, columns (type, nullability, collation, default, generation), indexes and the recorded version, read-only (`information_schema`, `pg_indexes`, `pg_extension`); never changes anything and never raises. A product calls it at start. |
-| `schema_steps(layout) -> tuple[str, ...]` | the statements of version 1 for a layout, for a product's own migration runner |
-| `migrate(source, layout) -> int` | applies them, only when called (never by a store), and records version 1 in `<prefix>orkexa_schema`; returns the version found before (`0`: none) |
+| `schema_steps(layout) -> tuple[str, ...]` | the statements of version 2 for a layout, for a product's own migration runner |
+| `migrate(source, layout) -> int` | applies them, only when called (never by a store), and records version 2 in `<prefix>orkexa_schema` (a database of version 1 gets only the steps of version 2); returns the version found before (`0`: none) |
 
 `SchemaReport` has `ok`, `summary()`, `version`, `pgvector` (installed and its version) and `problems`, a tuple of
 `SchemaProblem(kind, table, name, detail)` with `kind` one of `missing_table`, `missing_column`, `wrong_column`,
