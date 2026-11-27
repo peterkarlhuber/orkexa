@@ -14,6 +14,8 @@ listed here. The development version is `0.2.0.dev0`.
 * `SQLiteMemory` adds the nullable column `origin` to an existing `memory_files` table when it opens it. The
   PostgreSQL schema is now version 2 (`origin` on the memory table, Nodestro migration 0011); `migrate` brings a
   database of version 1 to version 2, and `verify_schema` reports a missing `origin` column.
+* Memory paths are at most `MEMORY_MAX_PATH` (512) characters, `/memories/` included; every command refuses a
+  longer one (conformance case `memory.path_rules`).
 
 ### Fixed: a PDF with a damaged object is unreadable again under pypdf 7.2.0 (W5, 2026-11-27)
 

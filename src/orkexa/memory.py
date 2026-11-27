@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from .backends.sqlite.memory import SQLiteMemory as SQLiteMemory
 
 __all__ = [
+    "MEMORY_MAX_PATH",
     "MEMORY_ROOT",
     "MEMORY_TOOL_NAME",
     "ORIGIN_TOOL",
@@ -73,6 +74,8 @@ __all__ = [
 ]
 
 MEMORY_ROOT = "/memories"
+#: The longest memory path in characters, ``/memories/`` included.
+MEMORY_MAX_PATH = 512
 MEMORY_TOOL_NAME = "memory"
 _MAX_LINES = 999_999
 _MEMORY_DESCRIPTION = (
@@ -172,10 +175,13 @@ def _key(path: object) -> str:
     """``"/memories/a/b.md"`` -> ``"a/b.md"``; ``"/memories"`` -> ``""``.
 
     Rejects anything that could leave the memory root: ``.``/``..`` segments,
-    also URL-encoded, backslashes, empty segments, NUL and control characters.
+    also URL-encoded, backslashes, empty segments, NUL and control characters,
+    and paths longer than :data:`MEMORY_MAX_PATH`.
     """
     if not isinstance(path, str):
         raise MemoryToolError(f"Error: path must be a string, got {type(path).__name__}")
+    if len(path) > MEMORY_MAX_PATH:
+        raise MemoryToolError(f"Error: path is longer than {MEMORY_MAX_PATH} characters")
     if path != MEMORY_ROOT and not path.startswith(MEMORY_ROOT + "/"):
         raise MemoryToolError(f"Error: path must start with {MEMORY_ROOT}, got: {path}")
     relative = path[len(MEMORY_ROOT) :].strip("/")

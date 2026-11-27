@@ -30,6 +30,7 @@ BAD_PATHS: tuple[str, ...] = (
     "/memories/x\x00.md",
     "/memories/x\n.md",
     "/memories/x\x7f.md",
+    "/memories/" + "a/" * 251 + "x.md",  # longer than MEMORY_MAX_PATH (short segments: no file system limit)
 )
 
 
@@ -69,8 +70,8 @@ def create_and_view(context: Context) -> None:
 
 
 def path_rules(context: Context) -> None:
-    """Paths outside ``/memories``, traversals (also URL-encoded), backslashes and control characters are
-    refused by every command; nothing is written."""
+    """Paths outside ``/memories``, traversals (also URL-encoded), backslashes, control characters and paths
+    longer than ``MEMORY_MAX_PATH`` are refused by every command; nothing is written."""
     memory = context.make()
     memory.create("/memories/keep.md", "keep")
     before = _snapshot(memory)

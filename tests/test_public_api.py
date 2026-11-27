@@ -183,6 +183,7 @@ PUBLIC = {
     "orkexa.memory": [
         "EphemeralMemory",
         "FileMemory",
+        "MEMORY_MAX_PATH",
         "MEMORY_ROOT",
         "MEMORY_TOOL_NAME",
         "MemoryBackend",

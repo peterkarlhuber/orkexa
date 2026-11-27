@@ -274,3 +274,19 @@ def test_the_error_codes_live_in_one_place() -> None:
         "schema.mismatch",
     } <= set(RETRIEVAL_ERROR_CODES)
     assert "document.too_complex" in RETRIEVAL_ERROR_CODES
+
+
+def test_memory_paths_are_limited_to_memory_max_path(tmp_path: Path) -> None:
+    from orkexa.errors import MemoryToolError
+    from orkexa.memory import MEMORY_MAX_PATH
+
+    longest = "/memories/" + "a" * (MEMORY_MAX_PATH - len("/memories/") - 3) + ".md"
+    assert len(longest) == MEMORY_MAX_PATH == 512
+    for memory in (EphemeralMemory(), SQLiteMemory(tmp_path / "memory.db")):
+        memory.create(longest, "x")
+        assert memory.view(longest).endswith("x")
+        with pytest.raises(MemoryToolError, match="longer than 512"):
+            memory.create(longest + "x", "x")
+        with pytest.raises(MemoryToolError, match="longer than 512"):
+            memory.execute({"command": "create", "path": longest + "x", "file_text": "x"})
+        assert [entry.path for entry in memory.list_entries()] == [longest]

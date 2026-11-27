@@ -82,6 +82,9 @@ origin; others (`FileMemory`) list `None` for both. A file written without an or
 lists `None`: `SQLiteMemory` adds the column `origin` to an older table when it opens it, and the PostgreSQL
 schema version 2 adds it there.
 
+**Path length.** A memory path is at most `MEMORY_MAX_PATH` (512) characters, `/memories/` included; every
+command refuses a longer one with `MemoryToolError`.
+
 ::: orkexa.MemoryBackend
 
 ::: orkexa.EphemeralMemory
