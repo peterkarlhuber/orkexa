@@ -23,6 +23,9 @@ from orkexa.mcp import (
     mcp_tools,
 )
 
+#: shutdown() waits for the next poll of serve_forever (default every 0.5 s); poll more often.
+POLL = {"poll_interval": 0.02}
+
 SERVER = str(Path(__file__).with_name("fake_server.py"))
 
 
@@ -211,7 +214,7 @@ def test_http_transport(sse: bool) -> None:
     _Handler.sse = sse
     _Handler.seen = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs=POLL, daemon=True)
     thread.start()
     try:
         url = f"http://127.0.0.1:{server.server_address[1]}/mcp"

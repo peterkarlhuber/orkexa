@@ -149,7 +149,10 @@ None known.
 
 ## Performance
 
-None known.
+None known. Done (W5, 2026-11-27, #119): test servers poll for shutdown every 0.02 s instead of 0.5 s, and the two
+broken-store folder-conformance tests skip the two timed cases they never assert (same tests; local run -11 %).
+Left as is on purpose: `folders.swap_race` (600 reads), `folders.expired` (a 2 s wall-clock wait) and the mypy run
+of `test_the_old_import_paths_pass_mypy_strict` (9 s).
 
 ## Features and enhancements
 

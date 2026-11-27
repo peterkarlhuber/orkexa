@@ -46,6 +46,9 @@ from orkexa.local.install import RuntimeArtifact, find_binary
 from orkexa.pricing import PricingBasis
 from orkexa.usage import record_token_usage, summarize_usage
 
+#: shutdown() waits for the next poll of serve_forever (default every 0.5 s); poll more often.
+POLL = {"poll_interval": 0.02}
+
 # ---- a fake Ollama ----------------------------------------------------------------------
 
 MODELS = {
@@ -181,7 +184,7 @@ def ollama() -> Iterator[str]:
     FakeOllama.requests = []
     FakeOllama.blobs = {}
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FakeOllama)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs=POLL, daemon=True)
     thread.start()
     yield f"http://127.0.0.1:{server.server_address[1]}"
     server.shutdown()

@@ -24,6 +24,9 @@ from orkexa.local import OllamaClient, OllamaError, install_runtime
 from orkexa.local._http import stream_error_code
 from orkexa.local.install import RuntimeArtifact
 
+#: shutdown() waits for the next poll of serve_forever (default every 0.5 s); poll more often.
+POLL = {"poll_interval": 0.02}
+
 
 def _archive(tmp_path: Path) -> tuple[bytes, RuntimeArtifact]:
     buffer = io.BytesIO()
@@ -235,7 +238,7 @@ class _Silent(http.server.BaseHTTPRequestHandler):
 def test_cancel_ends_a_silent_download_at_once() -> None:
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Silent)
     server.daemon_threads = True
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, kwargs=POLL, daemon=True).start()
     try:
         cancel = threading.Event()
         client = OllamaClient(f"http://127.0.0.1:{server.server_address[1]}")
