@@ -268,6 +268,88 @@ def test_an_unreadable_pdf_raises_value_error() -> None:
         pdf_pages_isolated(b"not a pdf at all")
 
 
+def _one_page(page: bytes, text: str = "Text of a damaged page.") -> bytes:
+    """A one-page PDF whose page object is ``page`` (object 4); object 5 is its content stream."""
+    return bytes(
+        MAKE._pdf(
+            [
+                b"<< /Type /Catalog /Pages 2 0 R >>",
+                b"<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+                MAKE._FONT,
+                page,
+                MAKE._stream(MAKE._text(text)),
+            ]
+        )
+    )
+
+
+_DEEP = b"<< /D " * 5000 + b"1" + b" >>" * 5000
+
+DAMAGED_PAGES = {
+    # resources that nest dictionaries too deeply for the parser (like nested_objects.pdf, with dictionaries)
+    "nested dictionaries": MAKE._page(b"5 0 R", b"<< /Font << /F1 3 0 R >> /Properties " + _DEEP + b" >>"),
+    # a value that is no PDF object: a lenient reader cuts the page dictionary short there and loses /Contents
+    "garbage value": MAKE._page(b"5 0 R").replace(b"/MediaBox", b"/Rotate ) /MediaBox", 1),
+    # a key that is no name
+    "number as key": MAKE._page(b"5 0 R").replace(b"/MediaBox", b"17 /MediaBox", 1),
+}
+
+
+# MUP-ONA T-PDF-7: pypdf 7.2.0 turns a RecursionError inside an array into PdfReadError, which a lenient
+# reader swallows; an object that cannot be parsed must make the whole PDF unreadable, never one cut short.
+@pytest.mark.parametrize("name", sorted(DAMAGED_PAGES))
+def test_a_pdf_with_a_damaged_object_is_unreadable(name: str) -> None:
+    from pypdf.errors import PyPdfError
+
+    data = _one_page(DAMAGED_PAGES[name])
+    with pytest.raises(ValueError, match="cannot be read"):
+        pdf_pages_isolated(data)
+    with pytest.raises(PyPdfError):
+        pdf_pages(data)
+
+
+def _repaired(data: bytes, damage: str) -> bytes:
+    if damage == "bytes before the header":
+        return b"\n\n\n" + data
+    if damage == "wrong startxref":
+        start = data.rindex(b"startxref\n") + len(b"startxref\n")
+        return data[:start] + b"12" + data[data.index(b"\n", start) :]
+    shifted = bytearray(data)  # every offset in the cross-reference table points 2 bytes too far
+    position = data.index(b"0000000000 65535 f \n") + 20
+    while data[position : position + 1].isdigit():
+        shifted[position : position + 10] = b"%010d" % (int(data[position : position + 10]) + 2)
+        position += 20
+    return bytes(shifted)
+
+
+# A damaged file structure is still repaired: the objects themselves are intact, so no text is lost.
+@pytest.mark.parametrize("damage", ["bytes before the header", "wrong startxref", "wrong xref offsets"])
+def test_a_repairable_file_structure_is_still_read(damage: str) -> None:
+    data = _repaired(_fixture("normal_10p.pdf"), damage)
+    assert data != _fixture("normal_10p.pdf")
+    assert pdf_pages(data) == MAKE.NORMAL_TEXTS
+    assert pdf_pages_isolated(data) == MAKE.NORMAL_TEXTS
+
+
+def test_a_memory_error_inside_pypdf_counts_as_memory() -> None:
+    from pypdf.errors import PdfReadError
+
+    from orkexa._pdf_worker import ran_out_of_memory
+
+    def wrapped(inner: BaseException) -> PdfReadError:
+        try:
+            try:
+                raise inner
+            except type(inner) as exc:
+                raise PdfReadError("Error reading PDF file.") from exc
+        except PdfReadError as outer:
+            return outer
+
+    assert ran_out_of_memory(wrapped(MemoryError()))
+    assert not ran_out_of_memory(wrapped(RecursionError()))
+    assert not ran_out_of_memory(PdfReadError("plain"))
+
+
 # ---- isolation of the child (T-PDF-11..14) ------------------------------------------------------------
 
 SECRETS = {

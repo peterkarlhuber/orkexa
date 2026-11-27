@@ -44,7 +44,6 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 import functools
 import inspect
-import io
 import math
 import os
 from pathlib import Path
@@ -387,7 +386,8 @@ def pdf_pages(
     """The text of each page of a PDF, in this process, within a page and a character budget.
 
     Raises :class:`RetrievalError` (``document.too_complex``, ``reason`` ``pages``, ``chars`` or ``limit``
-    for a limit of pypdf itself) between pages; a PDF that pypdf cannot read raises pypdf's error. The
+    for a limit of pypdf itself) between pages; a PDF that pypdf cannot read raises pypdf's error, also when
+    only one object is damaged (pypdf may repair the file structure, but no object is returned cut short). The
     budgets are cooperative: a single page that makes pypdf loop or allocate cannot be stopped here. Use
     :func:`pdf_pages_isolated` for untrusted files. Needs ``pypdf`` (``pip install "orkexa[pdf]"``).
     """
@@ -397,8 +397,10 @@ def pdf_pages(
         from pypdf.errors import LimitReachedError  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         raise ImportError('Indexing PDFs needs pypdf: pip install "orkexa[pdf]"') from None
+    from ._pdf_worker import open_reader
+
     try:
-        reader = PdfReader(io.BytesIO(data))
+        reader = open_reader(PdfReader, data)  # repairs the file structure, refuses a damaged object
         trailer: Any = reader.trailer
         declared = trailer["/Root"]["/Pages"].get("/Count", 0)  # checked before the page tree is read
         if isinstance(declared, int) and declared > max_pages:
@@ -439,7 +441,8 @@ def pdf_pages_isolated(
     after ``timeout`` seconds its process group gets ``SIGTERM`` and two seconds later ``SIGKILL``. Exceeding
     a budget, running out of memory, a crash or an oversized output raise :class:`RetrievalError`
     (``document.too_complex``) with ``reason`` ``timeout``, ``memory``, ``pages``, ``chars``, ``limit`` or
-    ``crash``; a PDF that pypdf cannot read raises ``ValueError``. Where the memory budget cannot be enforced
+    ``crash``; a PDF that pypdf cannot read raises ``ValueError``, also when only one object is damaged (as
+    in :func:`pdf_pages`, no object cut short is returned). Where the memory budget cannot be enforced
     (Windows: the job object cannot be created or assigned; macOS: the worker's memory cannot be measured)
     the PDF is not extracted: ``reason`` ``unenforced``.
 
