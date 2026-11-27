@@ -1,14 +1,16 @@
-"""Schema version 1, :func:`verify_schema`, :func:`schema_steps` and :func:`migrate` (MUP-ONA B5: T-SCH-1..3).
+"""Schema version 2, :func:`verify_schema`, :func:`schema_steps` and :func:`migrate` (MUP-ONA B5: T-SCH-1..3).
 
 * **T-SCH-1** ``verify_schema`` reports a missing table, column and index, a wrong column type (``double
   precision[]`` instead of ``real[]``) and whether pgvector is installed -- and changes nothing (catalog
   snapshot before and after, an event trigger sees no DDL). It never raises.
-* **T-SCH-2** schema comparison: one schema migrated by Nodestro's migration files 0001-0010 (test data from
-  nodestro-runtime 76f9cb2, checksums checked), another by ``migrate(PostgresLayout("nodestro_"))``; their
-  tables, columns, types, indexes and constraints of the knowledge and memory tables are identical. With
+* **T-SCH-2** schema comparison: one schema migrated by Nodestro's migration files 0001-0011 (test data from
+  nodestro-runtime 76f9cb2, 0011 from N-24, checksums checked), another by
+  ``migrate(PostgresLayout("nodestro_"))``; their tables, columns, types, indexes and constraints of the
+  knowledge and memory tables are identical. With
   ``ORKEXA_SCHEMA_REPORTS`` set, the comparison is written to ``<dir>/schema-comparison.json`` (CI artifact).
 * **T-SCH-3** ``migrate`` is explicit, idempotent, serialized, refuses a newer version and tables it did not
-  create, and never installs an extension; ``schema_steps`` is the text it runs.
+  create, and never installs an extension; ``schema_steps`` is the text it runs. N-24: a database of version 1
+  gets only the column ``origin``, and its memory files stay readable with the origin ``None``.
 """
 
 from __future__ import annotations
@@ -38,8 +40,8 @@ from . import support
 from .test_guard import SpySource
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "fixtures" / "postgres" / "nodestro_migrations"
-#: nodestro-runtime tests/fixtures/migration_checksums.json at 76f9cb2 (MUP-ONA T-MIG-1): the copies are those
-#: files.
+#: nodestro-runtime tests/fixtures/migration_checksums.json at 76f9cb2 (MUP-ONA T-MIG-1), and 0011 of N-24:
+#: the copies are those files.
 NODESTRO_CHECKSUMS = {
     "0001_documents.sql": "aa3bf7c5b3a8cd52a59f5b09b15b47746263d977a2716038a42421b7c29d5f18",
     "0002_knowledge_memory.sql": "2838b1ea2b91bf1d460e22e2c1373d2a73078dda79fc41f68b62fd941ad03409",
@@ -51,6 +53,7 @@ NODESTRO_CHECKSUMS = {
     "0008_tenant_status.sql": "afd8f83c39c8d82e1b91b099e5d737843008ecd1055077b580c921a46f53b3a8",
     "0009_created_order.sql": "bada36a3af623fb6b4a08e317c3e92cc4b275d8c56db6710c9bf6f2d4661e8ba",
     "0010_knowledge_vectors.sql": "aadda58e1c14e6654bca42394e058ae85ad44309b2f017d9ec2f15409a6732f5",
+    "0011_memory_origin.sql": "452daf9055a1134b2a5b7d5284a5bcdde2c27c7d59043a9c941f129e2b581efd",
 }
 NODESTRO = PostgresLayout("nodestro_")
 KNOWLEDGE_TABLES = sorted(NODESTRO.tables.values())
@@ -66,9 +69,9 @@ def _kinds(report: SchemaReport) -> set[tuple[str, str, str]]:
 
 
 @needs_psycopg
-def test_schema_steps_are_the_tables_of_0002_and_0010_without_an_extension() -> None:
+def test_schema_steps_are_the_tables_of_0002_0010_and_0011_without_an_extension() -> None:
     steps = schema_steps(support.LAYOUT)
-    assert len(steps) == 8
+    assert len(steps) == 9
     assert [step.split(" (")[0] for step in steps] == [
         'CREATE TABLE "t_files"',
         'CREATE TABLE "t_chunks"',
@@ -78,6 +81,7 @@ def test_schema_steps_are_the_tables_of_0002_and_0010_without_an_extension() -> 
         'CREATE TABLE "t_vector_spaces"',
         'CREATE TABLE "t_chunk_vectors"',
         'CREATE INDEX "t_chunk_vectors_chunk" ON "t_chunk_vectors"',
+        'ALTER TABLE "t_memory_files" ADD COLUMN origin text',
     ]
     text = " ".join(steps)
     assert "EXTENSION" not in text.upper() and " vector" not in text and "::vector" not in text
@@ -148,7 +152,11 @@ DAMAGE = {
         "DROP INDEX t_chunks_source; CREATE INDEX t_chunks_source ON t_chunks (source)",
         ("wrong_index", "t_chunks", "t_chunks_source"),
     ),
-    "newer version": ("INSERT INTO t_orkexa_schema (version) VALUES (2)", ("version", "t_orkexa_schema", "")),
+    "missing origin": (
+        "ALTER TABLE t_memory_files DROP COLUMN origin",
+        ("missing_column", "t_memory_files", "origin"),
+    ),
+    "newer version": ("INSERT INTO t_orkexa_schema (version) VALUES (3)", ("version", "t_orkexa_schema", "")),
 }
 
 
@@ -196,7 +204,7 @@ def _nodestro_migrations() -> list[tuple[str, str]]:
 
 # MUP-ONA T-SCH-2
 def test_the_nodestro_migrations_are_unchanged_copies() -> None:
-    assert len(_nodestro_migrations()) == 10
+    assert len(_nodestro_migrations()) == 11
 
 
 def _knowledge(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -234,7 +242,7 @@ def test_migrate_creates_what_nodestros_migrations_create() -> None:
                 json.dumps(
                     {
                         "test": "T-SCH-2 (tests/backends/postgres/test_schema.py)",
-                        "nodestro_migrations": "nodestro-runtime 76f9cb2, 0001-0010",
+                        "nodestro_migrations": "nodestro-runtime 76f9cb2, 0001-0010; N-24, 0011",
                         "tables": KNOWLEDGE_TABLES,
                         "identical": nodestro == orkexa,
                         "nodestro": nodestro,
@@ -251,7 +259,7 @@ def test_migrate_creates_what_nodestros_migrations_create() -> None:
             assert orkexa[key] == nodestro[key], key
         assert len(orkexa["indexes"]) == 8 and len(orkexa["constraints"]) == 14
         assert nodestro_report.ok and nodestro_report.version is None, nodestro_report.summary()
-        assert orkexa_report.ok and orkexa_report.version == 1, orkexa_report.summary()
+        assert orkexa_report.ok and orkexa_report.version == SCHEMA_VERSION == 2, orkexa_report.summary()
     finally:
         for schema in (by_nodestro, by_orkexa):
             support.drop_schema(schema)
@@ -267,7 +275,7 @@ def test_migrate_is_idempotent_and_records_its_version(db: support.Database) -> 
     before = support.catalog_snapshot(db.schema)
     assert migrate(db.owner, db.layout) == SCHEMA_VERSION
     assert support.catalog_snapshot(db.schema) == before
-    assert db.query("SELECT version FROM t_orkexa_schema") == [(1,)]
+    assert db.query("SELECT version FROM t_orkexa_schema") == [(2,)]
     with support.admin() as connection:
         extensions = connection.execute("SELECT extname FROM pg_extension ORDER BY 1").fetchall()
     assert {name for (name,) in extensions} <= {"plpgsql", "vector"}  # vector only from the server setup
@@ -276,7 +284,7 @@ def test_migrate_is_idempotent_and_records_its_version(db: support.Database) -> 
 # MUP-ONA T-SCH-3
 @pytest.mark.postgres
 def test_migrate_refuses_a_newer_version(db: support.Database) -> None:
-    db.query("INSERT INTO t_orkexa_schema (version) VALUES (2)")
+    db.query("INSERT INTO t_orkexa_schema (version) VALUES (3)")
     with pytest.raises(RetrievalError) as raised:
         migrate(db.owner, db.layout)
     assert (raised.value.code, raised.value.reason) == ("schema.mismatch", "too_new")
@@ -317,7 +325,7 @@ def test_concurrent_migrations_apply_once() -> None:
             thread.start()
         for thread in threads:
             thread.join(60)
-        assert sorted(results) == [0, 1, 1, 1], results
+        assert sorted(results) == [0, 2, 2, 2], results
         assert verify_schema(db.owner, db.layout).ok
 
 
@@ -328,3 +336,42 @@ def test_two_layouts_share_one_schema() -> None:
         other = PostgresLayout("other_")
         assert migrate(db.owner, other) == 0
         assert verify_schema(db.owner, other).ok and verify_schema(db.owner, db.layout).ok
+
+
+# N-24
+@pytest.mark.postgres
+def test_migrate_adds_the_origin_to_a_schema_of_version_1() -> None:
+    """A database of version 1 (as before N-24, with a memory file) gets only the column ``origin``: the file
+    keeps its content and time and lists the origin ``None``; new writes record theirs."""
+    from orkexa.backends.postgres import PostgresMemory
+    from orkexa.backends.postgres.schema import _STEPS, _render
+
+    with support.database(migrated=False) as db:
+        with db.owner.transaction("transaction") as connection:
+            for step in _STEPS:
+                connection.execute(_render(step, db.layout))
+            connection.execute(
+                "CREATE TABLE t_orkexa_schema (version integer PRIMARY KEY, applied_at timestamptz NOT NULL"
+                " DEFAULT now())"
+            )
+            connection.execute("INSERT INTO t_orkexa_schema (version) VALUES (1)")
+            connection.execute(
+                "INSERT INTO t_memory_files (tenant_id, namespace, path, content)"
+                " VALUES ('t1', 'm', 'old.md', 'x')"
+            )
+        before = verify_schema(db.owner, db.layout)
+        assert ("missing_column", "t_memory_files", "origin") in _kinds(before)
+        assert migrate(db.owner, db.layout) == 1
+        db.grant()
+        assert verify_schema(db.source, db.layout).ok
+        assert db.query("SELECT version FROM t_orkexa_schema ORDER BY 1") == [(1,), (2,)]
+        memory = PostgresMemory(db.source, "t1", layout=db.layout, namespace="m")
+        [old] = memory.list_entries()
+        assert (old.path, old.size, old.origin) == ("/memories/old.md", 1, None)
+        assert old.updated_at is not None
+        assert "x" in memory.view("/memories/old.md")
+        memory.create("/memories/new.md", "y", origin="user")
+        assert {entry.path: entry.origin for entry in memory.list_entries()} == {
+            "/memories/new.md": "user",
+            "/memories/old.md": None,
+        }

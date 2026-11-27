@@ -36,6 +36,7 @@ is discarded.
 | `reindex` | `ReindexableIndex`: vector spaces bound to one embedding model, `reindex()` | `SQLiteIndex` and `PostgresIndex` with `embeddings=` |
 | `partitioned` | one storage holds several partitions (tenants, or SQLite namespaces); an instance sees only its own | the three SQLite and the three PostgreSQL classes (by tenant) |
 | `concurrent_writers` | several instances or processes may write the same storage at once | the three SQLite and the three PostgreSQL classes |
+| `metadata` | every memory file keeps the time and origin of its last write (`MemoryBackend.list_entries`) | `EphemeralMemory`, `SQLiteMemory`, `PostgresMemory` |
 
 **Error codes** (`RetrievalError.code`, the same for every backend; map codes, never message texts):
 
@@ -71,6 +72,18 @@ they resolve these three names on first access. Only `__module__` of the classes
 tables, pragmas and file permissions did not.
 
 ## Memory
+
+**Entries and their metadata (N-24).** `list_entries(path="/memories")` lists every file below a directory as a
+`MemoryEntry(path, size, updated_at, origin)`, sorted by path, so a product can show, edit and delete a memory's
+entries. `create`, `str_replace` and `insert` take an optional `origin` (who writes, 1-200 printable characters;
+for example `"user"` for a person's explicit write); `execute`, the model's memory tool, writes with
+`ORIGIN_TOOL` (`"tool"`). A rename keeps the origin. Backends with the capability `metadata` keep the time and
+origin; others (`FileMemory`) list `None` for both. A file written without an origin, or before origins were kept,
+lists `None`: `SQLiteMemory` adds the column `origin` to an older table when it opens it, and the PostgreSQL
+schema version 2 adds it there.
+
+**Path length.** A memory path is at most `MEMORY_MAX_PATH` (512) characters, `/memories/` included; every
+command refuses a longer one with `MemoryToolError`.
 
 ::: orkexa.MemoryBackend
 

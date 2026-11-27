@@ -338,6 +338,8 @@ def memory_reads(context: Context) -> None:
     expect(MARKER not in a.view("/memories"), "the listing of A")
     expect_error(lambda: a.view(MARKER_PATH), MemoryToolError, "B's file in A")
     expect_error(lambda: a.view("/memories/secret"), MemoryToolError, "B's directory in A")
+    expect(MARKER_PATH not in [entry.path for entry in a.list_entries()], "the entries of A (N-24)")
+    expect_equal(a.list_entries("/memories/secret"), [], "B's directory in the entries of A")
     expect(MARKER in memories[B].view(MARKER_PATH), "B reads its own file")
 
 

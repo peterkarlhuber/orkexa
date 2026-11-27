@@ -8,7 +8,7 @@ import threading
 from typing import Any
 
 from orkexa import MemoryToolError
-from orkexa.memory import MemoryBackend
+from orkexa.memory import MemoryBackend, MemoryEntry, _path
 
 from ._sql import Executor, PostgresLayout, check_namespace, check_tenant
 from .connection import ConnectionSource
@@ -19,7 +19,9 @@ __all__ = ["PostgresMemory"]
 class PostgresMemory(MemoryBackend):
     """An Orkexa memory (``/memories``) of one tenant and namespace (table ``<prefix>memory_files``).
 
-    Every command runs in one transaction of the source, as with :class:`~orkexa.SQLiteMemory`.
+    Every command runs in one transaction of the source, as with :class:`~orkexa.SQLiteMemory`. Each file
+    keeps the time and origin of its last write (N-24, capability ``metadata``; the column ``origin`` of
+    schema version 2).
 
     Args:
         source: Gives the connections (:class:`~orkexa.backends.postgres.ConnectionSource`).
@@ -61,10 +63,10 @@ class PostgresMemory(MemoryBackend):
 
     @property
     def capabilities(self) -> frozenset[str]:
-        """``partitioned`` (by tenant) and ``concurrent_writers``
+        """``partitioned`` (by tenant), ``concurrent_writers`` and ``metadata``
         (:attr:`orkexa.memory.MemoryBackend.capabilities`): the commands of one process are serialized on the
         lock."""
-        return frozenset({"partitioned", "concurrent_writers"})
+        return frozenset({"partitioned", "concurrent_writers", "metadata"})
 
     def close(self) -> None:
         """Nothing to do: the connections belong to the source."""
@@ -81,12 +83,20 @@ class PostgresMemory(MemoryBackend):
     def _write(self, key: str, text: str) -> None:
         if "\x00" in text or "\x00" in key:
             raise MemoryToolError("Error: memory files cannot contain the character U+0000")
-        self._sql.execute("memory_write", self._key(path=key, content=text))
+        self._sql.execute("memory_write", self._key(path=key, content=text, origin=self._origin))
 
     def _files(self, prefix: str) -> dict[str, int]:
         start = f"{prefix}/" if prefix else ""
         rows = self._sql.execute("memory_files", self._key(start=start)).rows
         return {str(path): int(size) for path, size in rows}
+
+    def _entries(self, prefix: str) -> dict[str, MemoryEntry]:
+        start = f"{prefix}/" if prefix else ""
+        rows = self._sql.execute("memory_entries", self._key(start=start)).rows
+        return {
+            str(path): MemoryEntry(_path(str(path)), int(size), at, None if origin is None else str(origin))
+            for path, size, at, origin in rows
+        }
 
     def _delete(self, key: str) -> None:
         self._sql.execute("memory_delete", self._key(path=key, under=key + "/"))

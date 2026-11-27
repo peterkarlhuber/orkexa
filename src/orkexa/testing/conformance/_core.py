@@ -22,7 +22,9 @@ from ...files import FileStore
 from ...memory import MemoryBackend
 from ...retrieval import Index, RetrievalError
 
-CAPABILITIES: frozenset[str] = frozenset({"vectors", "reindex", "partitioned", "concurrent_writers"})
+CAPABILITIES: frozenset[str] = frozenset(
+    {"vectors", "reindex", "partitioned", "concurrent_writers", "metadata"}
+)
 """The capability names a backend may report (``capabilities``) and a caller may expect."""
 
 SECURITY_NEEDS: frozenset[str] = frozenset({"partitioned", "vectors", "reindex"})

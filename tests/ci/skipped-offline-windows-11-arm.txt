@@ -62,6 +62,7 @@ tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_
 tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_tenant[files_upsert]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_tenant[memory_clear]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_tenant[memory_delete]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
+tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_tenant[memory_entries]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_tenant[memory_files]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_tenant[memory_read]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.postgres.test_catalog::test_every_rendered_entry_is_bound_to_one_tenant[memory_rename]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
@@ -96,7 +97,7 @@ tests.backends.postgres.test_prefix::test_a_good_prefix_names_the_tables[a_]  # 
 tests.backends.postgres.test_prefix::test_a_good_prefix_names_the_tables[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.postgres.test_prefix::test_a_good_prefix_names_the_tables[nodestro_]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.postgres.test_prefix::test_a_good_prefix_names_the_tables[t_]  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
-tests.backends.postgres.test_schema::test_schema_steps_are_the_tables_of_0002_and_0010_without_an_extension  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
+tests.backends.postgres.test_schema::test_schema_steps_are_the_tables_of_0002_0010_and_0011_without_an_extension  # needs psycopg (orkexa[postgres]; no psycopg-binary wheel for win_arm64)
 tests.backends.sqlite.test_robustness::test_a_dangling_symlink_is_refused_and_not_created  # symlinks need privileges on Windows
 tests.backends.sqlite.test_robustness::test_a_failing_sqlite_vec_load_leaves_extension_loading_off  # sqlite-vec cannot be loaded here
 tests.backends.sqlite.test_robustness::test_a_legacy_vector_index_is_searched_written_and_deleted  # sqlite-vec cannot be loaded here
