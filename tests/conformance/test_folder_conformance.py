@@ -22,6 +22,12 @@ def test_the_safe_root_folders_conform(tmp_path: Path) -> None:
     assert len(report.passed) == len(FOLDER_CASES)
 
 
+#: All cases but the two timed ones: folders.swap_race (600 reads) and folders.expired (a 2 s wait) take
+#: about 5 s of a run of all cases, and the tests below that check a broken store assert neither of them.
+#: Every case still runs against the real store in test_the_safe_root_folders_conform.
+UNTIMED_CASES = [case for case in FOLDER_CASES if case.name not in {"folders.swap_race", "folders.expired"}]
+
+
 class _Leaky(SafeRootFolders):
     """Ignores exclude patterns and revocations: the suite must catch both."""
 
@@ -34,8 +40,9 @@ class _Leaky(SafeRootFolders):
 
 
 def test_the_suite_catches_a_leaky_implementation(tmp_path: Path) -> None:
+    assert len(UNTIMED_CASES) == len(FOLDER_CASES) - 2  # both left-out cases exist under these names
     report = run_cases(
-        lambda request: _Leaky(request.workdir / "data"), FOLDER_CASES, expect=(), workdir=tmp_path
+        lambda request: _Leaky(request.workdir / "data"), UNTIMED_CASES, expect=(), workdir=tmp_path
     )
     assert {"folders.exclude_patterns", "folders.revoked"} <= set(report.failed)
     assert "folders.list_read_search" in report.passed
@@ -113,5 +120,5 @@ def test_a_store_that_protects_nothing_fails(tmp_path: Path) -> None:
         found.data = request.workdir / "elsewhere"
         return found
 
-    report = run_cases(unprotected, FOLDER_CASES, expect=(), workdir=tmp_path)
+    report = run_cases(unprotected, UNTIMED_CASES, expect=(), workdir=tmp_path)
     assert {"folders.data_folder_not_grantable", "folders.data_folder_inside_a_grant"} <= set(report.failed)

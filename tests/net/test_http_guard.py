@@ -25,6 +25,9 @@ import httpx
 from orkexa.net.guard import EgressError, EgressPolicy, GuardedBackend
 from orkexa.net.http import deadline, guarded_client, send_following_redirects
 
+#: shutdown() waits for the next poll of serve_forever (default every 0.5 s); poll more often.
+POLL = {"poll_interval": 0.02}
+
 
 class _Handler(BaseHTTPRequestHandler):
     server: _Server
@@ -86,7 +89,7 @@ class _Server(ThreadingHTTPServer):
 def server() -> Iterator[_Server]:
     httpd = _Server(("127.0.0.1", 0), _Handler)
     httpd.requests = []
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread = threading.Thread(target=httpd.serve_forever, kwargs=POLL, daemon=True)
     thread.start()
     yield httpd
     httpd.shutdown()
@@ -329,7 +332,7 @@ def test_tls_uses_the_host_name_not_the_address(tmp_path: Any) -> None:
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     context.load_cert_chain(cert, key)
     httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread = threading.Thread(target=httpd.serve_forever, kwargs=POLL, daemon=True)
     thread.start()
     try:
         client_context = ssl.create_default_context(cafile=str(cert))

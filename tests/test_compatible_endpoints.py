@@ -19,6 +19,9 @@ import pytest
 from orkexa import Agent, AsyncAgent
 from orkexa.errors import ProviderError
 
+#: shutdown() waits for the next poll of serve_forever (default every 0.5 s); poll more often.
+POLL = {"poll_interval": 0.02}
+
 ANSWER = {
     "id": "chatcmpl-1",
     "object": "chat.completion",
@@ -32,7 +35,7 @@ ANSWER = {
 class _Server:
     def __init__(self, handler: type[http.server.BaseHTTPRequestHandler]) -> None:
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs=POLL, daemon=True)
         self.thread.start()
 
     @property
