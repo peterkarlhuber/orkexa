@@ -139,7 +139,9 @@ tool approvals (nodestro-runtime RT-001); `NODESTRO_TOOL_APPROVALS` stays off un
 
 ## Bugs and reliability
 
-None known.
+None known. Done (W5, 2026-11-27): pypdf 7.2.0 read a PDF with a damaged object as partial data (T-PDF-7 red on
+every test job and in the nightly of 2026-11-27); objects are now parsed strictly after the file structure is read,
+with no upper bound on pypdf (CHANGELOG, "Fixed: a PDF with a damaged object is unreadable again").
 
 ## Architecture and modularity
 

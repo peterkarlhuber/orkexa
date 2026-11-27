@@ -5,6 +5,16 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Fixed: a PDF with a damaged object is unreadable again under pypdf 7.2.0 (W5, 2026-11-27)
+
+* pypdf 7.2.0 turns a `RecursionError` or `MemoryError` inside an array into `PdfReadError`, which a lenient
+  reader swallows and answers with a dictionary cut short. `nested_objects.pdf` was then read as one empty page
+  (T-PDF-7 failed on every test job). `pdf_pages` and `pdf_pages_isolated` now parse objects strictly once the file
+  structure is read: a damaged cross-reference table, bytes before the header or a wrong `startxref` are still
+  repaired, but an object that cannot be parsed makes the PDF unreadable (`ValueError` "cannot be read"). This also
+  closes the same gap for dictionaries, which pypdf 7.1.1 already cut short. A `MemoryError` that pypdf re-raises
+  as `PdfReadError` is reported as `reason` `memory`. The lowest-versions job now installs pypdf 6.21.4.
+
 ### Added: a folder browser on the path guard (N-11, 2026-11-26)
 
 * `orkexa.fs.browse_folder(path, protected=..., home=...)` answers the sub-folders of an absolute folder for a

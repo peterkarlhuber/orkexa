@@ -84,8 +84,9 @@ jobs:
       - run: pip install -r requirements/tabrion.txt -e ".[dev]"
       # The lower bounds of pyproject.toml (pydantic 2.9 is the minimum of google-genai 2.0; pglast 7.20 is the
       # oldest 7.x release on PyPI; psycopg 3.2.0 is the lower bound of the extra "postgres"; its
-      # "binary" extra names a dev build, so psycopg-binary is pinned by name).
-      - run: pip install "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "boto3==1.43.80" "botocore==1.43.80" "pydantic==2.9.0" "typing-extensions==4.14.0" "pglast==7.20" "psycopg==3.2.0" "psycopg-binary==3.2.0"
+      # "binary" extra names a dev build, so psycopg-binary is pinned by name; pypdf 6.21.4 is the floor of the
+      # extra "pdf").
+      - run: pip install "pypdf==6.21.4" "anthropic==2.0.0" "openai==3.0.0" "google-genai==2.0.0" "boto3==1.43.80" "botocore==1.43.80" "pydantic==2.9.0" "typing-extensions==4.14.0" "pglast==7.20" "psycopg==3.2.0" "psycopg-binary==3.2.0"
       - run: pytest -m "not postgres" -rs --junitxml=junit-lowest-versions.xml
         env:
           ORKEXA_CONFORMANCE_JOB: lowest-versions

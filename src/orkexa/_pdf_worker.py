@@ -68,12 +68,39 @@ def _write(result: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
+def open_reader(reader_class: Any, data: bytes) -> Any:
+    """A ``PdfReader`` that repairs the file structure but refuses a damaged object.
+
+    The reader opens leniently, so pypdf may rebuild a damaged cross-reference table, find the header behind
+    leading bytes or follow a wrong ``startxref`` (the object data itself is unchanged). Then it is switched
+    to strict: an object that pypdf cannot parse raises ``PdfReadError`` instead of being cut short and
+    returned as partial data. pypdf 7.2.0 turns a ``RecursionError`` or ``MemoryError`` inside an array into
+    ``PdfReadError``, which a lenient reader swallows: a page whose resources nest too deeply lost its
+    ``/Contents`` and was read as one empty page (T-PDF-7).
+    """
+    reader = reader_class(io.BytesIO(data))  # reads the header, the cross-reference table and the trailer
+    reader.strict = True  # every object read from here on is parsed strictly
+    return reader
+
+
+def ran_out_of_memory(exc: BaseException) -> bool:
+    """Whether ``exc`` was caused by a ``MemoryError`` (pypdf re-raises it as ``PdfReadError``)."""
+    seen: set[int] = set()
+    cause: BaseException | None = exc
+    while cause is not None and id(cause) not in seen:
+        if isinstance(cause, MemoryError):
+            return True
+        seen.add(id(cause))
+        cause = cause.__cause__ or cause.__context__
+    return False
+
+
 def extract(data: bytes, max_pages: int, max_chars: int) -> int:
     from pypdf import PdfReader
     from pypdf.errors import LimitReachedError, PyPdfError
 
     try:
-        reader = PdfReader(io.BytesIO(data))
+        reader = open_reader(PdfReader, data)
         trailer: Any = reader.trailer
         declared = trailer["/Root"]["/Pages"].get("/Count", 0)  # checked before the page tree is read
         if isinstance(declared, int) and declared > max_pages:
@@ -92,7 +119,11 @@ def extract(data: bytes, max_pages: int, max_chars: int) -> int:
         return _refuse("memory", "The PDF needs more memory than allowed")
     except LimitReachedError as exc:
         return _refuse("limit", f"pypdf refused the PDF: {exc}")
-    except (PyPdfError, ValueError, KeyError, TypeError, AttributeError, RecursionError) as exc:
+    except PyPdfError as exc:
+        if ran_out_of_memory(exc):  # pypdf 7.2 wraps a MemoryError while parsing an object in PdfReadError
+            return _refuse("memory", "The PDF needs more memory than allowed")
+        return _refuse("invalid", f"The PDF cannot be read: {type(exc).__name__}: {exc}")
+    except (ValueError, KeyError, TypeError, AttributeError, RecursionError) as exc:
         return _refuse("invalid", f"The PDF cannot be read: {type(exc).__name__}: {exc}")
     _write({"ok": True, "pages": pages})
     return 0
