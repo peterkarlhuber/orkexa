@@ -130,6 +130,8 @@ tests.test_docker_host::test_sandbox_refuses_a_failing_host[seccomp-unconfined] 
 tests.test_docker_host::test_sandbox_refuses_a_failing_host[windows]  # the fake docker CLI is a POSIX script
 tests.test_docker_host::test_the_engine_name_is_never_trusted  # the fake docker CLI is a POSIX script
 tests.test_docker_host::test_unreported_cpu_limits_are_left_to_the_self_test_only_on_cgroup_v2  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_preflight_per_host[userns-remap]  # the fake docker CLI is a POSIX script
+tests.test_docker_host::test_user_namespace_remapping_is_reported  # the fake docker CLI is a POSIX script
 tests.test_docker_sandbox::test_call_runs_isolated  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
 tests.test_docker_sandbox::test_cancel_leaves_no_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
 tests.test_docker_sandbox::test_cancel_scope_removes_the_container  # Docker sandbox not ready: image: The sandbox image orkexa-sandbox is not built
