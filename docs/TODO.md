@@ -280,6 +280,8 @@ of `test_the_old_import_paths_pass_mypy_strict` (9 s).
   limits and an AppArmor profile; until then the non-blocking job `podman rootless is refused` asserts the refusal
   (the checks are not relaxed). Run the manual checklist on Docker Desktop (macOS arm64 and x86-64, Windows x64 and ARM64), OrbStack and `podman machine`
   and record the results in the feature matrix.
+  Nodestro's N-22 (extension tools, gate G-6) depends on this run as well: record there `userns_remap` (reported
+  since 2026-11-27) and whether the daemon applies a client-sent seccomp profile (`--security-opt seccomp=<file>`).
 
 ### ORK-012 · Real providers are not exercised
 

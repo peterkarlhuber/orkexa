@@ -128,6 +128,9 @@ class DockerHost:
     #: Whether swap is accounted (``--memory-swap`` effective); reported only, the self-test checks swap.
     swap_limit: bool | None = None
     operating_system: str = ""
+    #: Whether container users are mapped to unprivileged host users (Docker's ``userns-remap``, or a rootless
+    #: engine, whose containers always run in the user's namespace); reported only, never required.
+    userns_remap: bool = False
 
     def as_facts(self) -> tuple[tuple[str, str], ...]:
         """The host as :attr:`SandboxProbe.facts`."""
@@ -252,6 +255,7 @@ def _from_docker_info(info: Mapping[str, Any], version: Mapping[str, Any]) -> Do
         server_version=str(info.get("ServerVersion") or server.get("Version") or ""),
         swap_limit=swap if isinstance(swap, bool) else None,
         operating_system=str(info.get("OperatingSystem", "")),
+        userns_remap="userns" in options or "rootless" in options,
     )
 
 
@@ -283,6 +287,7 @@ def _from_podman_info(info: Mapping[str, Any]) -> DockerHost:
         server_version=str(_dict(info.get("version")).get("Version", "")),
         swap_limit=None,
         operating_system=str(distribution.get("distribution", "")),
+        userns_remap=security.get("rootless") is True,
     )
 
 
