@@ -42,6 +42,7 @@ EXPECTED = {
     "podman-native": ("podman", ""),
     "podman-native-no-delegation": ("podman", "limits"),
     "podman-native-cgroup1": ("podman", "rootless-cgroup"),
+    "userns-remap": ("docker", ""),
 }
 
 
@@ -78,6 +79,18 @@ def test_host_fields(fake_docker: FakeDocker) -> None:
     assert ["version", "--format", "{{json .}}"] not in fake_docker.calls()[-1:]
     fake_docker.host("podman-compat")
     assert inspect_host(str(fake_docker.path)).seccomp_profile == "default"
+
+
+def test_user_namespace_remapping_is_reported(fake_docker: FakeDocker) -> None:
+    """Reported (facts, fingerprint), never required: the sandbox user has no capabilities either way."""
+    for name, remapped in (("rootful-cgroup2", False), ("userns-remap", True), ("rootless-cgroup2", True)):
+        fake_docker.host(name)
+        host = inspect_host(str(fake_docker.path))
+        assert host.userns_remap is remapped, name
+        assert dict(host.as_facts())["userns_remap"] == ("true" if remapped else "false")
+        assert preflight(host).available
+    fake_docker.host("podman-native")
+    assert inspect_host(str(fake_docker.path)).userns_remap is True
 
 
 def test_the_engine_name_is_never_trusted(fake_docker: FakeDocker) -> None:

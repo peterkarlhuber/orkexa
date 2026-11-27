@@ -1082,5 +1082,78 @@
     "Version": "27.3.1"
    }
   }
+ },
+ "userns-remap": {
+  "info": {
+   "Architecture": "x86_64",
+   "CPUSet": true,
+   "CPUShares": true,
+   "CgroupDriver": "systemd",
+   "CgroupVersion": "2",
+   "Containers": 0,
+   "CpuCfsPeriod": true,
+   "CpuCfsQuota": true,
+   "Debug": false,
+   "Driver": "overlay2",
+   "ID": "8f3c2a8e-6d0b-4f43-9f6e-1d2f0c1b5eed",
+   "IPv4Forwarding": true,
+   "Images": 3,
+   "KernelVersion": "6.8.0-1017-azure",
+   "LoggingDriver": "json-file",
+   "MemTotal": 16766431232,
+   "MemoryLimit": true,
+   "NCPU": 4,
+   "Name": "runner-host",
+   "OSType": "linux",
+   "OSVersion": "24.04",
+   "OomKillDisable": false,
+   "OperatingSystem": "Ubuntu 24.04.1 LTS",
+   "PidsLimit": true,
+   "SecurityOptions": [
+    "name=apparmor",
+    "name=seccomp,profile=builtin",
+    "name=cgroupns",
+    "name=userns"
+   ],
+   "ServerVersion": "27.3.1",
+   "SwapLimit": true,
+   "Warnings": null
+  },
+  "version": {
+   "Client": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Os": "linux",
+    "Version": "27.3.1"
+   },
+   "Server": {
+    "ApiVersion": "1.47",
+    "Arch": "amd64",
+    "Components": [
+     {
+      "Details": {
+       "ApiVersion": "1.47",
+       "Arch": "amd64",
+       "Os": "linux"
+      },
+      "Name": "Engine",
+      "Version": "27.3.1"
+     },
+     {
+      "Name": "containerd",
+      "Version": "1.7.22"
+     },
+     {
+      "Name": "runc",
+      "Version": "1.1.14"
+     }
+    ],
+    "Os": "linux",
+    "Platform": {
+     "Name": "Docker Engine - Community"
+    },
+    "Version": "27.3.1"
+   }
+  }
  }
 }

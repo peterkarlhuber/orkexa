@@ -5,6 +5,11 @@
 First release of Orkexa. The version was `0.1.0` until MUP-ONA B0; no 0.1.0 was published, so its entries are
 listed here. The development version is `0.2.0.dev0`.
 
+### Added: user namespace remapping is reported (N-22, 2026-11-27)
+
+`DockerHost.userns_remap` (in the self-test facts and the host fingerprint) tells whether the daemon maps container
+users to unprivileged host users (Docker's `userns-remap`, or a rootless engine). It is reported only, never required.
+
 ### Fixed: a PDF with a damaged object is unreadable again under pypdf 7.2.0 (W5, 2026-11-27)
 
 * pypdf 7.2.0 turns a `RecursionError` or `MemoryError` inside an array into `PdfReadError`, which a lenient
